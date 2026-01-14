@@ -253,12 +253,19 @@ function checkRareDrop() {
 }
 
 // Build the generation prompt
-function buildPrompt(text, presetKey = "random") {
+function buildPrompt(text, presetKey = "random", backgroundKey = "none") {
   // Check for rare drop first (unless using a specific preset)
   if (presetKey === "random") {
     const rareDrop = checkRareDrop();
     if (rareDrop) {
-      return { prompt: rareDrop.prompt(text), rare: rareDrop.name };
+      // Add background to rare prompt if selected
+      const bg = BACKGROUNDS[backgroundKey];
+      let rarePrompt = rareDrop.prompt(text);
+      if (bg) {
+        rarePrompt = rarePrompt.replace("Solid white background for clean clipping.", bg.prompt + ".");
+        rarePrompt = rarePrompt.replace("Solid white background.", bg.prompt + ".");
+      }
+      return { prompt: rarePrompt, rare: rareDrop.name, hasBackground: !!bg };
     }
   }
 
@@ -276,9 +283,12 @@ function buildPrompt(text, presetKey = "random") {
 
   // Always random (not preset-specific)
   const texture = randomChoice(TEXTURE_PATTERNS);
-  const background = randomChoice(BACKGROUND_EFFECTS);
   const sprayTexture = randomChoice(SPRAY_TEXTURES);
   const paintTechnique = randomChoice(PAINT_TECHNIQUES);
+
+  // Background - use surface if selected, otherwise solid for clipping
+  const surfaceBg = BACKGROUNDS[backgroundKey];
+  const backgroundPrompt = surfaceBg ? surfaceBg.prompt : randomChoice(BACKGROUND_EFFECTS);
 
   // Japanese elements - 40% chance to include
   const japaneseElement = chance(40) ? `JAPANESE ACCENT: ${randomChoice(JAPANESE_ELEMENTS)}.` : "";
@@ -287,26 +297,72 @@ function buildPrompt(text, presetKey = "random") {
   const characterCameo = chance(30) ? `CHARACTER: ${randomChoice(CHARACTER_CAMEOS)}.` : "";
 
   // Build the prompt
-  let prompt = `Jet Set Radio / Jet Grind Radio video game style graffiti tag artwork, real spray paint on wall aesthetic. The word "${text}" written in ${letters}, colored with ${colors}. Letters have ${texture}. OUTLINES: ${outline}. DRIPS: ${drips}. DECORATIONS: ${decorations}. SHADOW: ${shadow}. ${japaneseElement} ${characterCameo} Decorated with ${flourish} around and between the letters. Painted with authentic spray paint texture: ${sprayTexture}. Technique style: ${paintTechnique}. ${background}. Wide panoramic landscape format, stylized Japanese video game graffiti art but with realistic spray paint material qualities, bold graphic design, high contrast colors, genuine aerosol paint aesthetic with visible paint texture and spray artifacts, urban street art.`;
+  let prompt = `Jet Set Radio / Jet Grind Radio video game style graffiti tag artwork, real spray paint on wall aesthetic. The word "${text}" written in ${letters}, colored with ${colors}. Letters have ${texture}. OUTLINES: ${outline}. DRIPS: ${drips}. DECORATIONS: ${decorations}. SHADOW: ${shadow}. ${japaneseElement} ${characterCameo} Decorated with ${flourish} around and between the letters. Painted with authentic spray paint texture: ${sprayTexture}. Technique style: ${paintTechnique}. ${backgroundPrompt}. Wide panoramic landscape format, stylized Japanese video game graffiti art but with realistic spray paint material qualities, bold graphic design, high contrast colors, genuine aerosol paint aesthetic with visible paint texture and spray artifacts, urban street art.`;
 
   // Add preset vibe if using a preset
   if (presetVibe) {
     prompt += ` Style vibe: ${presetVibe}.`;
   }
 
-  return { prompt, rare: null };
+  return { prompt, rare: null, hasBackground: !!surfaceBg };
 }
 
 const MAX_LENGTH = 20;
+
+// === BACKGROUND SURFACES ===
+const BACKGROUNDS = {
+  none: null, // Transparent (default)
+
+  brick: {
+    name: "🧱 Brick Wall",
+    prompt: "on a gritty urban red brick wall with weathered mortar, some bricks cracked and worn, street lighting casting shadows"
+  },
+  concrete: {
+    name: "🏢 Concrete",
+    prompt: "on a raw concrete wall with texture and imperfections, urban underpass vibes, industrial setting"
+  },
+  dumpster: {
+    name: "🗑️ Dumpster",
+    prompt: "spray painted on the side of a green metal dumpster in an alley, rust spots and dents visible"
+  },
+  train: {
+    name: "🚃 Train Car",
+    prompt: "on the side of a silver subway train car, metal panels and rivets visible, train yard setting"
+  },
+  billboard: {
+    name: "📋 Billboard",
+    prompt: "painted over an old billboard advertisement, peeling posters underneath, rooftop urban setting"
+  },
+  shutter: {
+    name: "🚪 Metal Shutter",
+    prompt: "on a corrugated metal roll-up shutter door of a closed shop, urban storefront at night"
+  },
+  highway: {
+    name: "🛣️ Highway Wall",
+    prompt: "on a highway sound barrier wall, concrete with drainage stains, cars blurred in background"
+  },
+  container: {
+    name: "📦 Shipping Container",
+    prompt: "on a rusty shipping container at the docks, industrial port setting, stacked containers behind"
+  },
+  tunnel: {
+    name: "🚇 Tunnel",
+    prompt: "inside a dark urban tunnel or underpass, curved concrete walls, dramatic lighting from entrance"
+  },
+  rooftop: {
+    name: "🏙️ Rooftop",
+    prompt: "on a rooftop water tank or HVAC unit, city skyline in background, urban exploration vibes"
+  }
+};
 
 // Output dimensions (4:1 aspect ratio)
 const OUTPUT_WIDTH = 1024;
 const OUTPUT_HEIGHT = 256;
 
 // Generate the graffiti tag image
-async function generateTag(text, presetKey = "random") {
+async function generateTag(text, presetKey = "random", backgroundKey = "none") {
   const cleanText = text.trim().toUpperCase();
-  const result = buildPrompt(cleanText, presetKey);
+  const result = buildPrompt(cleanText, presetKey, backgroundKey);
 
   // Generate at 1024x256 (4:1 ratio, higher res than 512x128)
   const image = await sup.ai.image.create(result.prompt, {
@@ -314,9 +370,12 @@ async function generateTag(text, presetKey = "random") {
     height: OUTPUT_HEIGHT
   });
 
-  // Use imageclip patch to remove background and make transparent
-  const imageclipPatch = await sup.patch("/baby/imageclip");
-  const transparentImage = await imageclipPatch.run(image);
+  // Only remove background if no surface background selected
+  let finalImage = image;
+  if (!result.hasBackground) {
+    const imageclipPatch = await sup.patch("/baby/imageclip");
+    finalImage = await imageclipPatch.run(image);
+  }
 
   // If rare drop, return with special message
   if (result.rare) {
@@ -325,27 +384,28 @@ async function generateTag(text, presetKey = "random") {
       HOLOGRAPHIC: "✨🌈 RARE TAG: HOLOGRAPHIC! 🌈✨",
       DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
     };
-    return [rareMessages[result.rare] || "✨ RARE TAG! ✨", transparentImage];
+    return [rareMessages[result.rare] || "✨ RARE TAG! ✨", finalImage];
   }
 
-  return transparentImage;
+  return finalImage;
 }
 
 // Button handler for form submission
-async function handleTag(text, presetKey = "random") {
+async function handleTag(text, presetKey = "random", backgroundKey = "none") {
   if (!text || text.trim() === "") {
     return "🚫 Enter some text first!";
   }
   if (text.trim().length > MAX_LENGTH) {
     return `🚫 Too long! Max ${MAX_LENGTH} characters (you entered ${text.trim().length}). Keep it short!`;
   }
-  return await generateTag(text, presetKey);
+  return await generateTag(text, presetKey, backgroundKey);
 }
 
 // Render the input form UI
 function renderForm() {
   const currentText = sup.message.get("inputText") || "";
   const selectedPreset = sup.message.get("selectedPreset") || "random";
+  const selectedBackground = sup.message.get("selectedBackground") || "none";
   const charCount = currentText.length;
   const isOverLimit = charCount > MAX_LENGTH;
   const isEmpty = charCount === 0;
@@ -360,8 +420,23 @@ function renderForm() {
     { key: "loveshockers", label: "💖 LOVE", color: "from-pink-500 to-red-500" },
   ];
 
+  // Background options
+  const backgroundOptions = [
+    { key: "none", label: "🚫 None (transparent)" },
+    { key: "brick", label: "🧱 Brick Wall" },
+    { key: "concrete", label: "🏢 Concrete" },
+    { key: "dumpster", label: "🗑️ Dumpster" },
+    { key: "train", label: "🚃 Train Car" },
+    { key: "billboard", label: "📋 Billboard" },
+    { key: "shutter", label: "🚪 Metal Shutter" },
+    { key: "highway", label: "🛣️ Highway Wall" },
+    { key: "container", label: "📦 Shipping Container" },
+    { key: "tunnel", label: "🚇 Tunnel" },
+    { key: "rooftop", label: "🏙️ Rooftop" },
+  ];
+
   return (
-    <html type="html" width={400} height={220}>
+    <html type="html" width={400} height={260}>
       <div className="flex flex-col gap-2 p-4 bg-gradient-to-br from-purple-900 via-black to-green-900 h-full font-mono">
         <div className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-cyan-400">
           JET GRIND TAG
@@ -410,8 +485,19 @@ function renderForm() {
           ))}
         </div>
 
+        {/* Background selector */}
+        <select
+          value={selectedBackground}
+          onChange={(e) => sup.message.set("selectedBackground", e.target.value)}
+          className="w-full px-2 py-1 bg-black/50 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-pink-500"
+        >
+          {backgroundOptions.map((bg) => (
+            <option key={bg.key} value={bg.key}>{bg.label}</option>
+          ))}
+        </select>
+
         <button
-          onClick={() => handleTag(currentText, selectedPreset)}
+          onClick={() => handleTag(currentText, selectedPreset, selectedBackground)}
           disabled={isDisabled}
           className={`w-full py-2 rounded-lg font-bold text-lg transition-all ${
             isDisabled
