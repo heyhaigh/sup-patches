@@ -116,6 +116,10 @@ function renderError(message, subtitle) {
   );
 }
 
+// Output dimensions (4:1 aspect ratio)
+const OUTPUT_WIDTH = 1024;
+const OUTPUT_HEIGHT = 256;
+
 // Generate the graffiti tag image
 async function generateTag(text) {
   const cleanText = text.trim().toUpperCase();
@@ -123,11 +127,16 @@ async function generateTag(text) {
 
   // Generate at 1024x256 (4:1 ratio, higher res than 512x128)
   const image = await sup.ai.image.create(prompt, {
-    width: 1024,
-    height: 256
+    width: OUTPUT_WIDTH,
+    height: OUTPUT_HEIGHT
   });
 
-  return image;
+  // Wrap in HTML container to control output dimensions and eliminate white space
+  return (
+    <html type="image" width={OUTPUT_WIDTH} height={OUTPUT_HEIGHT}>
+      <img src={image} className="w-full h-full object-cover" />
+    </html>
+  );
 }
 
 // Button handler for form submission
