@@ -2,7 +2,7 @@
 // Creates stylized graffiti tags based on user text input
 // Repository: https://github.com/heyhaigh/sup-patches
 
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 
 // Style variation pools for randomization
 const COLOR_PALETTES = [
@@ -398,39 +398,38 @@ async function generateTag(text, presetKey = "random") {
 }
 
 
-// Generate a random background image
-async function generateBackground(bgKey) {
+// Generate tag on background in a single image (faster than separate composite)
+async function generateTagOnBackground(tagText, bgKey, rare) {
   const bg = BACKGROUNDS[bgKey];
   if (!bg) return null;
 
-  const bgPrompt = `Illustrated stylized urban scene, ${bg.prompt}. Wide panoramic landscape format 4:1 aspect ratio. Jet Set Radio / Jet Grind Radio video game art style, cel-shaded, colorful, detailed environment, no text or graffiti, empty wall space in center for graffiti placement.`;
+  // Determine tag style based on rare type
+  let tagStyle = "colorful vibrant Jet Set Radio graffiti style with bold colors, thick outlines, drips and spray paint effects";
+  if (rare === "GOLD") {
+    tagStyle = "solid shiny gold metallic graffiti letters with gleaming highlights and gold drips";
+  } else if (rare === "HOLOGRAPHIC") {
+    tagStyle = "holographic rainbow iridescent chrome graffiti letters with prismatic light effects";
+  } else if (rare === "DIAMOND") {
+    tagStyle = "crystalline diamond sparkling gemstone graffiti letters with light refraction";
+  }
 
-  const bgImage = await sup.ai.image.create(bgPrompt, {
+  const prompt = `Graffiti tag artwork showing the word "${tagText}" spray painted ${bg.prompt}. The graffiti is in ${tagStyle}. Jet Set Radio / Jet Grind Radio video game art style, cel-shaded. Wide panoramic landscape format 4:1 aspect ratio. The tag is prominently displayed and clearly readable.`;
+
+  const image = await sup.ai.image.create(prompt, {
     width: OUTPUT_WIDTH,
     height: OUTPUT_HEIGHT
   });
 
-  return bgImage;
-}
-
-// Composite tag on background using AI image editing
-async function compositeTagOnBackground(tagImage, bgImage) {
-  // Use AI to composite the tag onto the background
-  const compositePrompt = "Place this graffiti tag artwork onto the background image. The tag should appear spray painted directly on the wall/surface, blending naturally. Maintain the graffiti's colors and style while making it look like it belongs on the surface. Keep the same composition and framing.";
-
-  // Use image edit to composite
-  const composite = await sup.ai.image.edit([bgImage, tagImage], compositePrompt, {
-    width: OUTPUT_WIDTH,
-    height: OUTPUT_HEIGHT
-  });
-
-  return composite;
+  return image;
 }
 
 // Handler for "Add Background" button
 async function handleAddBackground() {
+  const tagText = sup.message.get("currentTagText");
+  const rare = sup.message.get("currentTagRare");
   const tagImage = sup.message.get("currentTag");
-  if (!tagImage) {
+
+  if (!tagText) {
     return "🚫 No tag found. Generate a tag first!";
   }
 
@@ -440,17 +439,11 @@ async function handleAddBackground() {
     const randomBgKey = randomChoice(bgKeys);
     const bg = BACKGROUNDS[randomBgKey];
 
-    // Generate the background
-    const bgImage = await generateBackground(randomBgKey);
+    // Generate tag on background in single call (much faster)
+    const composite = await generateTagOnBackground(tagText, randomBgKey, rare);
 
-    // Store current background for reroll/save
+    // Store for reroll/save
     sup.message.set("currentBgKey", randomBgKey);
-    sup.message.set("currentBgImage", bgImage);
-
-    // Composite the tag onto the background
-    const composite = await compositeTagOnBackground(tagImage, bgImage);
-
-    // Store the composite for saving
     sup.message.set("currentComposite", composite);
 
     return [
@@ -462,7 +455,6 @@ async function handleAddBackground() {
     ];
   } catch (error) {
     // On error, show message and return to static tag
-    const rare = sup.message.get("currentTagRare");
     const response = ["⚠️ Background generation failed. Here's your tag:"];
 
     if (rare) {
