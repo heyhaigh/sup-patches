@@ -54,6 +54,31 @@ const BACKGROUND_EFFECTS = [
   "transparent background with fading color wisps"
 ];
 
+// Spray paint and painterly texture effects
+const SPRAY_TEXTURES = [
+  "visible spray paint overspray and soft bleeding edges where colors meet",
+  "aerosol mist gradients with speckled paint particles floating around letters",
+  "rough concrete wall texture showing through thin paint areas",
+  "weathered and faded paint patches with exposed underlayers",
+  "heavy paint drips running down from letter bottoms with pooling effects",
+  "multiple spray layers with varying opacity creating depth",
+  "gritty urban brick texture bleeding through the paint",
+  "splattered paint droplets and fine aerosol speckles across surface",
+  "chalky matte spray paint finish with dusty texture",
+  "wet glossy fresh paint look with light reflections and thick buildup"
+];
+
+const PAINT_TECHNIQUES = [
+  "hand-sprayed with visible can control variations and pressure changes",
+  "layered stencil edges with slight overspray bleeding",
+  "fat cap wide spray strokes with soft fuzzy edges",
+  "skinny cap precise lines with sharp details and fine mist halos",
+  "dripping wet paint with gravity pulls and running streaks",
+  "faded vintage spraypaint with sun-bleached areas",
+  "fresh vibrant paint with thick opaque coverage",
+  "quick bombing style with raw energetic strokes"
+];
+
 // Helper to pick random element from array
 function randomChoice(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -66,11 +91,30 @@ function buildPrompt(text) {
   const flourish = randomChoice(FLOURISH_TYPES);
   const texture = randomChoice(TEXTURE_PATTERNS);
   const background = randomChoice(BACKGROUND_EFFECTS);
+  const sprayTexture = randomChoice(SPRAY_TEXTURES);
+  const paintTechnique = randomChoice(PAINT_TECHNIQUES);
 
-  return `Jet Set Radio / Jet Grind Radio video game style graffiti tag artwork. The word "${text}" written in ${letters}, colored with ${colors}. Letters have ${texture}. Decorated with ${flourish} around and between the letters. ${background}. Wide panoramic landscape format, stylized cel-shaded Japanese video game graffiti art style, bold graphic design, high contrast colors, spray paint aesthetic, urban street art, Dreamcast era video game graphics style. No realistic elements, purely stylized illustrated graffiti art.`;
+  return `Jet Set Radio / Jet Grind Radio video game style graffiti tag artwork, real spray paint on wall aesthetic. The word "${text}" written in ${letters}, colored with ${colors}. Letters have ${texture}. Decorated with ${flourish} around and between the letters. Painted with authentic spray paint texture: ${sprayTexture}. Technique style: ${paintTechnique}. ${background}. Wide panoramic landscape format, stylized Japanese video game graffiti art but with realistic spray paint material qualities, bold graphic design, high contrast colors, genuine aerosol paint aesthetic with visible paint texture and spray artifacts, urban street art. Mix of stylized illustration with tactile paint surface quality.`;
 }
 
 const MAX_LENGTH = 20;
+
+// Styled error message display
+function renderError(message, subtitle) {
+  return (
+    <html type="image" width={1024} height={256}>
+      <div className="flex flex-col items-center justify-center h-full bg-gradient-to-r from-red-900 via-black to-red-900 font-mono">
+        <div className="text-6xl mb-4">🚫</div>
+        <div className="text-2xl font-bold text-red-400 mb-2 tracking-wider">
+          {message}
+        </div>
+        <div className="text-sm text-gray-400">
+          {subtitle}
+        </div>
+      </div>
+    </html>
+  );
+}
 
 // Generate the graffiti tag image
 async function generateTag(text) {
@@ -88,8 +132,11 @@ async function generateTag(text) {
 
 // Button handler for form submission
 async function handleTag(text) {
-  if (!text || text.trim() === "" || text.trim().length > MAX_LENGTH) {
-    return "Invalid input. Please enter 1-20 characters.";
+  if (!text || text.trim() === "") {
+    return renderError("EMPTY TAG", "Enter some text first!");
+  }
+  if (text.trim().length > MAX_LENGTH) {
+    return renderError("TAG TOO LONG", `Max ${MAX_LENGTH} characters. You entered ${text.trim().length}.`);
   }
   return await generateTag(text);
 }
@@ -164,10 +211,7 @@ async function main() {
   const cleanText = text.trim();
 
   if (cleanText.length > MAX_LENGTH) {
-    return [
-      `Too long! Keep it under ${MAX_LENGTH} characters.`,
-      renderForm()
-    ];
+    return renderError("TAG TOO LONG", `Max ${MAX_LENGTH} characters. You entered ${cleanText.length}. Keep it short!`);
   }
 
   return await generateTag(cleanText);
