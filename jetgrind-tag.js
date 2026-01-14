@@ -212,6 +212,26 @@ const STYLE_PRESETS = {
   }
 };
 
+// === RARE ELEMENTS (super low drop rate) ===
+
+const RARE_DROPS = [
+  {
+    name: "GOLD",
+    chance: 5, // 5% chance
+    prompt: (text) => `Ultra luxurious solid GOLD graffiti tag artwork. The word "${text}" in bold 3D letters made entirely of shiny polished gold metal. Gleaming reflective gold surface with bright specular highlights and light rays. Dripping with liquid gold, gold sparkles and gold dust particles floating around. Diamond and gem encrusted accents. Bling aesthetic with brilliant shine. Chrome gold metallic finish catching light from multiple angles. Luxurious wealthy opulent style. Gold bars and gold coins scattered as decorations. Rich solid gold with no other colors. Solid white background for clean clipping. Wide panoramic landscape format.`
+  },
+  {
+    name: "HOLOGRAPHIC",
+    chance: 3, // 3% chance
+    prompt: (text) => `Holographic rainbow iridescent graffiti tag artwork. The word "${text}" in chrome letters with shifting rainbow holographic finish. Prismatic light refraction creating rainbow spectrum colors that shift and change. Iridescent mother-of-pearl sheen. Laser hologram effect with light diffraction patterns. Cyberpunk futuristic chrome with rainbow oil-slick coloring. Shimmering pearlescent surface. Y2K aesthetic holographic style. Solid white background. Wide panoramic landscape format.`
+  },
+  {
+    name: "DIAMOND",
+    chance: 2, // 2% chance
+    prompt: (text) => `Crystalline diamond and ice graffiti tag artwork. The word "${text}" made entirely of sparkling cut diamonds and clear crystals. Brilliant light refraction through transparent gemstones. Icy frozen aesthetic with frost and snowflake accents. Luxury jewelry quality diamonds catching light. Prismatic rainbow light scattered through crystal facets. Glittering platinum and silver metallic accents. Frozen ice drips. Ultra premium precious gemstone aesthetic. Solid white background. Wide panoramic landscape format.`
+  }
+];
+
 // Helper to pick random element from array
 function randomChoice(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -222,8 +242,26 @@ function chance(percent) {
   return Math.random() * 100 < percent;
 }
 
+// Check for rare drop
+function checkRareDrop() {
+  for (const rare of RARE_DROPS) {
+    if (chance(rare.chance)) {
+      return rare;
+    }
+  }
+  return null;
+}
+
 // Build the generation prompt
 function buildPrompt(text, presetKey = "random") {
+  // Check for rare drop first (unless using a specific preset)
+  if (presetKey === "random") {
+    const rareDrop = checkRareDrop();
+    if (rareDrop) {
+      return { prompt: rareDrop.prompt(text), rare: rareDrop.name };
+    }
+  }
+
   const preset = STYLE_PRESETS[presetKey];
 
   // Use preset values if available, otherwise random from full pools
@@ -256,7 +294,7 @@ function buildPrompt(text, presetKey = "random") {
     prompt += ` Style vibe: ${presetVibe}.`;
   }
 
-  return prompt;
+  return { prompt, rare: null };
 }
 
 const MAX_LENGTH = 20;
@@ -268,10 +306,10 @@ const OUTPUT_HEIGHT = 256;
 // Generate the graffiti tag image
 async function generateTag(text, presetKey = "random") {
   const cleanText = text.trim().toUpperCase();
-  const prompt = buildPrompt(cleanText, presetKey);
+  const result = buildPrompt(cleanText, presetKey);
 
   // Generate at 1024x256 (4:1 ratio, higher res than 512x128)
-  const image = await sup.ai.image.create(prompt, {
+  const image = await sup.ai.image.create(result.prompt, {
     width: OUTPUT_WIDTH,
     height: OUTPUT_HEIGHT
   });
@@ -279,6 +317,16 @@ async function generateTag(text, presetKey = "random") {
   // Use imageclip patch to remove background and make transparent
   const imageclipPatch = await sup.patch("/baby/imageclip");
   const transparentImage = await imageclipPatch.run(image);
+
+  // If rare drop, return with special message
+  if (result.rare) {
+    const rareMessages = {
+      GOLD: "✨🏆 RARE DROP: SOLID GOLD! 🏆✨",
+      HOLOGRAPHIC: "✨🌈 RARE DROP: HOLOGRAPHIC! 🌈✨",
+      DIAMOND: "✨💎 ULTRA RARE: DIAMOND! 💎✨"
+    };
+    return [rareMessages[result.rare] || "✨ RARE DROP! ✨", transparentImage];
+  }
 
   return transparentImage;
 }
