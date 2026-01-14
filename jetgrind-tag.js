@@ -261,23 +261,6 @@ function buildPrompt(text, presetKey = "random") {
 
 const MAX_LENGTH = 20;
 
-// Styled error message display
-function renderError(message, subtitle) {
-  return (
-    <html type="image" width={1024} height={256}>
-      <div className="flex flex-col items-center justify-center h-full bg-gradient-to-r from-red-900 via-black to-red-900 font-mono">
-        <div className="text-6xl mb-4">🚫</div>
-        <div className="text-2xl font-bold text-red-400 mb-2 tracking-wider">
-          {message}
-        </div>
-        <div className="text-sm text-gray-400">
-          {subtitle}
-        </div>
-      </div>
-    </html>
-  );
-}
-
 // Output dimensions (4:1 aspect ratio)
 const OUTPUT_WIDTH = 1024;
 const OUTPUT_HEIGHT = 256;
@@ -303,10 +286,10 @@ async function generateTag(text, presetKey = "random") {
 // Button handler for form submission
 async function handleTag(text, presetKey = "random") {
   if (!text || text.trim() === "") {
-    return renderError("EMPTY TAG", "Enter some text first!");
+    return "🚫 Enter some text first!";
   }
   if (text.trim().length > MAX_LENGTH) {
-    return renderError("TAG TOO LONG", `Max ${MAX_LENGTH} characters. You entered ${text.trim().length}.`);
+    return `🚫 Too long! Max ${MAX_LENGTH} characters (you entered ${text.trim().length}). Keep it short!`;
   }
   return await generateTag(text, presetKey);
 }
@@ -408,7 +391,7 @@ async function main() {
   const cleanText = text.trim();
 
   if (cleanText.length > MAX_LENGTH) {
-    return renderError("TAG TOO LONG", `Max ${MAX_LENGTH} characters. You entered ${cleanText.length}. Keep it short!`);
+    return `🚫 Too long! Max ${MAX_LENGTH} characters (you entered ${cleanText.length}). Keep it short!`;
   }
 
   return await generateTag(cleanText);
