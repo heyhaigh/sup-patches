@@ -321,11 +321,11 @@ async function generateTag(text, presetKey = "random") {
   // If rare drop, return with special message
   if (result.rare) {
     const rareMessages = {
-      GOLD: "✨🏆 RARE DROP: SOLID GOLD! 🏆✨",
-      HOLOGRAPHIC: "✨🌈 RARE DROP: HOLOGRAPHIC! 🌈✨",
-      DIAMOND: "✨💎 ULTRA RARE: DIAMOND! 💎✨"
+      GOLD: "✨🏆 RARE TAG: SOLID GOLD! 🏆✨",
+      HOLOGRAPHIC: "✨🌈 RARE TAG: HOLOGRAPHIC! 🌈✨",
+      DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
     };
-    return [rareMessages[result.rare] || "✨ RARE DROP! ✨", transparentImage];
+    return [rareMessages[result.rare] || "✨ RARE TAG! ✨", transparentImage];
   }
 
   return transparentImage;
