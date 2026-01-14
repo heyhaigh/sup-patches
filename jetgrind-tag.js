@@ -1,5 +1,8 @@
 // Jet Grind Radio Style Graffiti Tag Generator
 // Creates stylized graffiti tags based on user text input
+// Repository: https://github.com/heyhaigh/sup-patches
+
+const VERSION = "1.0.0";
 
 // Style variation pools for randomization
 const COLOR_PALETTES = [
@@ -351,7 +354,7 @@ const BACKGROUNDS = {
 const OUTPUT_WIDTH = 1024;
 const OUTPUT_HEIGHT = 256;
 
-// Generate the graffiti tag image (always transparent)
+// Generate the graffiti tag image
 async function generateTag(text, presetKey = "random") {
   const cleanText = text.trim().toUpperCase();
   const result = buildPrompt(cleanText, presetKey);
@@ -388,82 +391,12 @@ async function generateTag(text, presetKey = "random") {
   response.push(transparentImage);
 
   // Add action buttons
-  response.push(sup.button("🎬 Animated Reveal", handleAnimatedReveal));
   response.push(sup.button("🎨 Add Background", handleAddBackground));
   response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
 
   return response;
 }
 
-// === ANIMATED REVEAL ===
-
-// Handler for animated reveal
-async function handleAnimatedReveal() {
-  const tagText = sup.message.get("currentTagText");
-  const rare = sup.message.get("currentTagRare");
-
-  if (!tagText) {
-    return "🚫 No tag found. Generate a tag first!";
-  }
-
-  // Build animation prompt based on tag type
-  let styleDesc = "colorful vibrant Jet Set Radio graffiti style";
-  if (rare === "GOLD") {
-    styleDesc = "luxurious solid gold metallic shiny";
-  } else if (rare === "HOLOGRAPHIC") {
-    styleDesc = "holographic rainbow iridescent chrome";
-  } else if (rare === "DIAMOND") {
-    styleDesc = "crystalline diamond sparkling gemstone";
-  }
-
-  const animationPrompt = `Short 0.5 second spray paint animation. A hand holding a spray paint can quickly paints the word "${tagText}" in ${styleDesc} graffiti letters. Fast energetic tagging motion, paint appearing on wall stroke by stroke. Jet Set Radio video game style, urban graffiti art. Wide landscape 4:1 aspect ratio. Dynamic spray paint mist and particles. Quick satisfying reveal animation.`;
-
-  // Generate the animation
-  const video = await sup.ai.video.create(animationPrompt, {
-    width: OUTPUT_WIDTH,
-    height: OUTPUT_HEIGHT,
-    duration: 0.5
-  });
-
-  const response = [
-    "🎬 Animated Reveal!",
-    video
-  ];
-
-  // Add buttons to go back or save
-  response.push(sup.button("🔄 Generate New Animation", handleAnimatedReveal));
-  response.push(sup.button("↩️ Back to Tag", handleBackToTag));
-  response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
-
-  return response;
-}
-
-// Handler to go back to static tag view
-function handleBackToTag() {
-  const tagImage = sup.message.get("currentTag");
-  const rare = sup.message.get("currentTagRare");
-
-  if (!tagImage) {
-    return "🚫 No tag found.";
-  }
-
-  const response = [];
-  if (rare) {
-    const rareMessages = {
-      GOLD: "✨🏆 RARE TAG: SOLID GOLD! 🏆✨",
-      HOLOGRAPHIC: "✨🌈 RARE TAG: HOLOGRAPHIC! 🌈✨",
-      DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
-    };
-    response.push(rareMessages[rare]);
-  }
-
-  response.push(tagImage);
-  response.push(sup.button("🎬 Animated Reveal", handleAnimatedReveal));
-  response.push(sup.button("🎨 Add Background", handleAddBackground));
-  response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
-
-  return response;
-}
 
 // Generate a random background image
 async function generateBackground(bgKey) {
@@ -480,16 +413,18 @@ async function generateBackground(bgKey) {
   return bgImage;
 }
 
-// Composite tag on background using HTML
-function compositeTagOnBackground(tagImage, bgImage, bgName) {
-  return (
-    <html type="image" width={OUTPUT_WIDTH} height={OUTPUT_HEIGHT}>
-      <div className="relative w-full h-full">
-        <img src={bgImage} className="absolute inset-0 w-full h-full object-cover" />
-        <img src={tagImage} className="absolute inset-0 w-full h-full object-contain" />
-      </div>
-    </html>
-  );
+// Composite tag on background using AI image editing
+async function compositeTagOnBackground(tagImage, bgImage) {
+  // Use AI to composite the tag onto the background
+  const compositePrompt = "Place this graffiti tag artwork onto the background image. The tag should appear spray painted directly on the wall/surface, blending naturally. Maintain the graffiti's colors and style while making it look like it belongs on the surface. Keep the same composition and framing.";
+
+  // Use image edit to composite
+  const composite = await sup.ai.image.edit([bgImage, tagImage], compositePrompt, {
+    width: OUTPUT_WIDTH,
+    height: OUTPUT_HEIGHT
+  });
+
+  return composite;
 }
 
 // Handler for "Add Background" button
@@ -499,28 +434,52 @@ async function handleAddBackground() {
     return "🚫 No tag found. Generate a tag first!";
   }
 
-  // Pick a random background (excluding "none")
-  const bgKeys = Object.keys(BACKGROUNDS).filter(k => k !== "none");
-  const randomBgKey = randomChoice(bgKeys);
-  const bg = BACKGROUNDS[randomBgKey];
+  try {
+    // Pick a random background (excluding "none")
+    const bgKeys = Object.keys(BACKGROUNDS).filter(k => k !== "none");
+    const randomBgKey = randomChoice(bgKeys);
+    const bg = BACKGROUNDS[randomBgKey];
 
-  // Generate the background
-  const bgImage = await generateBackground(randomBgKey);
+    // Generate the background
+    const bgImage = await generateBackground(randomBgKey);
 
-  // Store current background for reroll/save
-  sup.message.set("currentBgKey", randomBgKey);
-  sup.message.set("currentBgImage", bgImage);
+    // Store current background for reroll/save
+    sup.message.set("currentBgKey", randomBgKey);
+    sup.message.set("currentBgImage", bgImage);
 
-  // Composite and return with action buttons
-  const composite = compositeTagOnBackground(tagImage, bgImage, bg.name);
+    // Composite the tag onto the background
+    const composite = await compositeTagOnBackground(tagImage, bgImage);
 
-  return [
-    `📍 ${bg.name}`,
-    composite,
-    sup.button("🔄 Reroll Background", handleRerollBackground),
-    sup.button("💾 Save to Portfolio", handleSaveWithBackground),
-    sup.button("↩️ Back to Transparent", handleBackToTransparent)
-  ];
+    // Store the composite for saving
+    sup.message.set("currentComposite", composite);
+
+    return [
+      `📍 ${bg.name}`,
+      composite,
+      sup.button("🔄 Reroll Background", handleRerollBackground),
+      sup.button("💾 Save to Portfolio", handleSaveWithBackground),
+      sup.button("↩️ Back to Transparent", handleBackToTransparent)
+    ];
+  } catch (error) {
+    // On error, show message and return to static tag
+    const rare = sup.message.get("currentTagRare");
+    const response = ["⚠️ Background generation failed. Here's your tag:"];
+
+    if (rare) {
+      const rareMessages = {
+        GOLD: "✨🏆 RARE TAG: SOLID GOLD! 🏆✨",
+        HOLOGRAPHIC: "✨🌈 RARE TAG: HOLOGRAPHIC! 🌈✨",
+        DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
+      };
+      response.push(rareMessages[rare]);
+    }
+
+    response.push(tagImage);
+    response.push(sup.button("🔄 Try Again", handleAddBackground));
+    response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
+
+    return response;
+  }
 }
 
 // Handler for rerolling background
@@ -584,14 +543,13 @@ async function handleSaveToPortfolio() {
 
 // Save tag with background to portfolio
 async function handleSaveWithBackground() {
-  const tagImage = sup.message.get("currentTag");
   const tagText = sup.message.get("currentTagText");
   const rare = sup.message.get("currentTagRare");
   const bgKey = sup.message.get("currentBgKey");
-  const bgImage = sup.message.get("currentBgImage");
+  const composite = sup.message.get("currentComposite");
 
-  if (!tagImage || !bgImage) {
-    return "🚫 No tag or background to save!";
+  if (!composite) {
+    return "🚫 No composited tag to save!";
   }
 
   const bg = BACKGROUNDS[bgKey];
@@ -599,12 +557,12 @@ async function handleSaveWithBackground() {
   // Get existing portfolio or create new
   const portfolio = sup.user.get("tagPortfolio") || [];
 
-  // Add new entry with background
+  // Add new entry with the pre-composited image
   portfolio.push({
     text: tagText,
-    image: tagImage,
+    image: composite, // Save the composite directly
     rare: rare,
-    background: { key: bgKey, name: bg.name, image: bgImage },
+    backgroundName: bg.name, // Just store the name for display
     savedAt: Date.now()
   });
 
@@ -616,6 +574,11 @@ async function handleSaveWithBackground() {
 
 // === FAVORITE STYLES ===
 
+// Handler to go back to the create form
+function handleBackToCreate() {
+  return renderForm();
+}
+
 // Save current style as favorite
 function handleSaveFavoriteStyle(presetKey) {
   sup.user.set("favoriteStyle", presetKey);
@@ -623,7 +586,7 @@ function handleSaveFavoriteStyle(presetKey) {
   return [
     `⭐ Saved "${presetName}" as your favorite style!`,
     "This will be auto-selected when you open the patch.",
-    sup.button("🎨 Back to Create", () => renderForm())
+    sup.button("🎨 Back to Create", handleBackToCreate)
   ];
 }
 
@@ -632,9 +595,16 @@ function handleClearFavoriteStyle() {
   sup.user.set("favoriteStyle", null);
   return [
     "🗑️ Favorite style cleared. Will default to Random.",
-    sup.button("🎨 Back to Create", () => renderForm())
+    sup.button("🎨 Back to Create", handleBackToCreate)
   ];
 }
+
+// Handlers for setting specific favorite styles
+function handleSetFavoriteRandom() { return handleSaveFavoriteStyle("random"); }
+function handleSetFavoriteGGs() { return handleSaveFavoriteStyle("ggs"); }
+function handleSetFavoriteNoiseTanks() { return handleSaveFavoriteStyle("noisetanks"); }
+function handleSetFavoritePoisonJam() { return handleSaveFavoriteStyle("poisonjam"); }
+function handleSetFavoriteLoveShockers() { return handleSaveFavoriteStyle("loveshockers"); }
 
 // View/manage favorite style
 function handleManageFavoriteStyle() {
@@ -648,17 +618,17 @@ function handleManageFavoriteStyle() {
   ];
 
   // Add buttons for each preset
-  response.push(sup.button("🎲 Random", () => handleSaveFavoriteStyle("random")));
-  response.push(sup.button("⭐ GGs", () => handleSaveFavoriteStyle("ggs")));
-  response.push(sup.button("⚡ Noise Tanks", () => handleSaveFavoriteStyle("noisetanks")));
-  response.push(sup.button("💀 Poison Jam", () => handleSaveFavoriteStyle("poisonjam")));
-  response.push(sup.button("💖 Love Shockers", () => handleSaveFavoriteStyle("loveshockers")));
+  response.push(sup.button("🎲 Random", handleSetFavoriteRandom));
+  response.push(sup.button("⭐ GGs", handleSetFavoriteGGs));
+  response.push(sup.button("⚡ Noise Tanks", handleSetFavoriteNoiseTanks));
+  response.push(sup.button("💀 Poison Jam", handleSetFavoritePoisonJam));
+  response.push(sup.button("💖 Love Shockers", handleSetFavoriteLoveShockers));
 
   if (favorite) {
     response.push(sup.button("🗑️ Clear Favorite", handleClearFavoriteStyle));
   }
 
-  response.push(sup.button("↩️ Back", () => renderForm()));
+  response.push(sup.button("↩️ Back", handleBackToCreate));
 
   return response;
 }
@@ -778,6 +748,19 @@ function renderForm() {
 
 // === PORTFOLIO VIEWER ===
 
+// Pagination handlers
+function handlePortfolioNewerPage() {
+  const currentPage = sup.message.get("portfolioPage") || 0;
+  sup.message.set("portfolioPage", Math.max(0, currentPage - 1));
+  return handleViewPortfolio();
+}
+
+function handlePortfolioOlderPage() {
+  const currentPage = sup.message.get("portfolioPage") || 0;
+  sup.message.set("portfolioPage", currentPage + 1);
+  return handleViewPortfolio();
+}
+
 // View portfolio handler
 function handleViewPortfolio() {
   const portfolio = sup.user.get("tagPortfolio") || [];
@@ -786,7 +769,7 @@ function handleViewPortfolio() {
     return [
       "📂 Your portfolio is empty!",
       "Generate some tags and save them to build your collection.",
-      sup.button("🎨 Create a Tag", () => renderForm())
+      sup.button("🎨 Create a Tag", handleBackToCreate)
     ];
   }
 
@@ -805,40 +788,25 @@ function handleViewPortfolio() {
   for (let i = startIdx; i >= endIdx; i--) {
     const tag = portfolio[i];
     const rareLabel = tag.rare ? ` [${tag.rare}]` : "";
-    const bgLabel = tag.background ? ` on ${tag.background.name}` : "";
+    const bgLabel = tag.backgroundName ? ` on ${tag.backgroundName}` : "";
     const date = new Date(tag.savedAt).toLocaleDateString();
 
     response.push(`\n"${tag.text}"${rareLabel}${bgLabel} - ${date}`);
 
-    // Show the image (with background if saved with one)
-    if (tag.background) {
-      response.push(compositeTagOnBackground(tag.image, tag.background.image, tag.background.name));
-    } else {
-      response.push(tag.image);
-    }
+    // Show the saved image directly (already composited if saved with background)
+    response.push(tag.image);
   }
 
   // Pagination buttons
-  const navButtons = [];
   if (currentPage > 0) {
-    navButtons.push(sup.button("⬅️ Newer", () => {
-      sup.message.set("portfolioPage", currentPage - 1);
-      return handleViewPortfolio();
-    }));
+    response.push(sup.button("⬅️ Newer", handlePortfolioNewerPage));
   }
   if (currentPage < totalPages - 1) {
-    navButtons.push(sup.button("➡️ Older", () => {
-      sup.message.set("portfolioPage", currentPage + 1);
-      return handleViewPortfolio();
-    }));
-  }
-
-  if (navButtons.length > 0) {
-    response.push(...navButtons);
+    response.push(sup.button("➡️ Older", handlePortfolioOlderPage));
   }
 
   // Action buttons
-  response.push(sup.button("🎨 Create New Tag", () => renderForm()));
+  response.push(sup.button("🎨 Create New Tag", handleBackToCreate));
   response.push(sup.button("🗑️ Clear Portfolio", handleClearPortfolio));
 
   return response;
@@ -858,7 +826,7 @@ function handleConfirmClearPortfolio() {
   sup.user.set("tagPortfolio", []);
   return [
     "🗑️ Portfolio cleared!",
-    sup.button("🎨 Create a Tag", () => renderForm())
+    sup.button("🎨 Create a Tag", handleBackToCreate)
   ];
 }
 
