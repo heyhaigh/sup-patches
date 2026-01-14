@@ -388,6 +388,77 @@ async function generateTag(text, presetKey = "random") {
   response.push(transparentImage);
 
   // Add action buttons
+  response.push(sup.button("🎬 Animated Reveal", handleAnimatedReveal));
+  response.push(sup.button("🎨 Add Background", handleAddBackground));
+  response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
+
+  return response;
+}
+
+// === ANIMATED REVEAL ===
+
+// Handler for animated reveal
+async function handleAnimatedReveal() {
+  const tagText = sup.message.get("currentTagText");
+  const rare = sup.message.get("currentTagRare");
+
+  if (!tagText) {
+    return "🚫 No tag found. Generate a tag first!";
+  }
+
+  // Build animation prompt based on tag type
+  let styleDesc = "colorful vibrant Jet Set Radio graffiti style";
+  if (rare === "GOLD") {
+    styleDesc = "luxurious solid gold metallic shiny";
+  } else if (rare === "HOLOGRAPHIC") {
+    styleDesc = "holographic rainbow iridescent chrome";
+  } else if (rare === "DIAMOND") {
+    styleDesc = "crystalline diamond sparkling gemstone";
+  }
+
+  const animationPrompt = `Short 0.5 second spray paint animation. A hand holding a spray paint can quickly paints the word "${tagText}" in ${styleDesc} graffiti letters. Fast energetic tagging motion, paint appearing on wall stroke by stroke. Jet Set Radio video game style, urban graffiti art. Wide landscape 4:1 aspect ratio. Dynamic spray paint mist and particles. Quick satisfying reveal animation.`;
+
+  // Generate the animation
+  const video = await sup.ai.video.create(animationPrompt, {
+    width: OUTPUT_WIDTH,
+    height: OUTPUT_HEIGHT,
+    duration: 0.5
+  });
+
+  const response = [
+    "🎬 Animated Reveal!",
+    video
+  ];
+
+  // Add buttons to go back or save
+  response.push(sup.button("🔄 Generate New Animation", handleAnimatedReveal));
+  response.push(sup.button("↩️ Back to Tag", handleBackToTag));
+  response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
+
+  return response;
+}
+
+// Handler to go back to static tag view
+function handleBackToTag() {
+  const tagImage = sup.message.get("currentTag");
+  const rare = sup.message.get("currentTagRare");
+
+  if (!tagImage) {
+    return "🚫 No tag found.";
+  }
+
+  const response = [];
+  if (rare) {
+    const rareMessages = {
+      GOLD: "✨🏆 RARE TAG: SOLID GOLD! 🏆✨",
+      HOLOGRAPHIC: "✨🌈 RARE TAG: HOLOGRAPHIC! 🌈✨",
+      DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
+    };
+    response.push(rareMessages[rare]);
+  }
+
+  response.push(tagImage);
+  response.push(sup.button("🎬 Animated Reveal", handleAnimatedReveal));
   response.push(sup.button("🎨 Add Background", handleAddBackground));
   response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
 
