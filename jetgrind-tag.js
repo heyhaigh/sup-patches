@@ -227,7 +227,7 @@ const RARE_DROPS = [
   },
   {
     name: "DIAMOND",
-    chance: 2, // 2% chance
+    chance: 1, // 1% chance - ultra rare!
     prompt: (text) => `Crystalline diamond and ice graffiti tag artwork. The word "${text}" made entirely of sparkling cut diamonds and clear crystals. Brilliant light refraction through transparent gemstones. Icy frozen aesthetic with frost and snowflake accents. Luxury jewelry quality diamonds catching light. Prismatic rainbow light scattered through crystal facets. Glittering platinum and silver metallic accents. Frozen ice drips. Ultra premium precious gemstone aesthetic. Solid white background. Wide panoramic landscape format.`
   }
 ];
