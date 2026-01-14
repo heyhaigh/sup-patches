@@ -80,6 +80,58 @@ const PAINT_TECHNIQUES = [
   "quick bombing style with raw energetic strokes"
 ];
 
+// === QUICK WINS ===
+
+// 1. Aggressive outline styles
+const OUTLINE_STYLES = [
+  "thick black outline with bright white inner outline creating pop effect",
+  "double outline - inner white glow and outer black border",
+  "triple-layered outlines in contrasting colors for maximum depth",
+  "neon glow outline effect like backlit signage",
+  "jagged rough outline with sketchy hand-drawn quality",
+  "soft airbrushed glow halo around each letter",
+  "hard black outline with colored drop shadow outline behind",
+  "electric buzzing outline with energy crackling at edges"
+];
+
+// 2. Drip extensions
+const DRIP_EFFECTS = [
+  "long paint drips extending well below the letters pooling at bottom",
+  "thick goopy drips running down with bulbous ends",
+  "thin streaky drips like rain running down glass",
+  "splashy drips with secondary splatter where they land",
+  "melting effect with letters dissolving into drips at bottom",
+  "blood-drip style thick viscous runs",
+  "fresh wet paint with multiple drip streams per letter",
+  "minimal drips - just a few accent drips on key letters"
+];
+
+// 3. Decorative elements
+const DECORATIVE_ELEMENTS = [
+  "scattered stars and sparkles floating around the text",
+  "dynamic speed lines and motion streaks suggesting movement",
+  "crown floating above the text like royalty",
+  "arrows pointing outward in multiple directions",
+  "small skulls and crossbones as accent pieces",
+  "hearts and love symbols scattered throughout",
+  "lightning bolts and energy symbols crackling around",
+  "musical notes and sound waves emanating outward",
+  "dollar signs and diamond gems as bling accents",
+  "eyeballs and lips as surreal decorative elements"
+];
+
+// 4. Shadow styles
+const SHADOW_STYLES = [
+  "hard drop shadow offset to bottom-right in dark color",
+  "long dramatic cast shadow extending far behind letters",
+  "multi-colored layered shadow creating 3D stack effect",
+  "soft diffused shadow like letters floating above surface",
+  "harsh geometric shadow at 45-degree angle",
+  "glitchy double shadow with slight offset like misprint",
+  "gradient shadow fading from dark to transparent",
+  "colored shadow in contrasting hue for psychedelic effect"
+];
+
 // Helper to pick random element from array
 function randomChoice(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -94,8 +146,13 @@ function buildPrompt(text) {
   const background = randomChoice(BACKGROUND_EFFECTS);
   const sprayTexture = randomChoice(SPRAY_TEXTURES);
   const paintTechnique = randomChoice(PAINT_TECHNIQUES);
+  // Quick wins
+  const outline = randomChoice(OUTLINE_STYLES);
+  const drips = randomChoice(DRIP_EFFECTS);
+  const decorations = randomChoice(DECORATIVE_ELEMENTS);
+  const shadow = randomChoice(SHADOW_STYLES);
 
-  return `Jet Set Radio / Jet Grind Radio video game style graffiti tag artwork, real spray paint on wall aesthetic. The word "${text}" written in ${letters}, colored with ${colors}. Letters have ${texture}. Decorated with ${flourish} around and between the letters. Painted with authentic spray paint texture: ${sprayTexture}. Technique style: ${paintTechnique}. ${background}. Wide panoramic landscape format, stylized Japanese video game graffiti art but with realistic spray paint material qualities, bold graphic design, high contrast colors, genuine aerosol paint aesthetic with visible paint texture and spray artifacts, urban street art. Mix of stylized illustration with tactile paint surface quality.`;
+  return `Jet Set Radio / Jet Grind Radio video game style graffiti tag artwork, real spray paint on wall aesthetic. The word "${text}" written in ${letters}, colored with ${colors}. Letters have ${texture}. OUTLINES: ${outline}. DRIPS: ${drips}. DECORATIONS: ${decorations}. SHADOW: ${shadow}. Decorated with ${flourish} around and between the letters. Painted with authentic spray paint texture: ${sprayTexture}. Technique style: ${paintTechnique}. ${background}. Wide panoramic landscape format, stylized Japanese video game graffiti art but with realistic spray paint material qualities, bold graphic design, high contrast colors, genuine aerosol paint aesthetic with visible paint texture and spray artifacts, urban street art. Mix of stylized illustration with tactile paint surface quality.`;
 }
 
 const MAX_LENGTH = 20;
