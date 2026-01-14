@@ -132,27 +132,131 @@ const SHADOW_STYLES = [
   "colored shadow in contrasting hue for psychedelic effect"
 ];
 
+// === MEDIUM EFFORT FEATURES ===
+
+// Japanese text elements (randomly added as accents)
+const JAPANESE_ELEMENTS = [
+  "small katakana characters scattered as decorative accents",
+  "Japanese kanji symbols floating around the edges",
+  "hiragana characters integrated into the design as flourishes",
+  "Japanese sound effect text (like manga) as background elements",
+  "mixed English and Japanese characters in harmony",
+  "katakana version of the word subtly echoed behind main text",
+  "Japanese aesthetic with cherry blossom petals and kanji",
+  "Tokyo street sign style with Japanese text accents"
+];
+
+// Character cameos (silhouettes integrated into design)
+const CHARACTER_CAMEOS = [
+  "silhouette of a skater doing a trick integrated into the letters",
+  "small anime-style character peeking from behind the text",
+  "roller-blading figure silhouette as part of the composition",
+  "DJ character with headphones worked into the design",
+  "spray-painting figure silhouette adding to the graffiti",
+  "breakdancing silhouette as a dynamic accent",
+  "masked graffiti artist character integrated subtly",
+  "cute chibi character sitting on top of the letters"
+];
+
+// Style presets inspired by JGR gangs
+const STYLE_PRESETS = {
+  random: null, // Uses default random selection
+
+  ggs: {
+    name: "GGs",
+    description: "Classic colorful funk",
+    colors: ["neon green and hot pink with cyan accents", "vibrant orange and teal with yellow highlights", "electric blue and lime green with pink pops"],
+    letters: ["bold bubble letters with thick black outlines", "round bubbly letters with glossy highlights", "flowing organic letters with curved flourishes"],
+    decorations: ["scattered stars and sparkles floating around the text", "musical notes and sound waves emanating outward", "crown floating above the text like royalty"],
+    flourish: ["stars and sparkle effects", "spray paint clouds and mist effects"],
+    outline: ["neon glow outline effect like backlit signage", "soft airbrushed glow halo around each letter"],
+    shadow: ["multi-colored layered shadow creating 3D stack effect", "colored shadow in contrasting hue for psychedelic effect"],
+    vibe: "upbeat funky positive energy, classic Jet Set Radio style, colorful and fun"
+  },
+
+  noisetanks: {
+    name: "Noise Tanks",
+    description: "Techy cyber future",
+    colors: ["electric blue and white with silver chrome accents", "cyan and black with neon green data streams", "purple and blue with holographic silver"],
+    letters: ["sharp wildstyle graffiti letters with arrows and connections", "angular aggressive letters with spike elements", "jagged edgy letters with lightning bolt shapes"],
+    decorations: ["lightning bolts and energy symbols crackling around", "dynamic speed lines and motion streaks suggesting movement", "arrows pointing outward in multiple directions"],
+    flourish: ["electric sparks and energy bolts", "geometric shapes and arrows"],
+    outline: ["electric buzzing outline with energy crackling at edges", "neon glow outline effect like backlit signage"],
+    shadow: ["glitchy double shadow with slight offset like misprint", "harsh geometric shadow at 45-degree angle"],
+    vibe: "futuristic cyber tech aesthetic, digital glitch effects, robotic precision with electric energy"
+  },
+
+  poisonjam: {
+    name: "Poison Jam",
+    description: "Dark horror vibes",
+    colors: ["blood red and black with sickly green accents", "dark purple and crimson with toxic yellow", "black and neon green with blood red drips"],
+    letters: ["jagged edgy letters with lightning bolt shapes", "angular aggressive letters with spike elements", "chunky block letters with 3D depth and shadows"],
+    decorations: ["small skulls and crossbones as accent pieces", "eyeballs and lips as surreal decorative elements", "lightning bolts and energy symbols crackling around"],
+    flourish: ["flame wisps and fire trails", "smoke wisps and vapor trails"],
+    outline: ["jagged rough outline with sketchy hand-drawn quality", "hard black outline with colored drop shadow outline behind"],
+    shadow: ["long dramatic cast shadow extending far behind letters", "hard drop shadow offset to bottom-right in dark color"],
+    drips: ["blood-drip style thick viscous runs", "melting effect with letters dissolving into drips at bottom"],
+    vibe: "dark horror punk aesthetic, menacing and aggressive, monster movie vibes with toxic elements"
+  },
+
+  loveshockers: {
+    name: "Love Shockers",
+    description: "Romantic rebel style",
+    colors: ["hot pink and red with white highlights", "magenta and coral with gold accents", "pink and purple with red heart accents"],
+    letters: ["round bubbly letters with glossy highlights", "flowing organic letters with curved flourishes", "bold bubble letters with thick black outlines"],
+    decorations: ["hearts and love symbols scattered throughout", "scattered stars and sparkles floating around the text", "crown floating above the text like royalty"],
+    flourish: ["stars and sparkle effects", "liquid drips and paint splashes"],
+    outline: ["soft airbrushed glow halo around each letter", "double outline - inner white glow and outer black border"],
+    shadow: ["soft diffused shadow like letters floating above surface", "colored shadow in contrasting hue for psychedelic effect"],
+    vibe: "romantic rebel aesthetic, passionate and bold, love-struck with attitude"
+  }
+};
+
 // Helper to pick random element from array
 function randomChoice(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// Random chance helper (returns true X% of the time)
+function chance(percent) {
+  return Math.random() * 100 < percent;
+}
+
 // Build the generation prompt
-function buildPrompt(text) {
-  const colors = randomChoice(COLOR_PALETTES);
-  const letters = randomChoice(LETTER_STYLES);
-  const flourish = randomChoice(FLOURISH_TYPES);
+function buildPrompt(text, presetKey = "random") {
+  const preset = STYLE_PRESETS[presetKey];
+
+  // Use preset values if available, otherwise random from full pools
+  const colors = preset?.colors ? randomChoice(preset.colors) : randomChoice(COLOR_PALETTES);
+  const letters = preset?.letters ? randomChoice(preset.letters) : randomChoice(LETTER_STYLES);
+  const flourish = preset?.flourish ? randomChoice(preset.flourish) : randomChoice(FLOURISH_TYPES);
+  const decorations = preset?.decorations ? randomChoice(preset.decorations) : randomChoice(DECORATIVE_ELEMENTS);
+  const outline = preset?.outline ? randomChoice(preset.outline) : randomChoice(OUTLINE_STYLES);
+  const shadow = preset?.shadow ? randomChoice(preset.shadow) : randomChoice(SHADOW_STYLES);
+  const drips = preset?.drips ? randomChoice(preset.drips) : randomChoice(DRIP_EFFECTS);
+  const presetVibe = preset?.vibe || "";
+
+  // Always random (not preset-specific)
   const texture = randomChoice(TEXTURE_PATTERNS);
   const background = randomChoice(BACKGROUND_EFFECTS);
   const sprayTexture = randomChoice(SPRAY_TEXTURES);
   const paintTechnique = randomChoice(PAINT_TECHNIQUES);
-  // Quick wins
-  const outline = randomChoice(OUTLINE_STYLES);
-  const drips = randomChoice(DRIP_EFFECTS);
-  const decorations = randomChoice(DECORATIVE_ELEMENTS);
-  const shadow = randomChoice(SHADOW_STYLES);
 
-  return `Jet Set Radio / Jet Grind Radio video game style graffiti tag artwork, real spray paint on wall aesthetic. The word "${text}" written in ${letters}, colored with ${colors}. Letters have ${texture}. OUTLINES: ${outline}. DRIPS: ${drips}. DECORATIONS: ${decorations}. SHADOW: ${shadow}. Decorated with ${flourish} around and between the letters. Painted with authentic spray paint texture: ${sprayTexture}. Technique style: ${paintTechnique}. ${background}. Wide panoramic landscape format, stylized Japanese video game graffiti art but with realistic spray paint material qualities, bold graphic design, high contrast colors, genuine aerosol paint aesthetic with visible paint texture and spray artifacts, urban street art. Mix of stylized illustration with tactile paint surface quality.`;
+  // Japanese elements - 40% chance to include
+  const japaneseElement = chance(40) ? `JAPANESE ACCENT: ${randomChoice(JAPANESE_ELEMENTS)}.` : "";
+
+  // Character cameo - 30% chance to include
+  const characterCameo = chance(30) ? `CHARACTER: ${randomChoice(CHARACTER_CAMEOS)}.` : "";
+
+  // Build the prompt
+  let prompt = `Jet Set Radio / Jet Grind Radio video game style graffiti tag artwork, real spray paint on wall aesthetic. The word "${text}" written in ${letters}, colored with ${colors}. Letters have ${texture}. OUTLINES: ${outline}. DRIPS: ${drips}. DECORATIONS: ${decorations}. SHADOW: ${shadow}. ${japaneseElement} ${characterCameo} Decorated with ${flourish} around and between the letters. Painted with authentic spray paint texture: ${sprayTexture}. Technique style: ${paintTechnique}. ${background}. Wide panoramic landscape format, stylized Japanese video game graffiti art but with realistic spray paint material qualities, bold graphic design, high contrast colors, genuine aerosol paint aesthetic with visible paint texture and spray artifacts, urban street art.`;
+
+  // Add preset vibe if using a preset
+  if (presetVibe) {
+    prompt += ` Style vibe: ${presetVibe}.`;
+  }
+
+  return prompt;
 }
 
 const MAX_LENGTH = 20;
@@ -179,9 +283,9 @@ const OUTPUT_WIDTH = 1024;
 const OUTPUT_HEIGHT = 256;
 
 // Generate the graffiti tag image
-async function generateTag(text) {
+async function generateTag(text, presetKey = "random") {
   const cleanText = text.trim().toUpperCase();
-  const prompt = buildPrompt(cleanText);
+  const prompt = buildPrompt(cleanText, presetKey);
 
   // Generate at 1024x256 (4:1 ratio, higher res than 512x128)
   const image = await sup.ai.image.create(prompt, {
@@ -197,27 +301,37 @@ async function generateTag(text) {
 }
 
 // Button handler for form submission
-async function handleTag(text) {
+async function handleTag(text, presetKey = "random") {
   if (!text || text.trim() === "") {
     return renderError("EMPTY TAG", "Enter some text first!");
   }
   if (text.trim().length > MAX_LENGTH) {
     return renderError("TAG TOO LONG", `Max ${MAX_LENGTH} characters. You entered ${text.trim().length}.`);
   }
-  return await generateTag(text);
+  return await generateTag(text, presetKey);
 }
 
 // Render the input form UI
 function renderForm() {
   const currentText = sup.message.get("inputText") || "";
+  const selectedPreset = sup.message.get("selectedPreset") || "random";
   const charCount = currentText.length;
   const isOverLimit = charCount > MAX_LENGTH;
   const isEmpty = charCount === 0;
   const isDisabled = isEmpty || isOverLimit;
 
+  // Style button configs
+  const styleButtons = [
+    { key: "random", label: "🎲 RANDOM", color: "from-gray-600 to-gray-800" },
+    { key: "ggs", label: "⭐ GGs", color: "from-green-500 to-pink-500" },
+    { key: "noisetanks", label: "⚡ NOISE", color: "from-cyan-500 to-blue-700" },
+    { key: "poisonjam", label: "💀 POISON", color: "from-red-700 to-green-900" },
+    { key: "loveshockers", label: "💖 LOVE", color: "from-pink-500 to-red-500" },
+  ];
+
   return (
-    <html type="html" width={400} height={160}>
-      <div className="flex flex-col gap-3 p-4 bg-gradient-to-br from-purple-900 via-black to-green-900 h-full font-mono">
+    <html type="html" width={400} height={220}>
+      <div className="flex flex-col gap-2 p-4 bg-gradient-to-br from-purple-900 via-black to-green-900 h-full font-mono">
         <div className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-cyan-400">
           JET GRIND TAG
         </div>
@@ -248,8 +362,25 @@ function renderForm() {
           </div>
         </div>
 
+        {/* Style preset selector */}
+        <div className="flex gap-1">
+          {styleButtons.map((style) => (
+            <button
+              key={style.key}
+              onClick={() => sup.message.set("selectedPreset", style.key)}
+              className={`flex-1 py-1 px-1 rounded text-xs font-bold transition-all ${
+                selectedPreset === style.key
+                  ? `bg-gradient-to-r ${style.color} text-white ring-2 ring-white`
+                  : "bg-black/50 text-gray-400 hover:text-white"
+              }`}
+            >
+              {style.label}
+            </button>
+          ))}
+        </div>
+
         <button
-          onClick={() => handleTag(currentText)}
+          onClick={() => handleTag(currentText, selectedPreset)}
           disabled={isDisabled}
           className={`w-full py-2 rounded-lg font-bold text-lg transition-all ${
             isDisabled
