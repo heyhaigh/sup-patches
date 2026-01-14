@@ -622,20 +622,114 @@ function renderForm() {
           ))}
         </div>
 
-        <button
-          onClick={() => handleTag(currentText, selectedPreset)}
-          disabled={isDisabled}
-          className={`w-full py-2 rounded-lg font-bold text-lg transition-all ${
-            isDisabled
-              ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-              : "bg-gradient-to-r from-green-500 via-pink-500 to-cyan-500 text-white hover:scale-105 hover:shadow-lg hover:shadow-pink-500/50"
-          }`}
-        >
-          TAG
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleTag(currentText, selectedPreset)}
+            disabled={isDisabled}
+            className={`flex-1 py-2 rounded-lg font-bold text-lg transition-all ${
+              isDisabled
+                ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                : "bg-gradient-to-r from-green-500 via-pink-500 to-cyan-500 text-white hover:scale-105 hover:shadow-lg hover:shadow-pink-500/50"
+            }`}
+          >
+            TAG
+          </button>
+          <button
+            onClick={() => handleViewPortfolio()}
+            className="px-3 py-2 rounded-lg font-bold text-sm bg-black/50 text-gray-300 hover:text-white hover:bg-black/70 transition-all"
+          >
+            📂
+          </button>
+        </div>
       </div>
     </html>
   );
+}
+
+// === PORTFOLIO VIEWER ===
+
+// View portfolio handler
+function handleViewPortfolio() {
+  const portfolio = sup.user.get("tagPortfolio") || [];
+
+  if (portfolio.length === 0) {
+    return [
+      "📂 Your portfolio is empty!",
+      "Generate some tags and save them to build your collection.",
+      sup.button("🎨 Create a Tag", () => renderForm())
+    ];
+  }
+
+  // Show most recent first
+  const pageSize = 5;
+  const currentPage = sup.message.get("portfolioPage") || 0;
+  const totalPages = Math.ceil(portfolio.length / pageSize);
+  const startIdx = portfolio.length - 1 - (currentPage * pageSize);
+  const endIdx = Math.max(startIdx - pageSize + 1, 0);
+
+  const response = [
+    `📂 Your Portfolio (${portfolio.length} tags) - Page ${currentPage + 1}/${totalPages}`
+  ];
+
+  // Show tags for current page (newest first)
+  for (let i = startIdx; i >= endIdx; i--) {
+    const tag = portfolio[i];
+    const rareLabel = tag.rare ? ` [${tag.rare}]` : "";
+    const bgLabel = tag.background ? ` on ${tag.background.name}` : "";
+    const date = new Date(tag.savedAt).toLocaleDateString();
+
+    response.push(`\n"${tag.text}"${rareLabel}${bgLabel} - ${date}`);
+
+    // Show the image (with background if saved with one)
+    if (tag.background) {
+      response.push(compositeTagOnBackground(tag.image, tag.background.image, tag.background.name));
+    } else {
+      response.push(tag.image);
+    }
+  }
+
+  // Pagination buttons
+  const navButtons = [];
+  if (currentPage > 0) {
+    navButtons.push(sup.button("⬅️ Newer", () => {
+      sup.message.set("portfolioPage", currentPage - 1);
+      return handleViewPortfolio();
+    }));
+  }
+  if (currentPage < totalPages - 1) {
+    navButtons.push(sup.button("➡️ Older", () => {
+      sup.message.set("portfolioPage", currentPage + 1);
+      return handleViewPortfolio();
+    }));
+  }
+
+  if (navButtons.length > 0) {
+    response.push(...navButtons);
+  }
+
+  // Action buttons
+  response.push(sup.button("🎨 Create New Tag", () => renderForm()));
+  response.push(sup.button("🗑️ Clear Portfolio", handleClearPortfolio));
+
+  return response;
+}
+
+// Clear portfolio confirmation
+function handleClearPortfolio() {
+  return [
+    "⚠️ Are you sure you want to delete ALL your saved tags?",
+    sup.button("✅ Yes, Delete All", handleConfirmClearPortfolio),
+    sup.button("❌ Cancel", handleViewPortfolio)
+  ];
+}
+
+// Confirm clear portfolio
+function handleConfirmClearPortfolio() {
+  sup.user.set("tagPortfolio", []);
+  return [
+    "🗑️ Portfolio cleared!",
+    sup.button("🎨 Create a Tag", () => renderForm())
+  ];
 }
 
 // Main entry point
@@ -645,6 +739,12 @@ async function main() {
   // If no text input, show the form UI
   if (!text || text.trim() === "") {
     return renderForm();
+  }
+
+  // Check for special commands
+  const lowerText = text.trim().toLowerCase();
+  if (lowerText === "portfolio" || lowerText === "my tags" || lowerText === "saved") {
+    return handleViewPortfolio();
   }
 
   // Direct text input - validate and generate
