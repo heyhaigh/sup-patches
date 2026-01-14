@@ -46,12 +46,13 @@ const TEXTURE_PATTERNS = [
   "metallic sheen highlights"
 ];
 
+// Solid backgrounds that are easy to clip/remove
 const BACKGROUND_EFFECTS = [
-  "transparent background with floating paint splatters",
-  "transparent background with subtle spray mist",
-  "transparent background with dripping paint edges",
-  "transparent background with scattered geometric shapes",
-  "transparent background with fading color wisps"
+  "solid flat white background",
+  "solid flat light gray background",
+  "clean white background with no texture",
+  "pure white background",
+  "flat off-white background"
 ];
 
 // Spray paint and painterly texture effects
@@ -131,12 +132,11 @@ async function generateTag(text) {
     height: OUTPUT_HEIGHT
   });
 
-  // Wrap in HTML container to control output dimensions and eliminate white space
-  return (
-    <html type="image" width={OUTPUT_WIDTH} height={OUTPUT_HEIGHT}>
-      <img src={image} className="w-full h-full object-cover" />
-    </html>
-  );
+  // Use imageclip patch to remove background and make transparent
+  const imageclipPatch = await sup.patch("/baby/imageclip");
+  const transparentImage = await imageclipPatch.run(image);
+
+  return transparentImage;
 }
 
 // Button handler for form submission
