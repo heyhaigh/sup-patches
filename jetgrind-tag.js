@@ -252,20 +252,13 @@ function checkRareDrop() {
   return null;
 }
 
-// Build the generation prompt
-function buildPrompt(text, presetKey = "random", backgroundKey = "none") {
+// Build the generation prompt (always transparent for initial generation)
+function buildPrompt(text, presetKey = "random") {
   // Check for rare drop first (unless using a specific preset)
   if (presetKey === "random") {
     const rareDrop = checkRareDrop();
     if (rareDrop) {
-      // Add background to rare prompt if selected
-      const bg = BACKGROUNDS[backgroundKey];
-      let rarePrompt = rareDrop.prompt(text);
-      if (bg) {
-        rarePrompt = rarePrompt.replace("Solid white background for clean clipping.", bg.prompt + ".");
-        rarePrompt = rarePrompt.replace("Solid white background.", bg.prompt + ".");
-      }
-      return { prompt: rarePrompt, rare: rareDrop.name, hasBackground: !!bg };
+      return { prompt: rareDrop.prompt(text), rare: rareDrop.name };
     }
   }
 
@@ -286,9 +279,8 @@ function buildPrompt(text, presetKey = "random", backgroundKey = "none") {
   const sprayTexture = randomChoice(SPRAY_TEXTURES);
   const paintTechnique = randomChoice(PAINT_TECHNIQUES);
 
-  // Background - use surface if selected, otherwise solid for clipping
-  const surfaceBg = BACKGROUNDS[backgroundKey];
-  const backgroundPrompt = surfaceBg ? surfaceBg.prompt : randomChoice(BACKGROUND_EFFECTS);
+  // Always use solid background for clipping (backgrounds added post-generation)
+  const backgroundPrompt = randomChoice(BACKGROUND_EFFECTS);
 
   // Japanese elements - 40% chance to include
   const japaneseElement = chance(40) ? `JAPANESE ACCENT: ${randomChoice(JAPANESE_ELEMENTS)}.` : "";
@@ -304,7 +296,7 @@ function buildPrompt(text, presetKey = "random", backgroundKey = "none") {
     prompt += ` Style vibe: ${presetVibe}.`;
   }
 
-  return { prompt, rare: null, hasBackground: !!surfaceBg };
+  return { prompt, rare: null };
 }
 
 const MAX_LENGTH = 20;
@@ -359,10 +351,10 @@ const BACKGROUNDS = {
 const OUTPUT_WIDTH = 1024;
 const OUTPUT_HEIGHT = 256;
 
-// Generate the graffiti tag image
-async function generateTag(text, presetKey = "random", backgroundKey = "none") {
+// Generate the graffiti tag image (always transparent)
+async function generateTag(text, presetKey = "random") {
   const cleanText = text.trim().toUpperCase();
-  const result = buildPrompt(cleanText, presetKey, backgroundKey);
+  const result = buildPrompt(cleanText, presetKey);
 
   // Generate at 1024x256 (4:1 ratio, higher res than 512x128)
   const image = await sup.ai.image.create(result.prompt, {
@@ -370,42 +362,202 @@ async function generateTag(text, presetKey = "random", backgroundKey = "none") {
     height: OUTPUT_HEIGHT
   });
 
-  // Only remove background if no surface background selected
-  let finalImage = image;
-  if (!result.hasBackground) {
-    const imageclipPatch = await sup.patch("/baby/imageclip");
-    finalImage = await imageclipPatch.run(image);
-  }
+  // Always remove background for transparent output
+  const imageclipPatch = await sup.patch("/baby/imageclip");
+  const transparentImage = await imageclipPatch.run(image);
 
-  // If rare drop, return with special message
+  // Store the tag for later use (backgrounds, portfolio)
+  sup.message.set("currentTag", transparentImage);
+  sup.message.set("currentTagText", cleanText);
+  sup.message.set("currentTagRare", result.rare);
+
+  // Build response with tag and action buttons
+  const response = [];
+
+  // Add rare message if applicable
   if (result.rare) {
     const rareMessages = {
       GOLD: "✨🏆 RARE TAG: SOLID GOLD! 🏆✨",
       HOLOGRAPHIC: "✨🌈 RARE TAG: HOLOGRAPHIC! 🌈✨",
       DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
     };
-    return [rareMessages[result.rare] || "✨ RARE TAG! ✨", finalImage];
+    response.push(rareMessages[result.rare]);
   }
 
-  return finalImage;
+  // Add the tag image
+  response.push(transparentImage);
+
+  // Add action buttons
+  response.push(sup.button("🎨 Add Background", handleAddBackground));
+  response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
+
+  return response;
+}
+
+// Generate a random background image
+async function generateBackground(bgKey) {
+  const bg = BACKGROUNDS[bgKey];
+  if (!bg) return null;
+
+  const bgPrompt = `Illustrated stylized urban scene, ${bg.prompt}. Wide panoramic landscape format 4:1 aspect ratio. Jet Set Radio / Jet Grind Radio video game art style, cel-shaded, colorful, detailed environment, no text or graffiti, empty wall space in center for graffiti placement.`;
+
+  const bgImage = await sup.ai.image.create(bgPrompt, {
+    width: OUTPUT_WIDTH,
+    height: OUTPUT_HEIGHT
+  });
+
+  return bgImage;
+}
+
+// Composite tag on background using HTML
+function compositeTagOnBackground(tagImage, bgImage, bgName) {
+  return (
+    <html type="image" width={OUTPUT_WIDTH} height={OUTPUT_HEIGHT}>
+      <div className="relative w-full h-full">
+        <img src={bgImage} className="absolute inset-0 w-full h-full object-cover" />
+        <img src={tagImage} className="absolute inset-0 w-full h-full object-contain" />
+      </div>
+    </html>
+  );
+}
+
+// Handler for "Add Background" button
+async function handleAddBackground() {
+  const tagImage = sup.message.get("currentTag");
+  if (!tagImage) {
+    return "🚫 No tag found. Generate a tag first!";
+  }
+
+  // Pick a random background (excluding "none")
+  const bgKeys = Object.keys(BACKGROUNDS).filter(k => k !== "none");
+  const randomBgKey = randomChoice(bgKeys);
+  const bg = BACKGROUNDS[randomBgKey];
+
+  // Generate the background
+  const bgImage = await generateBackground(randomBgKey);
+
+  // Store current background for reroll/save
+  sup.message.set("currentBgKey", randomBgKey);
+  sup.message.set("currentBgImage", bgImage);
+
+  // Composite and return with action buttons
+  const composite = compositeTagOnBackground(tagImage, bgImage, bg.name);
+
+  return [
+    `📍 ${bg.name}`,
+    composite,
+    sup.button("🔄 Reroll Background", handleRerollBackground),
+    sup.button("💾 Save to Portfolio", handleSaveWithBackground),
+    sup.button("↩️ Back to Transparent", handleBackToTransparent)
+  ];
+}
+
+// Handler for rerolling background
+async function handleRerollBackground() {
+  return await handleAddBackground(); // Just generate a new random one
+}
+
+// Handler to go back to transparent tag
+function handleBackToTransparent() {
+  const tagImage = sup.message.get("currentTag");
+  const rare = sup.message.get("currentTagRare");
+
+  if (!tagImage) {
+    return "🚫 No tag found.";
+  }
+
+  const response = [];
+  if (rare) {
+    const rareMessages = {
+      GOLD: "✨🏆 RARE TAG: SOLID GOLD! 🏆✨",
+      HOLOGRAPHIC: "✨🌈 RARE TAG: HOLOGRAPHIC! 🌈✨",
+      DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
+    };
+    response.push(rareMessages[rare]);
+  }
+
+  response.push(tagImage);
+  response.push(sup.button("🎨 Add Background", handleAddBackground));
+  response.push(sup.button("💾 Save to Portfolio", handleSaveToPortfolio));
+
+  return response;
+}
+
+// Save transparent tag to portfolio
+async function handleSaveToPortfolio() {
+  const tagImage = sup.message.get("currentTag");
+  const tagText = sup.message.get("currentTagText");
+  const rare = sup.message.get("currentTagRare");
+
+  if (!tagImage) {
+    return "🚫 No tag to save!";
+  }
+
+  // Get existing portfolio or create new
+  const portfolio = sup.user.get("tagPortfolio") || [];
+
+  // Add new entry
+  portfolio.push({
+    text: tagText,
+    image: tagImage,
+    rare: rare,
+    background: null,
+    savedAt: Date.now()
+  });
+
+  // Save back (keep last 50)
+  sup.user.set("tagPortfolio", portfolio.slice(-50));
+
+  return [`✅ Saved "${tagText}" to your portfolio! (${portfolio.length} tags saved)`];
+}
+
+// Save tag with background to portfolio
+async function handleSaveWithBackground() {
+  const tagImage = sup.message.get("currentTag");
+  const tagText = sup.message.get("currentTagText");
+  const rare = sup.message.get("currentTagRare");
+  const bgKey = sup.message.get("currentBgKey");
+  const bgImage = sup.message.get("currentBgImage");
+
+  if (!tagImage || !bgImage) {
+    return "🚫 No tag or background to save!";
+  }
+
+  const bg = BACKGROUNDS[bgKey];
+
+  // Get existing portfolio or create new
+  const portfolio = sup.user.get("tagPortfolio") || [];
+
+  // Add new entry with background
+  portfolio.push({
+    text: tagText,
+    image: tagImage,
+    rare: rare,
+    background: { key: bgKey, name: bg.name, image: bgImage },
+    savedAt: Date.now()
+  });
+
+  // Save back (keep last 50)
+  sup.user.set("tagPortfolio", portfolio.slice(-50));
+
+  return [`✅ Saved "${tagText}" on ${bg.name} to your portfolio! (${portfolio.length} tags saved)`];
 }
 
 // Button handler for form submission
-async function handleTag(text, presetKey = "random", backgroundKey = "none") {
+async function handleTag(text, presetKey = "random") {
   if (!text || text.trim() === "") {
     return "🚫 Enter some text first!";
   }
   if (text.trim().length > MAX_LENGTH) {
     return `🚫 Too long! Max ${MAX_LENGTH} characters (you entered ${text.trim().length}). Keep it short!`;
   }
-  return await generateTag(text, presetKey, backgroundKey);
+  return await generateTag(text, presetKey);
 }
 
 // Render the input form UI
 function renderForm() {
   const currentText = sup.message.get("inputText") || "";
   const selectedPreset = sup.message.get("selectedPreset") || "random";
-  const selectedBackground = sup.message.get("selectedBackground") || "none";
   const charCount = currentText.length;
   const isOverLimit = charCount > MAX_LENGTH;
   const isEmpty = charCount === 0;
@@ -420,23 +572,8 @@ function renderForm() {
     { key: "loveshockers", label: "💖 LOVE", color: "from-pink-500 to-red-500" },
   ];
 
-  // Background options
-  const backgroundOptions = [
-    { key: "none", label: "🚫 None (transparent)" },
-    { key: "brick", label: "🧱 Brick Wall" },
-    { key: "concrete", label: "🏢 Concrete" },
-    { key: "dumpster", label: "🗑️ Dumpster" },
-    { key: "train", label: "🚃 Train Car" },
-    { key: "billboard", label: "📋 Billboard" },
-    { key: "shutter", label: "🚪 Metal Shutter" },
-    { key: "highway", label: "🛣️ Highway Wall" },
-    { key: "container", label: "📦 Shipping Container" },
-    { key: "tunnel", label: "🚇 Tunnel" },
-    { key: "rooftop", label: "🏙️ Rooftop" },
-  ];
-
   return (
-    <html type="html" width={400} height={260}>
+    <html type="html" width={400} height={200}>
       <div className="flex flex-col gap-2 p-4 bg-gradient-to-br from-purple-900 via-black to-green-900 h-full font-mono">
         <div className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 via-pink-500 to-cyan-400">
           JET GRIND TAG
@@ -485,19 +622,8 @@ function renderForm() {
           ))}
         </div>
 
-        {/* Background selector */}
-        <select
-          value={selectedBackground}
-          onChange={(e) => sup.message.set("selectedBackground", e.target.value)}
-          className="w-full px-2 py-1 bg-black/50 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-pink-500"
-        >
-          {backgroundOptions.map((bg) => (
-            <option key={bg.key} value={bg.key}>{bg.label}</option>
-          ))}
-        </select>
-
         <button
-          onClick={() => handleTag(currentText, selectedPreset, selectedBackground)}
+          onClick={() => handleTag(currentText, selectedPreset)}
           disabled={isDisabled}
           className={`w-full py-2 rounded-lg font-bold text-lg transition-all ${
             isDisabled
