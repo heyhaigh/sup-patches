@@ -614,6 +614,55 @@ async function handleSaveWithBackground() {
   return [`✅ Saved "${tagText}" on ${bg.name} to your portfolio! (${portfolio.length} tags saved)`];
 }
 
+// === FAVORITE STYLES ===
+
+// Save current style as favorite
+function handleSaveFavoriteStyle(presetKey) {
+  sup.user.set("favoriteStyle", presetKey);
+  const presetName = STYLE_PRESETS[presetKey]?.name || "Random";
+  return [
+    `⭐ Saved "${presetName}" as your favorite style!`,
+    "This will be auto-selected when you open the patch.",
+    sup.button("🎨 Back to Create", () => renderForm())
+  ];
+}
+
+// Clear favorite style
+function handleClearFavoriteStyle() {
+  sup.user.set("favoriteStyle", null);
+  return [
+    "🗑️ Favorite style cleared. Will default to Random.",
+    sup.button("🎨 Back to Create", () => renderForm())
+  ];
+}
+
+// View/manage favorite style
+function handleManageFavoriteStyle() {
+  const favorite = sup.user.get("favoriteStyle");
+  const presetName = favorite ? (STYLE_PRESETS[favorite]?.name || favorite) : "None set";
+
+  const response = [
+    `⭐ Favorite Style Management`,
+    `Current favorite: ${presetName}`,
+    "\nSelect a style to set as favorite:"
+  ];
+
+  // Add buttons for each preset
+  response.push(sup.button("🎲 Random", () => handleSaveFavoriteStyle("random")));
+  response.push(sup.button("⭐ GGs", () => handleSaveFavoriteStyle("ggs")));
+  response.push(sup.button("⚡ Noise Tanks", () => handleSaveFavoriteStyle("noisetanks")));
+  response.push(sup.button("💀 Poison Jam", () => handleSaveFavoriteStyle("poisonjam")));
+  response.push(sup.button("💖 Love Shockers", () => handleSaveFavoriteStyle("loveshockers")));
+
+  if (favorite) {
+    response.push(sup.button("🗑️ Clear Favorite", handleClearFavoriteStyle));
+  }
+
+  response.push(sup.button("↩️ Back", () => renderForm()));
+
+  return response;
+}
+
 // Button handler for form submission
 async function handleTag(text, presetKey = "random") {
   if (!text || text.trim() === "") {
@@ -628,19 +677,21 @@ async function handleTag(text, presetKey = "random") {
 // Render the input form UI
 function renderForm() {
   const currentText = sup.message.get("inputText") || "";
-  const selectedPreset = sup.message.get("selectedPreset") || "random";
+  // Use favorite style as default if set, otherwise random
+  const favoriteStyle = sup.user.get("favoriteStyle") || "random";
+  const selectedPreset = sup.message.get("selectedPreset") || favoriteStyle;
   const charCount = currentText.length;
   const isOverLimit = charCount > MAX_LENGTH;
   const isEmpty = charCount === 0;
   const isDisabled = isEmpty || isOverLimit;
 
-  // Style button configs
+  // Style button configs (mark favorite with ⭐)
   const styleButtons = [
-    { key: "random", label: "🎲 RANDOM", color: "from-gray-600 to-gray-800" },
-    { key: "ggs", label: "⭐ GGs", color: "from-green-500 to-pink-500" },
-    { key: "noisetanks", label: "⚡ NOISE", color: "from-cyan-500 to-blue-700" },
-    { key: "poisonjam", label: "💀 POISON", color: "from-red-700 to-green-900" },
-    { key: "loveshockers", label: "💖 LOVE", color: "from-pink-500 to-red-500" },
+    { key: "random", label: favoriteStyle === "random" ? "🎲⭐" : "🎲 RANDOM", color: "from-gray-600 to-gray-800" },
+    { key: "ggs", label: favoriteStyle === "ggs" ? "⭐ GGs" : "GGs", color: "from-green-500 to-pink-500" },
+    { key: "noisetanks", label: favoriteStyle === "noisetanks" ? "⚡⭐" : "⚡ NOISE", color: "from-cyan-500 to-blue-700" },
+    { key: "poisonjam", label: favoriteStyle === "poisonjam" ? "💀⭐" : "💀 POISON", color: "from-red-700 to-green-900" },
+    { key: "loveshockers", label: favoriteStyle === "loveshockers" ? "💖⭐" : "💖 LOVE", color: "from-pink-500 to-red-500" },
   ];
 
   return (
@@ -706,8 +757,16 @@ function renderForm() {
             TAG
           </button>
           <button
+            onClick={() => handleManageFavoriteStyle()}
+            className="px-3 py-2 rounded-lg font-bold text-sm bg-black/50 text-gray-300 hover:text-white hover:bg-black/70 transition-all"
+            title="Manage favorite style"
+          >
+            ⭐
+          </button>
+          <button
             onClick={() => handleViewPortfolio()}
             className="px-3 py-2 rounded-lg font-bold text-sm bg-black/50 text-gray-300 hover:text-white hover:bg-black/70 transition-all"
+            title="View portfolio"
           >
             📂
           </button>
@@ -816,6 +875,9 @@ async function main() {
   const lowerText = text.trim().toLowerCase();
   if (lowerText === "portfolio" || lowerText === "my tags" || lowerText === "saved") {
     return handleViewPortfolio();
+  }
+  if (lowerText === "favorite" || lowerText === "fav" || lowerText === "style") {
+    return handleManageFavoriteStyle();
   }
 
   // Direct text input - validate and generate
