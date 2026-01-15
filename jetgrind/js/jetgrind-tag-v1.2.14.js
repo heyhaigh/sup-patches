@@ -600,14 +600,12 @@ function renderTagPortfolioView() {
     }
 
     response.push(`Page ${currentPage + 1}/${totalPages}`);
+    response.push("");
 
-    // Render grid as HTML image
-    const gridHtml = buildGridHtml(pageItems);
-    response.push(sup.html(gridHtml, { width: 500, height: 400, type: 'image' }));
-
-    // Edit buttons for each item
+    // Display thumbnails with edit buttons (fallback to list view)
     pageItems.forEach((item, displayIdx) => {
-      response.push(sup.button(`✏️ Edit #${displayIdx + 1}: ${item.text}`, () => onViewPortfolioItem(item.originalIndex)));
+      response.push(item.image);
+      response.push(sup.button(`✏️ Edit #${displayIdx + 1}: ${item.text || 'Tag'}`, () => onViewPortfolioItem(item.originalIndex)));
     });
 
     // Pagination
@@ -681,14 +679,12 @@ function renderPhotoJournalView() {
     }
 
     response.push(`Page ${currentPage + 1}/${totalPages}`);
+    response.push("");
 
-    // Render grid as HTML image
-    const gridHtml = buildGridHtml(pageItems, true);
-    response.push(sup.html(gridHtml, { width: 500, height: 400, type: 'image' }));
-
-    // Edit buttons for each item
+    // Display thumbnails with edit buttons (fallback to list view)
     pageItems.forEach((item, displayIdx) => {
-      response.push(sup.button(`✏️ Edit #${displayIdx + 1}: ${item.text}`, () => onViewJournalItem(item.originalIndex)));
+      response.push(item.image);
+      response.push(sup.button(`✏️ Edit #${displayIdx + 1}: ${item.text || 'Photo'}`, () => onViewJournalItem(item.originalIndex)));
     });
 
     // Pagination
