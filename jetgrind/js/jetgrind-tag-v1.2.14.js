@@ -236,7 +236,7 @@ const OUTPUT_WIDTH = 1024;
 const OUTPUT_HEIGHT = 256;
 
 // Grid layout constants
-const GRID_COLUMNS = 2;
+const GRID_COLUMNS = 3;
 const GRID_PAGE_SIZE = 6;
 
 // =============================================================================
