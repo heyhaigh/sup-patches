@@ -2,7 +2,7 @@
 // Creates stylized graffiti tags based on user text input
 // Repository: https://github.com/heyhaigh/sup-patches
 
-const VERSION = "1.1.0";
+const VERSION = "1.1.5";
 
 // =============================================================================
 // STYLE POOLS & CONSTANTS
@@ -220,16 +220,16 @@ const RARE_DROPS = [
 ];
 
 const BACKGROUNDS = {
-  brick: { name: "🧱 Brick Wall", prompt: "on a gritty urban red brick wall with weathered mortar, some bricks cracked and worn, street lighting casting shadows" },
-  concrete: { name: "🏢 Concrete", prompt: "on a raw concrete wall with texture and imperfections, urban underpass vibes, industrial setting" },
-  dumpster: { name: "🗑️ Dumpster", prompt: "spray painted on the side of a green metal dumpster in an alley, rust spots and dents visible" },
-  train: { name: "🚃 Train Car", prompt: "on the side of a silver subway train car, metal panels and rivets visible, train yard setting" },
-  billboard: { name: "📋 Billboard", prompt: "painted over an old billboard advertisement, peeling posters underneath, rooftop urban setting" },
-  shutter: { name: "🚪 Metal Shutter", prompt: "on a corrugated metal roll-up shutter door of a closed shop, urban storefront at night" },
-  highway: { name: "🛣️ Highway Wall", prompt: "on a highway sound barrier wall, concrete with drainage stains, cars blurred in background" },
-  container: { name: "📦 Shipping Container", prompt: "on a rusty shipping container at the docks, industrial port setting, stacked containers behind" },
-  tunnel: { name: "🚇 Tunnel", prompt: "inside a dark urban tunnel or underpass, curved concrete walls, dramatic lighting from entrance" },
-  rooftop: { name: "🏙️ Rooftop", prompt: "on a rooftop water tank or HVAC unit, city skyline in background, urban exploration vibes" }
+  shibuya: { name: "🌃 Shibuya", prompt: "Jet Set Radio game screenshot style background, dense Tokyo cityscape with neon billboards and Japanese signs, flat cel-shaded colors with thick black outlines, muted grey buildings with bright neon accents, low-poly geometric shapes, dark street level, Dreamcast era 3D graphics aesthetic" },
+  garage: { name: "🏠 Garage", prompt: "Jet Set Radio game screenshot style background, indoor garage or basement with dark tiled floor grid pattern, industrial equipment, muted dark green and grey flat shaded walls, thick black outlines, speakers and machinery, Dreamcast era 3D cel-shaded aesthetic" },
+  shutter: { name: "🚪 Shutter", prompt: "Jet Set Radio game screenshot style background, metal roll-up shutter door on urban storefront, corrugated metal texture with flat cel-shaded colors, muted grey and brown tones, thick black outlines, Japanese storefront aesthetic, Dreamcast era 3D graphics" },
+  street: { name: "🛣️ Street", prompt: "Jet Set Radio game screenshot style background, Tokyo street scene with flat cel-shaded buildings, dark asphalt ground, muted browns and greys with neon sign accents, thick black outlines, low-poly geometric architecture, Dreamcast era 3D aesthetic" },
+  train: { name: "🚃 Train Yard", prompt: "Jet Set Radio game screenshot style background, subway train car side panel, silver and grey metal with flat cel-shaded colors, industrial train yard setting, thick black outlines, Dreamcast era 3D graphics aesthetic" },
+  rooftop: { name: "🌆 Rooftop", prompt: "Jet Set Radio game screenshot style background, Tokyo rooftop with water tanks and AC units, city skyline in distance, flat cel-shaded muted colors, thick black outlines, geometric shapes, Dreamcast era 3D aesthetic" },
+  highway: { name: "🛤️ Highway", prompt: "Jet Set Radio game screenshot style background, elevated highway or overpass, concrete barriers and road signs, flat cel-shaded grey and brown tones, thick black outlines, urban infrastructure, Dreamcast era 3D graphics" },
+  sewers: { name: "🚰 Sewers", prompt: "Jet Set Radio game screenshot style background, underground sewer tunnel with pipes and grates, dark green and grey flat shaded colors, wet floor reflections, thick black outlines, industrial underground aesthetic, Dreamcast era 3D" },
+  plaza: { name: "🏬 Plaza", prompt: "Jet Set Radio game screenshot style background, Tokyo shopping plaza with storefronts, flat cel-shaded colors, muted tones with bright signage accents, thick black outlines, tiled floor pattern, Dreamcast era 3D aesthetic" },
+  tower: { name: "📡 Tower", prompt: "Jet Set Radio game screenshot style background, Tokyo Tower or radio tower structure, geometric metal framework, flat cel-shaded orange and grey colors, thick black outlines, city backdrop, Dreamcast era 3D graphics aesthetic" }
 };
 
 const MAX_LENGTH = 20;
@@ -300,64 +300,12 @@ function getRareMessage(rare) {
 }
 
 // =============================================================================
-// ASYNC GENERATION FUNCTIONS (called from button handlers, store results in state)
+// BUTTON HANDLERS (only set state - async work happens in main())
 // =============================================================================
 
-async function doGenerateTag(text, presetKey) {
-  const cleanText = text.trim().toUpperCase();
-  const result = buildPrompt(cleanText, presetKey);
-
-  const image = await sup.ai.image.create(result.prompt, {
-    width: OUTPUT_WIDTH,
-    height: OUTPUT_HEIGHT
-  });
-
-  const imageclipPatch = await sup.patch("/baby/imageclip");
-  const transparentImage = await imageclipPatch.run(image);
-
-  // Store results in state
-  sup.set("currentTag", transparentImage);
-  sup.set("currentTagText", cleanText);
-  sup.set("currentTagRare", result.rare);
-  sup.set("view", "tag");
-}
-
-async function doGenerateBackground() {
-  const tagText = sup.get("currentTagText");
-  const rare = sup.get("currentTagRare");
-
-  const bgKeys = Object.keys(BACKGROUNDS);
-  const randomBgKey = randomChoice(bgKeys);
-  const bg = BACKGROUNDS[randomBgKey];
-
-  let tagStyle = "colorful vibrant Jet Set Radio graffiti style with bold colors, thick outlines, drips and spray paint effects";
-  if (rare === "GOLD") {
-    tagStyle = "solid shiny gold metallic graffiti letters with gleaming highlights and gold drips";
-  } else if (rare === "HOLOGRAPHIC") {
-    tagStyle = "holographic rainbow iridescent chrome graffiti letters with prismatic light effects";
-  } else if (rare === "DIAMOND") {
-    tagStyle = "crystalline diamond sparkling gemstone graffiti letters with light refraction";
-  }
-
-  const prompt = `Graffiti tag artwork showing the word "${tagText}" spray painted ${bg.prompt}. The graffiti is in ${tagStyle}. Jet Set Radio / Jet Grind Radio video game art style, cel-shaded. Wide panoramic landscape format 4:1 aspect ratio. The tag is prominently displayed and clearly readable.`;
-
-  const composite = await sup.ai.image.create(prompt, {
-    width: OUTPUT_WIDTH,
-    height: OUTPUT_HEIGHT
-  });
-
-  sup.set("currentComposite", composite);
-  sup.set("currentBgKey", randomBgKey);
-  sup.set("view", "background");
-}
-
-// =============================================================================
-// BUTTON HANDLERS (only set state, no returns)
-// =============================================================================
-
-// Tag view actions
+// Tag view actions - only set state, main() handles async work
 function onAddBackground() {
-  doGenerateBackground();
+  sup.set("action", "generateBackground");
 }
 
 function onSaveToPortfolio() {
@@ -383,7 +331,7 @@ function onSaveToPortfolio() {
 
 // Background view actions
 function onRerollBackground() {
-  doGenerateBackground();
+  sup.set("action", "generateBackground");
 }
 
 function onBackToTransparent() {
@@ -601,8 +549,47 @@ function renderFavoritesView() {
 // MAIN ENTRY POINT
 // =============================================================================
 
-function main() {
-  // Check for direct text input (generates immediately)
+async function main() {
+  // Check for pending actions from button clicks (Dom's pattern)
+  const action = sup.get("action");
+
+  if (action === "generateBackground") {
+    // Clear action immediately
+    sup.set("action", null);
+
+    // Get the existing tag image
+    const existingTag = sup.get("currentTag");
+    const rare = sup.get("currentTagRare");
+
+    // Pick random background
+    const bgKeys = Object.keys(BACKGROUNDS);
+    const randomBgKey = randomChoice(bgKeys);
+    const bg = BACKGROUNDS[randomBgKey];
+
+    // Use image.edit to add background behind the existing tag
+    const editPrompt = `Add a background behind this graffiti tag. Background: ${bg.prompt}. Keep the graffiti tag exactly as it is, just fill in the transparent/white background area with the stylized background. Wide panoramic format.`;
+
+    const composite = await sup.ai.image.edit(existingTag, editPrompt);
+
+    // Store results
+    sup.set("currentComposite", composite);
+    sup.set("currentBgKey", randomBgKey);
+    sup.set("view", "background");
+
+    // Return background view
+    const response = [];
+    if (rare) {
+      response.push(getRareMessage(rare));
+    }
+    response.push(`📍 ${bg.name}`);
+    response.push(composite);
+    response.push(sup.button("🔄 Reroll Background", onRerollBackground));
+    response.push(sup.button("💾 Save to Portfolio", onSaveWithBackground));
+    response.push(sup.button("↩️ Back to Transparent", onBackToTransparent));
+    return response;
+  }
+
+  // Check for text input - generate tag immediately
   const text = sup.input.text;
   if (text && text.trim() !== "") {
     const cleanText = text.trim();
@@ -611,19 +598,42 @@ function main() {
     const lower = cleanText.toLowerCase();
     if (lower === "portfolio" || lower === "my tags" || lower === "saved") {
       sup.set("view", "portfolio");
-    } else if (lower === "favorite" || lower === "fav" || lower === "style") {
-      sup.set("view", "favorites");
-    } else if (cleanText.length <= MAX_LENGTH) {
-      // Generate tag directly from text input
-      const preset = sup.user.get("favoriteStyle") || "random";
-      doGenerateTag(cleanText, preset);
-    } else {
+    } else if (cleanText.length > MAX_LENGTH) {
       return `🚫 Too long! Max ${MAX_LENGTH} characters (you entered ${cleanText.length}).`;
+    } else {
+      // Generate tag immediately
+      const preset = sup.user.get("favoriteStyle") || "random";
+      const result = buildPrompt(cleanText.toUpperCase(), preset);
+
+      const image = await sup.ai.image.create(result.prompt, {
+        width: OUTPUT_WIDTH,
+        height: OUTPUT_HEIGHT
+      });
+
+      const imageclipPatch = await sup.patch("/baby/imageclip");
+      const transparentImage = await imageclipPatch.run(image);
+
+      // Store for button actions
+      sup.set("currentTag", transparentImage);
+      sup.set("currentTagText", cleanText.toUpperCase());
+      sup.set("currentTagRare", result.rare);
+      sup.set("view", "tag");
+
+      // Return tag with buttons
+      const response = [];
+      if (result.rare) {
+        response.push(getRareMessage(result.rare));
+      }
+      response.push(transparentImage);
+      response.push(sup.button("🎨 Add Background", onAddBackground));
+      response.push(sup.button("💾 Save to Portfolio", onSaveToPortfolio));
+      response.push(sup.button("📂 Portfolio", onViewPortfolio));
+      return response;
     }
   }
 
-  // Render based on current view state
-  const view = sup.get("view") || "form";
+  // Render based on view state (for other button interactions)
+  const view = sup.get("view") || "welcome";
 
   switch (view) {
     case "tag":
@@ -636,10 +646,13 @@ function main() {
       return renderPortfolioView();
     case "clearConfirm":
       return renderClearConfirmView();
-    case "favorites":
-      return renderFavoritesView();
-    case "form":
     default:
-      return renderFormView();
+      return [
+        "🎨 JET GRIND TAG",
+        "",
+        "Type any text to generate a graffiti tag!",
+        "",
+        sup.button("📂 Portfolio", onViewPortfolio)
+      ];
   }
 }

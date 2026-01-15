@@ -2,7 +2,7 @@
 // Creates stylized graffiti tags based on user text input
 // Repository: https://github.com/heyhaigh/sup-patches
 
-const VERSION = "1.1.0";
+const VERSION = "1.1.2";
 
 // =============================================================================
 // STYLE POOLS & CONSTANTS
@@ -601,9 +601,10 @@ function renderFavoritesView() {
 // MAIN ENTRY POINT
 // =============================================================================
 
-function main() {
-  // Check for direct text input (generates immediately)
+async function main() {
   const text = sup.input.text;
+
+  // If user provides text, generate tag immediately
   if (text && text.trim() !== "") {
     const cleanText = text.trim();
 
@@ -611,19 +612,43 @@ function main() {
     const lower = cleanText.toLowerCase();
     if (lower === "portfolio" || lower === "my tags" || lower === "saved") {
       sup.set("view", "portfolio");
-    } else if (lower === "favorite" || lower === "fav" || lower === "style") {
-      sup.set("view", "favorites");
-    } else if (cleanText.length <= MAX_LENGTH) {
-      // Generate tag directly from text input
-      const preset = sup.user.get("favoriteStyle") || "random";
-      doGenerateTag(cleanText, preset);
-    } else {
+    } else if (cleanText.length > MAX_LENGTH) {
       return `🚫 Too long! Max ${MAX_LENGTH} characters (you entered ${cleanText.length}).`;
+    } else {
+      // Generate tag immediately and return result
+      const preset = sup.user.get("favoriteStyle") || "random";
+      const result = buildPrompt(cleanText.toUpperCase(), preset);
+
+      const image = await sup.ai.image.create(result.prompt, {
+        width: OUTPUT_WIDTH,
+        height: OUTPUT_HEIGHT
+      });
+
+      const imageclipPatch = await sup.patch("/baby/imageclip");
+      const transparentImage = await imageclipPatch.run(image);
+
+      // Store for button actions
+      sup.set("currentTag", transparentImage);
+      sup.set("currentTagText", cleanText.toUpperCase());
+      sup.set("currentTagRare", result.rare);
+      sup.set("view", "tag");
+
+      // Return tag with action buttons
+      const response = [];
+      if (result.rare) {
+        response.push(getRareMessage(result.rare));
+      }
+      response.push(transparentImage);
+      response.push(sup.button("🎨 Add Background", onAddBackground));
+      response.push(sup.button("💾 Save to Portfolio", onSaveToPortfolio));
+      response.push(sup.button("📂 Portfolio", onViewPortfolio));
+
+      return response;
     }
   }
 
-  // Render based on current view state
-  const view = sup.get("view") || "form";
+  // Button interactions - render based on view state
+  const view = sup.get("view") || "welcome";
 
   switch (view) {
     case "tag":
@@ -636,10 +661,14 @@ function main() {
       return renderPortfolioView();
     case "clearConfirm":
       return renderClearConfirmView();
-    case "favorites":
-      return renderFavoritesView();
-    case "form":
     default:
-      return renderFormView();
+      // Welcome message when no text provided
+      return [
+        "🎨 JET GRIND TAG",
+        "",
+        "Type any text to generate a graffiti tag!",
+        "",
+        sup.button("📂 Portfolio", onViewPortfolio)
+      ];
   }
 }

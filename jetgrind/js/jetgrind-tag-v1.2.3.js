@@ -2,7 +2,7 @@
 // Creates stylized graffiti tags based on user text input
 // Repository: https://github.com/heyhaigh/sup-patches
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.3";
 
 // =============================================================================
 // STYLE POOLS & CONSTANTS
@@ -220,16 +220,16 @@ const RARE_DROPS = [
 ];
 
 const BACKGROUNDS = {
-  brick: { name: "🧱 Brick Wall", prompt: "on a gritty urban red brick wall with weathered mortar, some bricks cracked and worn, street lighting casting shadows" },
-  concrete: { name: "🏢 Concrete", prompt: "on a raw concrete wall with texture and imperfections, urban underpass vibes, industrial setting" },
-  dumpster: { name: "🗑️ Dumpster", prompt: "spray painted on the side of a green metal dumpster in an alley, rust spots and dents visible" },
-  train: { name: "🚃 Train Car", prompt: "on the side of a silver subway train car, metal panels and rivets visible, train yard setting" },
-  billboard: { name: "📋 Billboard", prompt: "painted over an old billboard advertisement, peeling posters underneath, rooftop urban setting" },
-  shutter: { name: "🚪 Metal Shutter", prompt: "on a corrugated metal roll-up shutter door of a closed shop, urban storefront at night" },
-  highway: { name: "🛣️ Highway Wall", prompt: "on a highway sound barrier wall, concrete with drainage stains, cars blurred in background" },
-  container: { name: "📦 Shipping Container", prompt: "on a rusty shipping container at the docks, industrial port setting, stacked containers behind" },
-  tunnel: { name: "🚇 Tunnel", prompt: "inside a dark urban tunnel or underpass, curved concrete walls, dramatic lighting from entrance" },
-  rooftop: { name: "🏙️ Rooftop", prompt: "on a rooftop water tank or HVAC unit, city skyline in background, urban exploration vibes" }
+  shibuya: { name: "🌃 Shibuya", prompt: "Jet Set Radio game screenshot style background, dense Tokyo cityscape with neon billboards and Japanese signs, flat cel-shaded colors with thick black outlines, muted grey buildings with bright neon accents, low-poly geometric shapes, dark street level, Dreamcast era 3D graphics aesthetic" },
+  garage: { name: "🏠 Garage", prompt: "Jet Set Radio game screenshot style background, indoor garage or basement with dark tiled floor grid pattern, industrial equipment, muted dark green and grey flat shaded walls, thick black outlines, speakers and machinery, Dreamcast era 3D cel-shaded aesthetic" },
+  shutter: { name: "🚪 Shutter", prompt: "Jet Set Radio game screenshot style background, metal roll-up shutter door on urban storefront, corrugated metal texture with flat cel-shaded colors, muted grey and brown tones, thick black outlines, Japanese storefront aesthetic, Dreamcast era 3D graphics" },
+  street: { name: "🛣️ Street", prompt: "Jet Set Radio game screenshot style background, Tokyo street scene with flat cel-shaded buildings, dark asphalt ground, muted browns and greys with neon sign accents, thick black outlines, low-poly geometric architecture, Dreamcast era 3D aesthetic" },
+  train: { name: "🚃 Train Yard", prompt: "Jet Set Radio game screenshot style background, subway train car side panel, silver and grey metal with flat cel-shaded colors, industrial train yard setting, thick black outlines, Dreamcast era 3D graphics aesthetic" },
+  rooftop: { name: "🌆 Rooftop", prompt: "Jet Set Radio game screenshot style background, Tokyo rooftop with water tanks and AC units, city skyline in distance, flat cel-shaded muted colors, thick black outlines, geometric shapes, Dreamcast era 3D aesthetic" },
+  highway: { name: "🛤️ Highway", prompt: "Jet Set Radio game screenshot style background, elevated highway or overpass, concrete barriers and road signs, flat cel-shaded grey and brown tones, thick black outlines, urban infrastructure, Dreamcast era 3D graphics" },
+  sewers: { name: "🚰 Sewers", prompt: "Jet Set Radio game screenshot style background, underground sewer tunnel with pipes and grates, dark green and grey flat shaded colors, wet floor reflections, thick black outlines, industrial underground aesthetic, Dreamcast era 3D" },
+  plaza: { name: "🏬 Plaza", prompt: "Jet Set Radio game screenshot style background, Tokyo shopping plaza with storefronts, flat cel-shaded colors, muted tones with bright signage accents, thick black outlines, tiled floor pattern, Dreamcast era 3D aesthetic" },
+  tower: { name: "📡 Tower", prompt: "Jet Set Radio game screenshot style background, Tokyo Tower or radio tower structure, geometric metal framework, flat cel-shaded orange and grey colors, thick black outlines, city backdrop, Dreamcast era 3D graphics aesthetic" }
 };
 
 const MAX_LENGTH = 20;
@@ -300,70 +300,18 @@ function getRareMessage(rare) {
 }
 
 // =============================================================================
-// ASYNC GENERATION FUNCTIONS (called from button handlers, store results in state)
+// BUTTON HANDLERS (only set state - async work happens in main())
 // =============================================================================
 
-async function doGenerateTag(text, presetKey) {
-  const cleanText = text.trim().toUpperCase();
-  const result = buildPrompt(cleanText, presetKey);
-
-  const image = await sup.ai.image.create(result.prompt, {
-    width: OUTPUT_WIDTH,
-    height: OUTPUT_HEIGHT
-  });
-
-  const imageclipPatch = await sup.patch("/baby/imageclip");
-  const transparentImage = await imageclipPatch.run(image);
-
-  // Store results in state
-  sup.set("currentTag", transparentImage);
-  sup.set("currentTagText", cleanText);
-  sup.set("currentTagRare", result.rare);
-  sup.set("view", "tag");
-}
-
-async function doGenerateBackground() {
-  const tagText = sup.get("currentTagText");
-  const rare = sup.get("currentTagRare");
-
-  const bgKeys = Object.keys(BACKGROUNDS);
-  const randomBgKey = randomChoice(bgKeys);
-  const bg = BACKGROUNDS[randomBgKey];
-
-  let tagStyle = "colorful vibrant Jet Set Radio graffiti style with bold colors, thick outlines, drips and spray paint effects";
-  if (rare === "GOLD") {
-    tagStyle = "solid shiny gold metallic graffiti letters with gleaming highlights and gold drips";
-  } else if (rare === "HOLOGRAPHIC") {
-    tagStyle = "holographic rainbow iridescent chrome graffiti letters with prismatic light effects";
-  } else if (rare === "DIAMOND") {
-    tagStyle = "crystalline diamond sparkling gemstone graffiti letters with light refraction";
-  }
-
-  const prompt = `Graffiti tag artwork showing the word "${tagText}" spray painted ${bg.prompt}. The graffiti is in ${tagStyle}. Jet Set Radio / Jet Grind Radio video game art style, cel-shaded. Wide panoramic landscape format 4:1 aspect ratio. The tag is prominently displayed and clearly readable.`;
-
-  const composite = await sup.ai.image.create(prompt, {
-    width: OUTPUT_WIDTH,
-    height: OUTPUT_HEIGHT
-  });
-
-  sup.set("currentComposite", composite);
-  sup.set("currentBgKey", randomBgKey);
-  sup.set("view", "background");
-}
-
-// =============================================================================
-// BUTTON HANDLERS (only set state, no returns)
-// =============================================================================
-
-// Tag view actions
+// Tag view actions - only set state, main() handles async work
 function onAddBackground() {
-  doGenerateBackground();
+  sup.message.set("action", "generateBackground");
 }
 
-function onSaveToPortfolio() {
-  const tagImage = sup.get("currentTag");
-  const tagText = sup.get("currentTagText");
-  const rare = sup.get("currentTagRare");
+function onSaveToTagPortfolio() {
+  const tagImage = sup.message.get("currentTag");
+  const tagText = sup.message.get("currentTagText");
+  const rare = sup.message.get("currentTagRare");
 
   if (!tagImage) return;
 
@@ -372,86 +320,118 @@ function onSaveToPortfolio() {
     text: tagText,
     image: tagImage,
     rare: rare,
-    backgroundName: null,
     savedAt: Date.now()
   });
   sup.user.set("tagPortfolio", portfolio.slice(-50));
 
-  sup.set("saveMessage", `✅ Saved "${tagText}" to portfolio! (${portfolio.length} tags)`);
-  sup.set("view", "saved");
+  sup.message.set("saveMessage", `✅ Saved "${tagText}" to Tag Portfolio! (${portfolio.length} tags)`);
+  sup.message.set("view", "saved");
 }
 
 // Background view actions
 function onRerollBackground() {
-  doGenerateBackground();
+  sup.message.set("action", "generateBackground");
 }
 
 function onBackToTransparent() {
-  sup.set("view", "tag");
+  sup.message.set("view", "tag");
 }
 
-function onSaveWithBackground() {
-  const tagText = sup.get("currentTagText");
-  const rare = sup.get("currentTagRare");
-  const bgKey = sup.get("currentBgKey");
-  const composite = sup.get("currentComposite");
+function onSaveToPhotoJournal() {
+  const tagText = sup.message.get("currentTagText");
+  const rare = sup.message.get("currentTagRare");
+  const bgKey = sup.message.get("currentBgKey");
+  const composite = sup.message.get("currentComposite");
 
   if (!composite) return;
 
   const bg = BACKGROUNDS[bgKey];
-  const portfolio = sup.user.get("tagPortfolio") || [];
-  portfolio.push({
+  const journal = sup.user.get("photoJournal") || [];
+  journal.push({
     text: tagText,
     image: composite,
     rare: rare,
-    backgroundName: bg.name,
+    backdropName: bg.name,
     savedAt: Date.now()
   });
-  sup.user.set("tagPortfolio", portfolio.slice(-50));
+  sup.user.set("photoJournal", journal.slice(-50));
 
-  sup.set("saveMessage", `✅ Saved "${tagText}" on ${bg.name}! (${portfolio.length} tags)`);
-  sup.set("view", "saved");
+  sup.message.set("saveMessage", `✅ Saved "${tagText}" on ${bg.name} to Photo Journal! (${journal.length} photos)`);
+  sup.message.set("view", "saved");
 }
 
 // Navigation
-function onBackToForm() {
-  sup.set("view", "form");
+function onBackToTag() {
+  sup.message.set("view", "tag");
 }
 
-function onViewPortfolio() {
-  sup.set("portfolioPage", 0);
-  sup.set("view", "portfolio");
+function onViewTagPortfolio() {
+  sup.message.set("portfolioPage", 0);
+  sup.message.set("view", "tagPortfolio");
 }
 
-function onViewFavorites() {
-  sup.set("view", "favorites");
+function onViewPhotoJournal() {
+  sup.message.set("journalPage", 0);
+  sup.message.set("view", "photoJournal");
 }
 
-// Portfolio actions
+// Tag Portfolio actions
 function onPortfolioNewerPage() {
-  const page = sup.get("portfolioPage") || 0;
-  sup.set("portfolioPage", Math.max(0, page - 1));
+  const page = sup.message.get("portfolioPage") || 0;
+  sup.message.set("portfolioPage", Math.max(0, page - 1));
 }
 
 function onPortfolioOlderPage() {
-  const page = sup.get("portfolioPage") || 0;
-  sup.set("portfolioPage", page + 1);
+  const page = sup.message.get("portfolioPage") || 0;
+  sup.message.set("portfolioPage", page + 1);
 }
 
-function onClearPortfolio() {
-  sup.set("view", "clearConfirm");
+function onViewPortfolioItem(index) {
+  sup.message.set("selectedPortfolioIndex", index);
+  sup.message.set("view", "portfolioDetail");
 }
 
-function onConfirmClearPortfolio() {
-  sup.user.set("tagPortfolio", []);
-  sup.set("view", "portfolio");
+function onRemovePortfolioItem() {
+  const index = sup.message.get("selectedPortfolioIndex");
+  const portfolio = sup.user.get("tagPortfolio") || [];
+  if (index >= 0 && index < portfolio.length) {
+    portfolio.splice(index, 1);
+    sup.user.set("tagPortfolio", portfolio);
+  }
+  sup.message.set("view", "tagPortfolio");
 }
 
-function onCancelClear() {
-  sup.set("view", "portfolio");
+// Photo Journal actions
+function onJournalNewerPage() {
+  const page = sup.message.get("journalPage") || 0;
+  sup.message.set("journalPage", Math.max(0, page - 1));
+}
+
+function onJournalOlderPage() {
+  const page = sup.message.get("journalPage") || 0;
+  sup.message.set("journalPage", page + 1);
+}
+
+function onViewJournalItem(index) {
+  sup.message.set("selectedJournalIndex", index);
+  sup.message.set("view", "journalDetail");
+}
+
+function onRemoveJournalItem() {
+  const index = sup.message.get("selectedJournalIndex");
+  const journal = sup.user.get("photoJournal") || [];
+  if (index >= 0 && index < journal.length) {
+    journal.splice(index, 1);
+    sup.user.set("photoJournal", journal);
+  }
+  sup.message.set("view", "photoJournal");
 }
 
 // Favorite style actions
+function onViewFavorites() {
+  sup.message.set("view", "favorites");
+}
+
 function onSetFavorite(key) {
   sup.user.set("favoriteStyle", key);
 }
@@ -460,29 +440,17 @@ function onClearFavorite() {
   sup.user.set("favoriteStyle", null);
 }
 
+function onBackToWelcome() {
+  sup.message.set("view", "welcome");
+}
+
 // =============================================================================
 // VIEW RENDERERS (called from main based on state)
 // =============================================================================
 
-function renderFormView() {
-  const favoriteStyle = sup.user.get("favoriteStyle");
-  const favName = favoriteStyle ? (STYLE_PRESETS[favoriteStyle]?.name || "Random") : "Random";
-
-  return [
-    "🎨 JET GRIND TAG GENERATOR",
-    "",
-    `Type your tag text (1-3 words, max ${MAX_LENGTH} chars)`,
-    "",
-    `Current style: ${favName}`,
-    "",
-    sup.button("⭐ Set Style", onViewFavorites),
-    sup.button("📂 Portfolio", onViewPortfolio)
-  ];
-}
-
 function renderTagView() {
-  const tagImage = sup.get("currentTag");
-  const rare = sup.get("currentTagRare");
+  const tagImage = sup.message.get("currentTag");
+  const rare = sup.message.get("currentTagRare");
 
   const response = [];
 
@@ -491,17 +459,18 @@ function renderTagView() {
   }
 
   response.push(tagImage);
-  response.push(sup.button("🎨 Add Background", onAddBackground));
-  response.push(sup.button("💾 Save to Portfolio", onSaveToPortfolio));
-  response.push(sup.button("🔄 New Tag", onBackToForm));
+  response.push(sup.button("🎨 Add Backdrop", onAddBackground));
+  response.push(sup.button("💾 Save to Tag Portfolio", onSaveToTagPortfolio));
+  response.push(sup.button("🏷️ Tag Portfolio", onViewTagPortfolio));
+  response.push(sup.button("📸 Photo Journal", onViewPhotoJournal));
 
   return response;
 }
 
-function renderBackgroundView() {
-  const composite = sup.get("currentComposite");
-  const bgKey = sup.get("currentBgKey");
-  const rare = sup.get("currentTagRare");
+function renderBackdropView() {
+  const composite = sup.message.get("currentComposite");
+  const bgKey = sup.message.get("currentBgKey");
+  const rare = sup.message.get("currentTagRare");
   const bg = BACKGROUNDS[bgKey];
 
   const response = [];
@@ -512,69 +481,200 @@ function renderBackgroundView() {
 
   response.push(`📍 ${bg.name}`);
   response.push(composite);
-  response.push(sup.button("🔄 Reroll Background", onRerollBackground));
-  response.push(sup.button("💾 Save to Portfolio", onSaveWithBackground));
-  response.push(sup.button("↩️ Back to Transparent", onBackToTransparent));
+  response.push(sup.button("🔄 Reroll Backdrop", onRerollBackground));
+  response.push(sup.button("💾 Save to Photo Journal", onSaveToPhotoJournal));
+  response.push(sup.button("↩️ Back to Original", onBackToTransparent));
 
   return response;
 }
 
 function renderSavedView() {
-  const message = sup.get("saveMessage");
+  const message = sup.message.get("saveMessage");
   return [
     message,
-    sup.button("🎨 Create Another", onBackToForm),
-    sup.button("📂 View Portfolio", onViewPortfolio)
+    sup.button("↩️ Back to Tag", onBackToTag),
+    sup.button("🏷️ Tag Portfolio", onViewTagPortfolio),
+    sup.button("📸 Photo Journal", onViewPhotoJournal)
   ];
 }
 
-function renderPortfolioView() {
+function renderTagPortfolioView() {
   const portfolio = sup.user.get("tagPortfolio") || [];
-
-  if (portfolio.length === 0) {
-    return [
-      "📂 Your portfolio is empty!",
-      "Generate some tags and save them.",
-      sup.button("🎨 Create a Tag", onBackToForm)
-    ];
-  }
-
-  const pageSize = 3;
-  const currentPage = sup.get("portfolioPage") || 0;
-  const totalPages = Math.ceil(portfolio.length / pageSize);
-  const startIdx = portfolio.length - 1 - (currentPage * pageSize);
-  const endIdx = Math.max(startIdx - pageSize + 1, 0);
+  const hasCurrentTag = sup.message.get("currentTag");
+  const pageSize = 6; // Show 6 thumbnails per page
 
   const response = [
-    `📂 Portfolio (${portfolio.length} tags) - Page ${currentPage + 1}/${totalPages}`
+    `🏷️ Tag Portfolio (${portfolio.length}/50)`
   ];
 
-  for (let i = startIdx; i >= endIdx; i--) {
-    const tag = portfolio[i];
-    const rareLabel = tag.rare ? ` [${tag.rare}]` : "";
-    const bgLabel = tag.backgroundName ? ` on ${tag.backgroundName}` : "";
-    response.push(`\n"${tag.text}"${rareLabel}${bgLabel}`);
-    response.push(tag.image);
+  if (portfolio.length === 0) {
+    response.push("");
+    response.push("No tags saved yet!");
+    response.push("Generate a tag and save it here.");
+    response.push("");
+    // Show empty grid placeholders
+    response.push("⬜ ⬜ ⬜");
+    response.push("⬜ ⬜ ⬜");
+  } else {
+    const currentPage = sup.message.get("portfolioPage") || 0;
+    const totalPages = Math.ceil(portfolio.length / pageSize);
+
+    // Calculate which items to show (newest first)
+    const startIdx = portfolio.length - 1 - (currentPage * pageSize);
+    const endIdx = Math.max(0, startIdx - pageSize + 1);
+
+    response.push(`Page ${currentPage + 1}/${totalPages}`);
+    response.push("");
+
+    // Display thumbnails with selection buttons below each
+    for (let i = startIdx; i >= endIdx; i--) {
+      const tag = portfolio[i];
+      const rareLabel = tag.rare ? ` ✨${tag.rare}` : "";
+      // Show the actual thumbnail image
+      response.push(tag.image);
+      // Button to select/view this tag
+      response.push(sup.button(`👆 "${tag.text}"${rareLabel}`, () => onViewPortfolioItem(i)));
+    }
+
+    // Show empty slots if not full page
+    const itemsShown = startIdx - endIdx + 1;
+    const emptySlots = pageSize - itemsShown;
+    if (emptySlots > 0 && currentPage === totalPages - 1) {
+      for (let i = 0; i < emptySlots; i++) {
+        response.push("⬜");
+      }
+    }
+
+    // Pagination
+    if (totalPages > 1) {
+      response.push("");
+      if (currentPage > 0) {
+        response.push(sup.button("⬅️ Newer", onPortfolioNewerPage));
+      }
+      if (currentPage < totalPages - 1) {
+        response.push(sup.button("➡️ Older", onPortfolioOlderPage));
+      }
+    }
   }
 
-  if (currentPage > 0) {
-    response.push(sup.button("⬅️ Newer", onPortfolioNewerPage));
+  response.push("");
+  if (hasCurrentTag) {
+    response.push(sup.button("↩️ Back to Tag", onBackToTag));
   }
-  if (currentPage < totalPages - 1) {
-    response.push(sup.button("➡️ Older", onPortfolioOlderPage));
-  }
-
-  response.push(sup.button("🎨 Create New Tag", onBackToForm));
-  response.push(sup.button("🗑️ Clear Portfolio", onClearPortfolio));
+  response.push(sup.button("📸 Photo Journal", onViewPhotoJournal));
 
   return response;
 }
 
-function renderClearConfirmView() {
+function renderPortfolioDetailView() {
+  const portfolio = sup.user.get("tagPortfolio") || [];
+  const index = sup.message.get("selectedPortfolioIndex");
+
+  if (index === undefined || index < 0 || index >= portfolio.length) {
+    return [
+      "Tag not found",
+      sup.button("↩️ Back to Portfolio", onViewTagPortfolio)
+    ];
+  }
+
+  const tag = portfolio[index];
+  const rareLabel = tag.rare ? ` [${tag.rare}]` : "";
+
   return [
-    "⚠️ Delete ALL saved tags?",
-    sup.button("✅ Yes, Delete All", onConfirmClearPortfolio),
-    sup.button("❌ Cancel", onCancelClear)
+    `🏷️ "${tag.text}"${rareLabel}`,
+    tag.image,
+    sup.button("🗑️ Remove from Portfolio", onRemovePortfolioItem),
+    sup.button("↩️ Back to Portfolio", onViewTagPortfolio)
+  ];
+}
+
+function renderPhotoJournalView() {
+  const journal = sup.user.get("photoJournal") || [];
+  const hasCurrentTag = sup.message.get("currentTag");
+  const pageSize = 6; // Show 6 thumbnails per page
+
+  const response = [
+    `📸 Photo Journal (${journal.length}/50)`
+  ];
+
+  if (journal.length === 0) {
+    response.push("");
+    response.push("No photos saved yet!");
+    response.push("Add a backdrop to a tag and save it here.");
+    response.push("");
+    // Show empty grid placeholders
+    response.push("⬜ ⬜ ⬜");
+    response.push("⬜ ⬜ ⬜");
+  } else {
+    const currentPage = sup.message.get("journalPage") || 0;
+    const totalPages = Math.ceil(journal.length / pageSize);
+
+    // Calculate which items to show (newest first)
+    const startIdx = journal.length - 1 - (currentPage * pageSize);
+    const endIdx = Math.max(0, startIdx - pageSize + 1);
+
+    response.push(`Page ${currentPage + 1}/${totalPages}`);
+    response.push("");
+
+    // Display thumbnails with selection buttons below each
+    for (let i = startIdx; i >= endIdx; i--) {
+      const photo = journal[i];
+      const rareLabel = photo.rare ? ` ✨${photo.rare}` : "";
+      // Show the actual thumbnail image
+      response.push(photo.image);
+      // Button to select/view this photo
+      response.push(sup.button(`👆 "${photo.text}" ${photo.backdropName}${rareLabel}`, () => onViewJournalItem(i)));
+    }
+
+    // Show empty slots if not full page
+    const itemsShown = startIdx - endIdx + 1;
+    const emptySlots = pageSize - itemsShown;
+    if (emptySlots > 0 && currentPage === totalPages - 1) {
+      for (let i = 0; i < emptySlots; i++) {
+        response.push("⬜");
+      }
+    }
+
+    // Pagination
+    if (totalPages > 1) {
+      response.push("");
+      if (currentPage > 0) {
+        response.push(sup.button("⬅️ Newer", onJournalNewerPage));
+      }
+      if (currentPage < totalPages - 1) {
+        response.push(sup.button("➡️ Older", onJournalOlderPage));
+      }
+    }
+  }
+
+  response.push("");
+  if (hasCurrentTag) {
+    response.push(sup.button("↩️ Back to Tag", onBackToTag));
+  }
+  response.push(sup.button("🏷️ Tag Portfolio", onViewTagPortfolio));
+
+  return response;
+}
+
+function renderJournalDetailView() {
+  const journal = sup.user.get("photoJournal") || [];
+  const index = sup.message.get("selectedJournalIndex");
+
+  if (index === undefined || index < 0 || index >= journal.length) {
+    return [
+      "Photo not found",
+      sup.button("↩️ Back to Journal", onViewPhotoJournal)
+    ];
+  }
+
+  const photo = journal[index];
+  const rareLabel = photo.rare ? ` [${photo.rare}]` : "";
+
+  return [
+    `📸 "${photo.text}" on ${photo.backdropName}${rareLabel}`,
+    photo.image,
+    sup.button("🗑️ Remove from Journal", onRemoveJournalItem),
+    sup.button("↩️ Back to Journal", onViewPhotoJournal)
   ];
 }
 
@@ -593,7 +693,7 @@ function renderFavoritesView() {
     sup.button(favorite === "loveshockers" ? "💖 Love Shockers ✓" : "💖 Love Shockers", () => onSetFavorite("loveshockers")),
     "",
     favorite ? sup.button("🗑️ Clear Favorite", onClearFavorite) : null,
-    sup.button("↩️ Back", onBackToForm)
+    sup.button("↩️ Back", onBackToWelcome)
   ].filter(Boolean);
 }
 
@@ -601,45 +701,130 @@ function renderFavoritesView() {
 // MAIN ENTRY POINT
 // =============================================================================
 
-function main() {
-  // Check for direct text input (generates immediately)
+async function main() {
+  // Check for pending actions from button clicks (Dom's pattern)
+  const action = sup.message.get("action");
+
+  if (action === "generateBackground") {
+    // Clear action immediately
+    sup.message.set("action", null);
+
+    // Get the existing tag data
+    const existingTag = sup.message.get("currentTag");
+    const tagText = sup.message.get("currentTagText");
+    const rare = sup.message.get("currentTagRare");
+
+    // Safety check
+    if (!existingTag || !tagText) {
+      return "⚠️ No tag found. Generate a tag first!";
+    }
+
+    // Pick random background
+    const bgKeys = Object.keys(BACKGROUNDS);
+    const randomBgKey = randomChoice(bgKeys);
+    const bg = BACKGROUNDS[randomBgKey];
+
+    // Try to use image.edit to add background behind existing tag
+    const editPrompt = `Add a stylized background behind this graffiti tag. Replace the white/transparent background with: ${bg.prompt}. Keep the graffiti text exactly as it appears, only change the background. Wide panoramic format.`;
+
+    const composite = await sup.ai.image.edit(existingTag, editPrompt);
+
+    // Store results
+    sup.message.set("currentComposite", composite);
+    sup.message.set("currentBgKey", randomBgKey);
+    sup.message.set("view", "background");
+
+    // Return backdrop view
+    const response = [];
+    if (rare) {
+      response.push(getRareMessage(rare));
+    }
+    response.push(`📍 ${bg.name}`);
+    response.push(composite);
+    response.push(sup.button("🔄 Reroll Backdrop", onRerollBackground));
+    response.push(sup.button("💾 Save to Photo Journal", onSaveToPhotoJournal));
+    response.push(sup.button("↩️ Back to Original", onBackToTransparent));
+    return response;
+  }
+
+  // Check for text input - generate tag immediately
   const text = sup.input.text;
   if (text && text.trim() !== "") {
     const cleanText = text.trim();
 
     // Special commands
     const lower = cleanText.toLowerCase();
-    if (lower === "portfolio" || lower === "my tags" || lower === "saved") {
-      sup.set("view", "portfolio");
-    } else if (lower === "favorite" || lower === "fav" || lower === "style") {
-      sup.set("view", "favorites");
-    } else if (cleanText.length <= MAX_LENGTH) {
-      // Generate tag directly from text input
-      const preset = sup.user.get("favoriteStyle") || "random";
-      doGenerateTag(cleanText, preset);
-    } else {
+    if (lower === "tags" || lower === "portfolio") {
+      sup.message.set("view", "tagPortfolio");
+    } else if (lower === "photos" || lower === "journal") {
+      sup.message.set("view", "photoJournal");
+    } else if (cleanText.length > MAX_LENGTH) {
       return `🚫 Too long! Max ${MAX_LENGTH} characters (you entered ${cleanText.length}).`;
+    } else {
+      // Generate tag immediately
+      const preset = sup.user.get("favoriteStyle") || "random";
+      const result = buildPrompt(cleanText.toUpperCase(), preset);
+
+      const image = await sup.ai.image.create(result.prompt, {
+        width: OUTPUT_WIDTH,
+        height: OUTPUT_HEIGHT
+      });
+
+      const imageclipPatch = await sup.patch("/baby/imageclip");
+      const transparentImage = await imageclipPatch.run(image);
+
+      // Store for button actions
+      sup.message.set("currentTag", transparentImage);
+      sup.message.set("currentTagText", cleanText.toUpperCase());
+      sup.message.set("currentTagRare", result.rare);
+      sup.message.set("view", "tag");
+
+      // Return tag with buttons
+      const response = [];
+      if (result.rare) {
+        response.push(getRareMessage(result.rare));
+      }
+      response.push(transparentImage);
+      response.push(sup.button("🎨 Add Backdrop", onAddBackground));
+      response.push(sup.button("💾 Save to Tag Portfolio", onSaveToTagPortfolio));
+      response.push(sup.button("🏷️ Tag Portfolio", onViewTagPortfolio));
+      response.push(sup.button("📸 Photo Journal", onViewPhotoJournal));
+      return response;
     }
   }
 
-  // Render based on current view state
-  const view = sup.get("view") || "form";
+  // Render based on view state (for other button interactions)
+  const view = sup.message.get("view") || "welcome";
 
   switch (view) {
     case "tag":
       return renderTagView();
     case "background":
-      return renderBackgroundView();
+      return renderBackdropView();
     case "saved":
       return renderSavedView();
-    case "portfolio":
-      return renderPortfolioView();
-    case "clearConfirm":
-      return renderClearConfirmView();
+    case "tagPortfolio":
+      return renderTagPortfolioView();
+    case "portfolioDetail":
+      return renderPortfolioDetailView();
+    case "photoJournal":
+      return renderPhotoJournalView();
+    case "journalDetail":
+      return renderJournalDetailView();
     case "favorites":
       return renderFavoritesView();
-    case "form":
     default:
-      return renderFormView();
+      const favoriteStyle = sup.user.get("favoriteStyle");
+      const styleName = favoriteStyle ? (STYLE_PRESETS[favoriteStyle]?.name || "Random") : "Random";
+      return [
+        "🎨 JET GRIND TAG",
+        "",
+        "Type any text to generate a graffiti tag!",
+        `Style: ${styleName}`,
+        "",
+        sup.button("⭐ Set Style", onViewFavorites),
+        sup.button("🏷️ Tag Portfolio", onViewTagPortfolio),
+        sup.button("📸 Photo Journal", onViewPhotoJournal)
+      ];
   }
 }

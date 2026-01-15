@@ -2,7 +2,7 @@
 // Creates stylized graffiti tags based on user text input
 // Repository: https://github.com/heyhaigh/sup-patches
 
-const VERSION = "1.1.0";
+const VERSION = "1.1.4";
 
 // =============================================================================
 // STYLE POOLS & CONSTANTS
@@ -220,16 +220,16 @@ const RARE_DROPS = [
 ];
 
 const BACKGROUNDS = {
-  brick: { name: "🧱 Brick Wall", prompt: "on a gritty urban red brick wall with weathered mortar, some bricks cracked and worn, street lighting casting shadows" },
-  concrete: { name: "🏢 Concrete", prompt: "on a raw concrete wall with texture and imperfections, urban underpass vibes, industrial setting" },
-  dumpster: { name: "🗑️ Dumpster", prompt: "spray painted on the side of a green metal dumpster in an alley, rust spots and dents visible" },
-  train: { name: "🚃 Train Car", prompt: "on the side of a silver subway train car, metal panels and rivets visible, train yard setting" },
-  billboard: { name: "📋 Billboard", prompt: "painted over an old billboard advertisement, peeling posters underneath, rooftop urban setting" },
-  shutter: { name: "🚪 Metal Shutter", prompt: "on a corrugated metal roll-up shutter door of a closed shop, urban storefront at night" },
-  highway: { name: "🛣️ Highway Wall", prompt: "on a highway sound barrier wall, concrete with drainage stains, cars blurred in background" },
-  container: { name: "📦 Shipping Container", prompt: "on a rusty shipping container at the docks, industrial port setting, stacked containers behind" },
-  tunnel: { name: "🚇 Tunnel", prompt: "inside a dark urban tunnel or underpass, curved concrete walls, dramatic lighting from entrance" },
-  rooftop: { name: "🏙️ Rooftop", prompt: "on a rooftop water tank or HVAC unit, city skyline in background, urban exploration vibes" }
+  brick: { name: "🧱 Brick Wall", prompt: "cel-shaded anime style red brick wall texture, Jet Set Radio video game aesthetic, flat bold colors, clean graphic lines, stylized urban surface" },
+  concrete: { name: "🏢 Concrete", prompt: "cel-shaded concrete wall texture, Jet Set Radio style, flat gray tones with stylized cracks, anime urban aesthetic, bold outlines" },
+  metal: { name: "🔩 Metal", prompt: "cel-shaded corrugated metal surface, Jet Set Radio style, stylized rust spots, flat colors with bold graphic shading, industrial anime aesthetic" },
+  train: { name: "🚃 Train Car", prompt: "cel-shaded subway train car side panel, Jet Set Radio style, silver metal with stylized rivets, anime urban transit aesthetic" },
+  neon: { name: "🌃 Neon City", prompt: "cel-shaded Tokyo night cityscape, Jet Set Radio style, neon signs and bright colors, stylized urban background, anime aesthetic" },
+  shibuya: { name: "🏙️ Shibuya", prompt: "cel-shaded Shibuya crossing inspired background, Jet Set Radio style, colorful billboards and signs, anime Tokyo aesthetic" },
+  rooftop: { name: "🌆 Rooftop", prompt: "cel-shaded rooftop view with water tanks, Jet Set Radio style, stylized city skyline, anime urban exploration aesthetic" },
+  alley: { name: "🚶 Alley", prompt: "cel-shaded back alley texture, Jet Set Radio style, stylized dumpsters and pipes, flat colors, anime urban aesthetic" },
+  garage: { name: "🅿️ Garage", prompt: "cel-shaded parking garage wall, Jet Set Radio style, concrete pillars and painted lines, flat graphic colors, urban anime aesthetic" },
+  tunnel: { name: "🚇 Tunnel", prompt: "cel-shaded underground tunnel, Jet Set Radio style, curved walls with dramatic lighting, stylized urban anime aesthetic" }
 };
 
 const MAX_LENGTH = 20;
@@ -300,64 +300,12 @@ function getRareMessage(rare) {
 }
 
 // =============================================================================
-// ASYNC GENERATION FUNCTIONS (called from button handlers, store results in state)
+// BUTTON HANDLERS (only set state - async work happens in main())
 // =============================================================================
 
-async function doGenerateTag(text, presetKey) {
-  const cleanText = text.trim().toUpperCase();
-  const result = buildPrompt(cleanText, presetKey);
-
-  const image = await sup.ai.image.create(result.prompt, {
-    width: OUTPUT_WIDTH,
-    height: OUTPUT_HEIGHT
-  });
-
-  const imageclipPatch = await sup.patch("/baby/imageclip");
-  const transparentImage = await imageclipPatch.run(image);
-
-  // Store results in state
-  sup.set("currentTag", transparentImage);
-  sup.set("currentTagText", cleanText);
-  sup.set("currentTagRare", result.rare);
-  sup.set("view", "tag");
-}
-
-async function doGenerateBackground() {
-  const tagText = sup.get("currentTagText");
-  const rare = sup.get("currentTagRare");
-
-  const bgKeys = Object.keys(BACKGROUNDS);
-  const randomBgKey = randomChoice(bgKeys);
-  const bg = BACKGROUNDS[randomBgKey];
-
-  let tagStyle = "colorful vibrant Jet Set Radio graffiti style with bold colors, thick outlines, drips and spray paint effects";
-  if (rare === "GOLD") {
-    tagStyle = "solid shiny gold metallic graffiti letters with gleaming highlights and gold drips";
-  } else if (rare === "HOLOGRAPHIC") {
-    tagStyle = "holographic rainbow iridescent chrome graffiti letters with prismatic light effects";
-  } else if (rare === "DIAMOND") {
-    tagStyle = "crystalline diamond sparkling gemstone graffiti letters with light refraction";
-  }
-
-  const prompt = `Graffiti tag artwork showing the word "${tagText}" spray painted ${bg.prompt}. The graffiti is in ${tagStyle}. Jet Set Radio / Jet Grind Radio video game art style, cel-shaded. Wide panoramic landscape format 4:1 aspect ratio. The tag is prominently displayed and clearly readable.`;
-
-  const composite = await sup.ai.image.create(prompt, {
-    width: OUTPUT_WIDTH,
-    height: OUTPUT_HEIGHT
-  });
-
-  sup.set("currentComposite", composite);
-  sup.set("currentBgKey", randomBgKey);
-  sup.set("view", "background");
-}
-
-// =============================================================================
-// BUTTON HANDLERS (only set state, no returns)
-// =============================================================================
-
-// Tag view actions
+// Tag view actions - only set state, main() handles async work
 function onAddBackground() {
-  doGenerateBackground();
+  sup.set("action", "generateBackground");
 }
 
 function onSaveToPortfolio() {
@@ -383,7 +331,7 @@ function onSaveToPortfolio() {
 
 // Background view actions
 function onRerollBackground() {
-  doGenerateBackground();
+  sup.set("action", "generateBackground");
 }
 
 function onBackToTransparent() {
@@ -601,8 +549,47 @@ function renderFavoritesView() {
 // MAIN ENTRY POINT
 // =============================================================================
 
-function main() {
-  // Check for direct text input (generates immediately)
+async function main() {
+  // Check for pending actions from button clicks (Dom's pattern)
+  const action = sup.get("action");
+
+  if (action === "generateBackground") {
+    // Clear action immediately
+    sup.set("action", null);
+
+    // Get the existing tag image
+    const existingTag = sup.get("currentTag");
+    const rare = sup.get("currentTagRare");
+
+    // Pick random background
+    const bgKeys = Object.keys(BACKGROUNDS);
+    const randomBgKey = randomChoice(bgKeys);
+    const bg = BACKGROUNDS[randomBgKey];
+
+    // Use image.edit to add background behind the existing tag
+    const editPrompt = `Add a background behind this graffiti tag. Background: ${bg.prompt}. Keep the graffiti tag exactly as it is, just fill in the transparent/white background area with the stylized background. Wide panoramic format.`;
+
+    const composite = await sup.ai.image.edit(existingTag, editPrompt);
+
+    // Store results
+    sup.set("currentComposite", composite);
+    sup.set("currentBgKey", randomBgKey);
+    sup.set("view", "background");
+
+    // Return background view
+    const response = [];
+    if (rare) {
+      response.push(getRareMessage(rare));
+    }
+    response.push(`📍 ${bg.name}`);
+    response.push(composite);
+    response.push(sup.button("🔄 Reroll Background", onRerollBackground));
+    response.push(sup.button("💾 Save to Portfolio", onSaveWithBackground));
+    response.push(sup.button("↩️ Back to Transparent", onBackToTransparent));
+    return response;
+  }
+
+  // Check for text input - generate tag immediately
   const text = sup.input.text;
   if (text && text.trim() !== "") {
     const cleanText = text.trim();
@@ -611,19 +598,42 @@ function main() {
     const lower = cleanText.toLowerCase();
     if (lower === "portfolio" || lower === "my tags" || lower === "saved") {
       sup.set("view", "portfolio");
-    } else if (lower === "favorite" || lower === "fav" || lower === "style") {
-      sup.set("view", "favorites");
-    } else if (cleanText.length <= MAX_LENGTH) {
-      // Generate tag directly from text input
-      const preset = sup.user.get("favoriteStyle") || "random";
-      doGenerateTag(cleanText, preset);
-    } else {
+    } else if (cleanText.length > MAX_LENGTH) {
       return `🚫 Too long! Max ${MAX_LENGTH} characters (you entered ${cleanText.length}).`;
+    } else {
+      // Generate tag immediately
+      const preset = sup.user.get("favoriteStyle") || "random";
+      const result = buildPrompt(cleanText.toUpperCase(), preset);
+
+      const image = await sup.ai.image.create(result.prompt, {
+        width: OUTPUT_WIDTH,
+        height: OUTPUT_HEIGHT
+      });
+
+      const imageclipPatch = await sup.patch("/baby/imageclip");
+      const transparentImage = await imageclipPatch.run(image);
+
+      // Store for button actions
+      sup.set("currentTag", transparentImage);
+      sup.set("currentTagText", cleanText.toUpperCase());
+      sup.set("currentTagRare", result.rare);
+      sup.set("view", "tag");
+
+      // Return tag with buttons
+      const response = [];
+      if (result.rare) {
+        response.push(getRareMessage(result.rare));
+      }
+      response.push(transparentImage);
+      response.push(sup.button("🎨 Add Background", onAddBackground));
+      response.push(sup.button("💾 Save to Portfolio", onSaveToPortfolio));
+      response.push(sup.button("📂 Portfolio", onViewPortfolio));
+      return response;
     }
   }
 
-  // Render based on current view state
-  const view = sup.get("view") || "form";
+  // Render based on view state (for other button interactions)
+  const view = sup.get("view") || "welcome";
 
   switch (view) {
     case "tag":
@@ -636,10 +646,13 @@ function main() {
       return renderPortfolioView();
     case "clearConfirm":
       return renderClearConfirmView();
-    case "favorites":
-      return renderFavoritesView();
-    case "form":
     default:
-      return renderFormView();
+      return [
+        "🎨 JET GRIND TAG",
+        "",
+        "Type any text to generate a graffiti tag!",
+        "",
+        sup.button("📂 Portfolio", onViewPortfolio)
+      ];
   }
 }
