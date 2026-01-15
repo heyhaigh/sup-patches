@@ -234,6 +234,73 @@ To prevent monotonous backgrounds (we kept getting green industrial scenes):
 | v1.2.7 | Distinct color palettes per backdrop |
 | v1.2.8 | "Low-res realistic textures on 3D geometry" approach |
 | v1.2.9 | Anti-vector prompting, 10 diverse backdrops |
+| v1.2.10 | Explicit tag sizing instructions for backdrop compositing |
+| v1.2.11 | Pure white backgrounds only (removed gray/off-white) |
+| v1.2.12 | Fixed reply context triggering length validation |
+
+---
+
+## Known Platform Limitations
+
+### Backdrop Tag Sizing Inconsistency
+When using `sup.ai.image.edit()` to add backdrops behind tags, the tag renders at inconsistent sizes and positions each time - despite explicit prompt instructions to keep it centered and at original size.
+
+**What we tried:**
+```javascript
+const editPrompt = `Add a background BEHIND this graffiti tag. CRITICAL: Keep the
+graffiti at EXACTLY its current size - do NOT resize, scale, shrink or enlarge.
+Keep the graffiti CENTERED in the frame...`;
+```
+
+**Result:** AI still varies the output. This appears to be a limitation of how the image edit model interprets sizing instructions.
+
+**Potential platform solutions:**
+- Compositing layer support (locked foreground layer)
+- Size/position parameters for `image.edit()`
+- Mask-based editing regions
+- Reference image anchoring
+
+### Reply Context in Input
+When users reply to a message, `sup.input.text` may include the original message content, not just the user's new input. This caused "Too long" validation errors even when the user's actual input was short.
+
+**The Fix (v1.2.12):**
+```javascript
+// Skip input validation if user already has an active session
+const existingView = sup.message.get("view");
+const hasExistingTag = sup.message.get("currentTag");
+
+if (text && text.trim() !== "" && !existingView && !hasExistingTag) {
+  // Only validate and process NEW tag generation
+}
+```
+
+**Key Insight:** Always check if the user is in an existing session before processing `sup.input.text` - it may contain stale or concatenated content from replies.
+
+---
+
+## UI/UX Learnings
+
+### White Backgrounds for Card Integration
+Tags should be generated on **pure white backgrounds** (`#FFFFFF`) to blend seamlessly with the white card UI in SupChat. Earlier versions included "light gray" and "off-white" options that created visible tinting.
+
+**Before (tinted):**
+```javascript
+const BACKGROUND_EFFECTS = [
+  "solid flat white background",
+  "solid flat light gray background",  // causes tinting
+  "flat off-white background"           // causes tinting
+];
+```
+
+**After (clean):**
+```javascript
+const BACKGROUND_EFFECTS = [
+  "solid pure white background #FFFFFF",
+  "clean white background with no texture",
+  "pure white background",
+  "bright white background"
+];
+```
 
 ---
 
