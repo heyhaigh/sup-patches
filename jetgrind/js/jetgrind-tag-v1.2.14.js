@@ -600,22 +600,11 @@ function renderTagPortfolioView() {
     }
 
     response.push(`Page ${currentPage + 1}/${totalPages}`);
+    response.push("");
 
-    // TEST: Simple grid with just text placeholders (no images)
-    const testGridHtml = `
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px; background: white; font-family: sans-serif;">
-        ${pageItems.map((item, idx) => `
-          <div style="background: #f0f0f0; padding: 20px; text-align: center; border-radius: 8px;">
-            <div style="font-size: 24px; margin-bottom: 8px;">#${idx + 1}</div>
-            <div style="font-size: 12px; color: #666;">${item.text || 'Tag'}</div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    response.push(sup.html(testGridHtml, { width: 500, height: 300, type: 'image' }));
-
-    // Edit buttons for each item
+    // List view (sup.html grid caused errors - needs debugging)
     pageItems.forEach((item, displayIdx) => {
+      response.push(item.image);
       response.push(sup.button(`✏️ Edit #${displayIdx + 1}: ${item.text || 'Tag'}`, () => onViewPortfolioItem(item.originalIndex)));
     });
 
