@@ -235,10 +235,6 @@ const MAX_LENGTH = 20;
 const OUTPUT_WIDTH = 1024;
 const OUTPUT_HEIGHT = 256;
 
-// Grid layout constants
-const GRID_COLUMNS = 3;
-const GRID_PAGE_SIZE = 6;
-
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -300,35 +296,6 @@ function getRareMessage(rare) {
     DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
   };
   return messages[rare] || null;
-}
-
-// Build HTML grid for gallery display
-function buildGridHtml(items, isPhoto = false) {
-  const itemsHtml = items.map((item, idx) => {
-    const label = item.text || `#${idx + 1}`;
-    const rareIndicator = item.rare ? `<span style="color: gold; font-size: 10px;">✨${item.rare}</span>` : '';
-    return `
-      <div style="text-align: center;">
-        <img src="${item.image}" style="width: 100%; border-radius: 4px; border: 1px solid #333;" />
-        <div style="font-size: 11px; color: #666; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          ${idx + 1}. ${label} ${rareIndicator}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  return `
-    <div style="
-      display: grid;
-      grid-template-columns: repeat(${GRID_COLUMNS}, 1fr);
-      gap: 8px;
-      padding: 8px;
-      background: white;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    ">
-      ${itemsHtml}
-    </div>
-  `;
 }
 
 // =============================================================================
@@ -576,6 +543,7 @@ function renderSavedView() {
 function renderTagPortfolioView() {
   const portfolio = sup.user.get("tagPortfolio") || [];
   const hasCurrentTag = sup.message.get("currentTag");
+  const pageSize = 6;
 
   const response = [
     `🏷️ Tag Portfolio (${portfolio.length}/50)`
@@ -587,26 +555,21 @@ function renderTagPortfolioView() {
     response.push("Generate a tag and save it here.");
   } else {
     const currentPage = sup.message.get("portfolioPage") || 0;
-    const totalPages = Math.ceil(portfolio.length / GRID_PAGE_SIZE);
+    const totalPages = Math.ceil(portfolio.length / pageSize);
 
     // Calculate which items to show (newest first)
-    const startIdx = portfolio.length - 1 - (currentPage * GRID_PAGE_SIZE);
-    const endIdx = Math.max(0, startIdx - GRID_PAGE_SIZE + 1);
-
-    // Build array of items for this page (newest first)
-    const pageItems = [];
-    for (let i = startIdx; i >= endIdx; i--) {
-      pageItems.push({ ...portfolio[i], originalIndex: i });
-    }
+    const startIdx = portfolio.length - 1 - (currentPage * pageSize);
+    const endIdx = Math.max(0, startIdx - pageSize + 1);
 
     response.push(`Page ${currentPage + 1}/${totalPages}`);
     response.push("");
 
-    // List view (sup.html grid caused errors - needs debugging)
-    pageItems.forEach((item, displayIdx) => {
-      response.push(item.image);
-      response.push(sup.button(`✏️ Edit #${displayIdx + 1}: ${item.text || 'Tag'}`, () => onViewPortfolioItem(item.originalIndex)));
-    });
+    // Display thumbnails with edit buttons below each
+    for (let i = startIdx; i >= endIdx; i--) {
+      const tag = portfolio[i];
+      response.push(tag.image);
+      response.push(sup.button("✏️ Edit Tag", () => onViewPortfolioItem(i)));
+    }
 
     // Pagination
     if (totalPages > 1) {
@@ -655,6 +618,7 @@ function renderPortfolioDetailView() {
 function renderPhotoJournalView() {
   const journal = sup.user.get("photoJournal") || [];
   const hasCurrentTag = sup.message.get("currentTag");
+  const pageSize = 6;
 
   const response = [
     `📸 Photo Journal (${journal.length}/50)`
@@ -666,26 +630,21 @@ function renderPhotoJournalView() {
     response.push("Add a backdrop to a tag and save it here.");
   } else {
     const currentPage = sup.message.get("journalPage") || 0;
-    const totalPages = Math.ceil(journal.length / GRID_PAGE_SIZE);
+    const totalPages = Math.ceil(journal.length / pageSize);
 
     // Calculate which items to show (newest first)
-    const startIdx = journal.length - 1 - (currentPage * GRID_PAGE_SIZE);
-    const endIdx = Math.max(0, startIdx - GRID_PAGE_SIZE + 1);
-
-    // Build array of items for this page (newest first)
-    const pageItems = [];
-    for (let i = startIdx; i >= endIdx; i--) {
-      pageItems.push({ ...journal[i], originalIndex: i });
-    }
+    const startIdx = journal.length - 1 - (currentPage * pageSize);
+    const endIdx = Math.max(0, startIdx - pageSize + 1);
 
     response.push(`Page ${currentPage + 1}/${totalPages}`);
     response.push("");
 
-    // Display thumbnails with edit buttons (fallback to list view)
-    pageItems.forEach((item, displayIdx) => {
-      response.push(item.image);
-      response.push(sup.button(`✏️ Edit #${displayIdx + 1}: ${item.text || 'Photo'}`, () => onViewJournalItem(item.originalIndex)));
-    });
+    // Display thumbnails with edit buttons below each
+    for (let i = startIdx; i >= endIdx; i--) {
+      const photo = journal[i];
+      response.push(photo.image);
+      response.push(sup.button("✏️ Edit Photo", () => onViewJournalItem(i)));
+    }
 
     // Pagination
     if (totalPages > 1) {
