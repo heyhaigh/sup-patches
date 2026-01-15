@@ -2,7 +2,7 @@
 // Creates stylized graffiti tags based on user text input
 // Repository: https://github.com/heyhaigh/sup-patches
 
-const VERSION = "1.2.14";
+const VERSION = "1.2.15";
 
 // =============================================================================
 // STYLE POOLS & CONSTANTS
@@ -562,6 +562,10 @@ function renderTagPortfolioView() {
     const endIdx = Math.max(0, startIdx - pageSize + 1);
 
     response.push(`Page ${currentPage + 1}/${totalPages}`);
+
+    // TEST 1: Absolute minimal sup.html() - pure static string, no variables
+    response.push(sup.html('<div style="padding:20px;background:white;"><h2>Test Grid</h2></div>', { width: 300, height: 100, type: 'image' }));
+
     response.push("");
 
     // Display thumbnails with edit buttons below each
