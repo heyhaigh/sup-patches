@@ -237,6 +237,125 @@ To prevent monotonous backgrounds (we kept getting green industrial scenes):
 | v1.2.10 | Explicit tag sizing instructions for backdrop compositing |
 | v1.2.11 | Pure white backgrounds only (removed gray/off-white) |
 | v1.2.12 | Fixed reply context triggering length validation |
+| v1.2.13 | Simplified tag view (just "More Options" button after generation) |
+| v1.2.14 | Reverted grid experiments, stable list view |
+| v1.2.15-20 | Progressive sup.html() debugging and testing |
+| v1.2.21 | Working 3-column image grid using sup.html() |
+| v1.2.22 | Grid styling: transparent bg, rounded corners, numbered edit buttons |
+
+---
+
+## sup.html() - HTML to Image Rendering
+
+### Key Discovery
+SupChat provides `sup.html()` to render HTML as a static screenshot/image. This is powerful for creating custom layouts like grids that aren't possible with standard response arrays.
+
+### Basic Usage
+```javascript
+const htmlString = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+  <div>Cell 1</div>
+  <div>Cell 2</div>
+  <div>Cell 3</div>
+</div>`;
+
+const gridImage = sup.html(htmlString, {
+  width: 500,   // viewport width
+  height: 300,  // viewport height
+  type: 'image'
+});
+
+response.push(gridImage);
+```
+
+### Critical Insight: Image Object Structure
+**The Problem:** When using `<img src="${tag.image}">` in the HTML, images appeared broken but no JavaScript error occurred.
+
+**The Discovery:** Images returned from `sup.ai.image.create()` are **SupImage objects**, NOT URL strings:
+```javascript
+// What tag.image actually contains:
+SupImage: {
+  filename: undefined,
+  url: 'https://user-uploads.supcontent.com/xxxxx.webp'
+}
+```
+
+**The Fix:** Access the `.url` property:
+```javascript
+// WRONG - tag.image is an object, not a string
+<img src="${tag.image}" />
+
+// CORRECT - access the .url property
+<img src="${tag.image.url}" />
+```
+
+### sup.html() Rendering Behavior
+Important: `sup.html()` renders HTML as a **static screenshot**. This means:
+- It captures the HTML at render time as an image
+- External resources must be actual accessible URLs
+- CSS is supported (Grid, Flexbox, etc.)
+- No JavaScript interactivity (it's an image)
+
+### Transparent Backgrounds
+To get a transparent background on `sup.html()` output, use `transparent: true`:
+
+```javascript
+sup.html(htmlString, {
+  width: 500,
+  height: 300,
+  type: 'image',
+  transparent: true  // Key option for transparent background
+});
+```
+
+**Note:** The card background tint seen in SupChat is from an older system being phased out. Using `transparent: true` allows your HTML content to blend with whatever card background is shown.
+
+### Working Grid Implementation (v1.2.23)
+```javascript
+const gridHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+  ${itemsToShow.map(tag => `
+    <div style="display:flex;align-items:center;justify-content:center;background:#f0f0f0;border-radius:16px;overflow:hidden;aspect-ratio:1;">
+      <img src="${tag.image.url}" style="width:100%;height:100%;object-fit:contain;" />
+    </div>
+  `).join('')}
+</div>`;
+
+response.push(sup.html(gridHtml, { width: 500, height: 300, type: 'image', transparent: true }));
+```
+
+### Debugging Approach
+When sup.html() fails silently or produces unexpected results:
+
+1. **Test with static string first:**
+   ```javascript
+   sup.html('<p>Hello</p>', { width: 200, height: 100, type: 'image' })
+   ```
+
+2. **Add template literals:**
+   ```javascript
+   const name = "Test";
+   sup.html(`<p>Hello ${name}</p>`, ...)
+   ```
+
+3. **Test .map() with hardcoded data:**
+   ```javascript
+   const items = ["a", "b", "c"];
+   sup.html(`<div>${items.map(i => `<span>${i}</span>`).join('')}</div>`, ...)
+   ```
+
+4. **Test with actual data (text only):**
+   ```javascript
+   ${portfolio.map(tag => `<div>${tag.name}</div>`).join('')}
+   ```
+
+5. **Debug object structure:**
+   ```javascript
+   const debugInfo = `Type: ${typeof portfolio[0].image}, Value: ${JSON.stringify(portfolio[0].image)}`;
+   ```
+
+6. **Use correct property access:**
+   ```javascript
+   ${tag.image.url}  // NOT ${tag.image}
+   ```
 
 ---
 
@@ -325,4 +444,4 @@ These were critical for understanding the true visual style - analyzing actual g
 ---
 
 *Last updated: January 2026*
-*Current version: v1.2.9*
+*Current version: v1.2.22*

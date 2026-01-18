@@ -2,7 +2,7 @@
 // Creates stylized graffiti tags based on user text input
 // Repository: https://github.com/heyhaigh/sup-patches
 
-const VERSION = "1.2.22";
+const VERSION = "1.2.25";
 
 // =============================================================================
 // STYLE POOLS & CONSTANTS
@@ -231,6 +231,9 @@ const BACKGROUNDS = {
   factory: { name: "🏭 Factory", prompt: "1999 Dreamcast 3D game screenshot, frontal view, industrial warehouse with red steel beam framework, VERY LOW polygon count chunky 3D geometry, simple beam and pillar shapes, grungy low-res textures, black outlines on edges only, baked shadows, NOT vector art NOT flat illustration, red metal grey concrete, PS1 era graphics quality" }
 };
 
+// Pre-computed for performance
+const BACKGROUND_KEYS = Object.keys(BACKGROUNDS);
+
 const MAX_LENGTH = 20;
 const OUTPUT_WIDTH = 1024;
 const OUTPUT_HEIGHT = 256;
@@ -296,6 +299,19 @@ function getRareMessage(rare) {
     DIAMOND: "✨💎 GRAIL TAG: DIAMOND! 💎✨"
   };
   return messages[rare] || null;
+}
+
+// Shared grid renderer for portfolio/journal views
+function renderGrid(items, getImageUrl) {
+  const numRows = Math.ceil(items.length / 3);
+  const thumbSize = 150;
+  const gap = 8;
+  const gridHeight = (numRows * thumbSize) + ((numRows - 1) * gap);
+
+  // object-fit:cover fills the thumbnail and crops overflow (better for mixed aspect ratios)
+  const gridHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:${gap}px;">${items.map(item => `<div style="display:flex;align-items:center;justify-content:center;background:#ffffff;border-radius:16px;overflow:hidden;aspect-ratio:1;"><img src="${getImageUrl(item)}" style="width:100%;height:100%;object-fit:cover;"/></div>`).join('')}</div>`;
+
+  return sup.html(gridHtml, { width: 500, height: gridHeight, type: 'image', transparent: true });
 }
 
 // =============================================================================
@@ -545,59 +561,35 @@ function renderTagPortfolioView() {
   const hasCurrentTag = sup.message.get("currentTag");
   const pageSize = 6;
 
-  const response = [
-    `🏷️ Tag Portfolio (${portfolio.length}/50)`
-  ];
+  const response = [`🏷️ Tag Portfolio (${portfolio.length}/50)`];
 
   if (portfolio.length === 0) {
-    response.push("");
-    response.push("No tags saved yet!");
-    response.push("Generate a tag and save it here.");
+    response.push("", "No tags saved yet!", "Generate a tag and save it here.");
   } else {
     const currentPage = sup.message.get("portfolioPage") || 0;
     const totalPages = Math.ceil(portfolio.length / pageSize);
-
-    // Calculate which items to show (newest first)
-    const startIdx = portfolio.length - 1 - (currentPage * pageSize);
-    const endIdx = Math.max(0, startIdx - pageSize + 1);
+    const startIdx = portfolio.length - (currentPage * pageSize);
+    const itemsToShow = portfolio.slice(Math.max(0, startIdx - pageSize), startIdx).reverse();
 
     response.push(`Page ${currentPage + 1}/${totalPages}`);
+    response.push(renderGrid(itemsToShow, tag => tag.image.url));
 
-    // Image grid using tag.image.url
-    // - Transparent background (no white container)
-    // - 10px rounded corners on thumbnails
-    // - Vertically centered images
-    const gridHtml = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0;">
-      ${portfolio.map(tag => `
-        <div style="display:flex;align-items:center;justify-content:center;background:#f0f0f0;border-radius:10px;overflow:hidden;aspect-ratio:1;">
-          <img src="${tag.image.url}" style="width:100%;height:100%;object-fit:contain;" />
-        </div>
-      `).join('')}
-    </div>`;
-    response.push(sup.html(gridHtml, { width: 500, height: 300, type: 'image' }));
-
-    // Just numbered edit buttons (no stacked images)
-    for (let i = startIdx; i >= endIdx; i--) {
-      const displayNum = startIdx - i + 1;
-      response.push(sup.button(`✏️ Edit #${displayNum}`, () => onViewPortfolioItem(i)));
-    }
+    // Numbered edit buttons
+    itemsToShow.forEach((_, i) => {
+      const actualIndex = startIdx - 1 - i;
+      response.push(sup.button(`Edit #${i + 1}`, () => onViewPortfolioItem(actualIndex)));
+    });
 
     // Pagination
     if (totalPages > 1) {
       response.push("");
-      if (currentPage > 0) {
-        response.push(sup.button("⬅️ Newer", onPortfolioNewerPage));
-      }
-      if (currentPage < totalPages - 1) {
-        response.push(sup.button("➡️ Older", onPortfolioOlderPage));
-      }
+      if (currentPage > 0) response.push(sup.button("⬅️ Newer", onPortfolioNewerPage));
+      if (currentPage < totalPages - 1) response.push(sup.button("➡️ Older", onPortfolioOlderPage));
     }
   }
 
   response.push("");
-  if (hasCurrentTag) {
-    response.push(sup.button("↩️ Back to Tag", onBackToTag));
-  }
+  if (hasCurrentTag) response.push(sup.button("↩️ Back to Tag", onBackToTag));
   response.push(sup.button("📸 Photo Journal", onViewPhotoJournal));
 
   return response;
@@ -631,48 +623,35 @@ function renderPhotoJournalView() {
   const hasCurrentTag = sup.message.get("currentTag");
   const pageSize = 6;
 
-  const response = [
-    `📸 Photo Journal (${journal.length}/50)`
-  ];
+  const response = [`📸 Photo Journal (${journal.length}/50)`];
 
   if (journal.length === 0) {
-    response.push("");
-    response.push("No photos saved yet!");
-    response.push("Add a backdrop to a tag and save it here.");
+    response.push("", "No photos saved yet!", "Add a backdrop to a tag and save it here.");
   } else {
     const currentPage = sup.message.get("journalPage") || 0;
     const totalPages = Math.ceil(journal.length / pageSize);
-
-    // Calculate which items to show (newest first)
-    const startIdx = journal.length - 1 - (currentPage * pageSize);
-    const endIdx = Math.max(0, startIdx - pageSize + 1);
+    const startIdx = journal.length - (currentPage * pageSize);
+    const itemsToShow = journal.slice(Math.max(0, startIdx - pageSize), startIdx).reverse();
 
     response.push(`Page ${currentPage + 1}/${totalPages}`);
-    response.push("");
+    response.push(renderGrid(itemsToShow, photo => photo.image.url));
 
-    // Display thumbnails with edit buttons below each
-    for (let i = startIdx; i >= endIdx; i--) {
-      const photo = journal[i];
-      response.push(photo.image);
-      response.push(sup.button("✏️ Edit Photo", () => onViewJournalItem(i)));
-    }
+    // Numbered edit buttons
+    itemsToShow.forEach((_, i) => {
+      const actualIndex = startIdx - 1 - i;
+      response.push(sup.button(`Edit #${i + 1}`, () => onViewJournalItem(actualIndex)));
+    });
 
     // Pagination
     if (totalPages > 1) {
       response.push("");
-      if (currentPage > 0) {
-        response.push(sup.button("⬅️ Newer", onJournalNewerPage));
-      }
-      if (currentPage < totalPages - 1) {
-        response.push(sup.button("➡️ Older", onJournalOlderPage));
-      }
+      if (currentPage > 0) response.push(sup.button("⬅️ Newer", onJournalNewerPage));
+      if (currentPage < totalPages - 1) response.push(sup.button("➡️ Older", onJournalOlderPage));
     }
   }
 
   response.push("");
-  if (hasCurrentTag) {
-    response.push(sup.button("↩️ Back to Tag", onBackToTag));
-  }
+  if (hasCurrentTag) response.push(sup.button("↩️ Back to Tag", onBackToTag));
   response.push(sup.button("🏷️ Tag Portfolio", onViewTagPortfolio));
 
   return response;
@@ -728,46 +707,28 @@ async function main() {
   const action = sup.message.get("action");
 
   if (action === "generateBackground") {
-    // Clear action immediately
     sup.message.set("action", null);
 
-    // Get the existing tag data
     const existingTag = sup.message.get("currentTag");
     const tagText = sup.message.get("currentTagText");
-    const rare = sup.message.get("currentTagRare");
 
-    // Safety check
     if (!existingTag || !tagText) {
       return "⚠️ No tag found. Generate a tag first!";
     }
 
-    // Pick random background
-    const bgKeys = Object.keys(BACKGROUNDS);
-    const randomBgKey = randomChoice(bgKeys);
+    // Pick random background using pre-computed keys
+    const randomBgKey = randomChoice(BACKGROUND_KEYS);
     const bg = BACKGROUNDS[randomBgKey];
 
-    // Try to use image.edit to add background behind existing tag
-    // IMPORTANT: Explicit size/placement instructions for consistency
     const editPrompt = `Add a background BEHIND this graffiti tag. CRITICAL: Keep the graffiti at EXACTLY its current size - do NOT resize, scale, shrink or enlarge the graffiti. Keep the graffiti CENTERED in the frame. Only replace the white/transparent background with: ${bg.prompt}. The graffiti must remain the dominant element taking up most of the frame width. Do not move or reposition the graffiti.`;
 
     const composite = await sup.ai.image.edit(existingTag, editPrompt);
 
-    // Store results
     sup.message.set("currentComposite", composite);
     sup.message.set("currentBgKey", randomBgKey);
     sup.message.set("view", "background");
 
-    // Return backdrop view
-    const response = [];
-    if (rare) {
-      response.push(getRareMessage(rare));
-    }
-    response.push(`📍 ${bg.name}`);
-    response.push(composite);
-    response.push(sup.button("🔄 Reroll Backdrop", onRerollBackground));
-    response.push(sup.button("💾 Save to Photo Journal", onSaveToPhotoJournal));
-    response.push(sup.button("↩️ Back to Original", onBackToTransparent));
-    return response;
+    return renderBackdropView();
   }
 
   // Check for text input - generate tag immediately
