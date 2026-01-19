@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v1.2.27] - 2026-01-18
+
+### Added
+- **Shared grid renderer** - `renderGrid()` function for portfolio/journal views
+- Pre-computed `BACKGROUND_KEYS` for performance optimization
+
+### Changed
+- Minor code organization improvements
+
+---
+
+## [v1.2.26] - 2026-01-18
+
+### Changed
+- Style selection now includes `null` option for fully random combinations
+- Random style picker chooses from preset styles OR fully random (millions of combos)
+
+---
+
+## [v1.2.25] - 2026-01-18
+
+### Added
+- **Blackwork style preset** - Mike Giant tattoo aesthetic
+  - Bold black linework with crisp white accents
+  - Chicano graffiti influence
+  - Decorations: skulls, roses, geometric patterns, chicano flourishes
+  - High contrast black and white with graphic precision
+
+---
+
+## [v1.2.24] - 2026-01-18
+
+### Added
+- **Grunge style preset** - Raw punk aesthetic
+  - Muted colors: olive green, rust orange, burgundy, dirty yellow
+  - Rough hand-painted letters with weathered texture
+  - Decorations: rust stains, torn paper edges, scratches
+  - Urban decay vibes with authentic street grit
+
+---
+
+## [v1.2.23] - 2026-01-18
+
+### Changed
+- Reorganized assets into `assets/backgrounds` and `assets/graffiti` folders
+- Moved version files to `versions/` subdirectory
+- Added CHANGELOG.md and README.md to jetgrind folder
+
+---
+
 ## [v1.2.22] - 2026-01-15
 
 ### Changed

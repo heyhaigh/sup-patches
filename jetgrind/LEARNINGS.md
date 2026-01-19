@@ -204,6 +204,33 @@ To prevent monotonous backgrounds (we kept getting green industrial scenes):
 - Rich style variety: colors, letter styles, flourishes, textures
 - Gang presets (GGs, Noise Tanks, Poison Jam, Love Shockers) for thematic consistency
 
+### Style Preset Architecture (v1.2.24-v1.2.27)
+
+Added two new style presets beyond the original JSR gang themes:
+
+**Grunge Style:**
+- Raw punk aesthetic with weathered/worn textures
+- Muted colors: olive green, rust orange, burgundy, dirty yellow
+- Decorations: rust stains, torn paper edges, scratches
+- Captures authentic street grit and urban decay
+
+**Blackwork Style (Mike Giant inspired):**
+- Bold black linework with crisp white accents
+- Chicano graffiti influence
+- Decorations: skulls, roses, geometric patterns, chicano flourishes
+- High contrast black and white with graphic precision
+
+**Random Style Selection:**
+The style selection now includes a `null` option in `STYLE_KEYS`, which means:
+- ~14% chance: GGs, Noise Tanks, Poison Jam, Love Shockers, Grunge, or Blackwork preset
+- ~14% chance: Fully random combination from all style pools (millions of combinations)
+
+```javascript
+const STYLE_KEYS = [null, "ggs", "noisetanks", "poisonjam", "loveshockers", "grunge", "blackwork"];
+presetKey = randomChoice(STYLE_KEYS);
+const preset = presetKey ? STYLE_PRESETS[presetKey] : null;  // null = fully random
+```
+
 ### For Backdrops
 - **Frontal view** prevents perspective conflicts with the tag
 - Technical descriptions > brand references
@@ -242,6 +269,11 @@ To prevent monotonous backgrounds (we kept getting green industrial scenes):
 | v1.2.15-20 | Progressive sup.html() debugging and testing |
 | v1.2.21 | Working 3-column image grid using sup.html() |
 | v1.2.22 | Grid styling: transparent bg, rounded corners, numbered edit buttons |
+| v1.2.23 | Reorganized assets into folders, added README/CHANGELOG |
+| v1.2.24 | Added Grunge style preset |
+| v1.2.25 | Added Blackwork style preset (Mike Giant inspired) |
+| v1.2.26 | Random style selection includes null for fully random combos |
+| v1.2.27 | Shared grid renderer, pre-computed BACKGROUND_KEYS |
 
 ---
 
@@ -444,4 +476,4 @@ These were critical for understanding the true visual style - analyzing actual g
 ---
 
 *Last updated: January 2026*
-*Current version: v1.2.22*
+*Current version: v1.2.27*
