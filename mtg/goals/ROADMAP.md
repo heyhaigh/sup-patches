@@ -140,6 +140,28 @@ Below is a concrete, "do-this-next" list, organized by priority. It's written to
 
 ## P1 — Match flow improvements (UX + clarity)
 
+> **P1 items 4-6 are partially or fully implemented as of the P1.5 Game Mat UI milestone below.**
+
+---
+
+## P1.5 — Game Mat UI (Arena-style) ✅
+
+**Goal:** Replace the flat list game view with an immersive Arena/Gwent/Hearthstone-style game mat, and show actual card images during mulligan.
+
+**Implemented:**
+
+- **Mulligan hand card display** — 7 card images (100×140) rendered in a centered flex container during mulligan phase. Cards are clickable (select) and double-clickable (inspect modal). Redraws on mulligan with updated hand.
+- **Split-view game board** — Opponent at top, player at bottom, with turn bar in the center. Dark gradient background (`#1a1a2e` → `#16213e` → `#0f3460`).
+- **Floating card inspector** — Replaces the old sidebar inspector. Shows card image, name, type, and action buttons (Play/GY/Inspect). Auto-hides when no card selected.
+- **Turn bar** — Center strip showing turn number, active player (highlighted gold when your turn), phase label, Draw and End Turn buttons.
+- **Hand tray** — Bottom tray with larger card images (90×126), horizontal scroll on overflow, double-click to play to battlefield.
+- **Zone badges** — Compact badges (Lib/Hand/GY/Exile/Cmd) per player showing zone counts.
+- **Mobile responsive** — Board stacks vertically, hand tray scrolls horizontally, inspector slides up from bottom.
+
+**Files changed:** `mtg/mtg.js` (CSS + HTML + JS in `getClientHtml()` template literal)
+
+---
+
 ### 4) Better mulligan UX
 
 **Goal:** Mulligan phase is quick, clear, and hard to misclick.

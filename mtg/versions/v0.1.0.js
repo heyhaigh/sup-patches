@@ -122,6 +122,9 @@ function getClientHtml() {
     .cardImg.selected { box-shadow:0 0 0 3px rgba(11,116,255,0.35),var(--shadow2); border-color:rgba(11,116,255,0.35); }
     .handRow { display:flex; gap:10px; overflow:auto; padding:8px; border-radius:14px; background:rgba(255,255,255,0.65); border:1px solid var(--border); }
     .handRow .cardImg { width:78px; height:110px; flex:0 0 auto; }
+    .mulliganHand { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; padding:16px 12px; border-radius:14px; background:rgba(18,21,26,0.04); border:1px solid var(--border); margin:12px 0; }
+    .mulliganHand .cardImg { width:100px; height:140px; border-radius:12px; flex:0 0 auto; transition:transform 160ms ease,box-shadow 160ms ease; }
+    .mulliganHand .cardImg:hover { transform:translateY(-6px) scale(1.04); box-shadow:0 12px 24px rgba(0,0,0,0.15); }
     .zonePills { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
     .zonePill { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid var(--border); background:rgba(255,255,255,0.75); border-radius:999px; font-size:12px; color:var(--muted); font-weight:650; }
     .inspectorImg { width:100%; border-radius:14px; border:1px solid var(--border); background:rgba(18,21,26,0.06); aspect-ratio:63/88; object-fit:cover; }
@@ -159,6 +162,39 @@ function getClientHtml() {
     .appRoot.matchActive #tab-play > .row:first-child { display:none; }
     .appRoot.matchActive #tab-play > .grid2 { display:none; }
     .appRoot.matchActive #tab-play > .card:last-child { display:none; }
+    /* Game board - Arena-style vertical split */
+    .gameBoard { display:flex; flex-direction:column; height:calc(100vh - 52px); min-height:480px; background:linear-gradient(180deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #1a1a2e 100%); border-radius:var(--radius); overflow:hidden; position:relative; }
+    .gameBoardInner { display:flex; flex-direction:column; flex:1; min-height:0; }
+    .oppSide { flex:1; display:flex; flex-direction:column; padding:12px 16px 8px; min-height:0; }
+    .seatBar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .seatName { font-weight:800; font-size:14px; color:rgba(255,255,255,0.85); }
+    .lifeBadge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,0.12); color:#fff; font-size:13px; font-weight:700; border:1px solid rgba(255,255,255,0.15); }
+    .lifeIcon { font-size:16px; }
+    .zoneRow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+    .zoneBadge { padding:4px 8px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.6); font-size:11px; font-weight:600; border:1px solid rgba(255,255,255,0.08); }
+    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:8px 0; min-height:60px; }
+    .bfArea .cardImg { width:72px; height:100px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; }
+    .bfArea .cardImg:hover { transform:translateY(-4px) scale(1.05); box-shadow:0 8px 20px rgba(0,0,0,0.3); }
+    .turnBar { display:flex; align-items:center; justify-content:center; gap:16px; padding:8px 16px; background:rgba(255,255,255,0.06); border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08); flex:0 0 auto; }
+    .turnInfo { font-size:13px; color:rgba(255,255,255,0.75); font-weight:600; }
+    .turnHighlight { color:#fbbf24; font-weight:800; }
+    .turnBar .btn { font-size:12px; padding:6px 14px; background:rgba(255,255,255,0.10); color:#fff; border-color:rgba(255,255,255,0.15); }
+    .turnBar .btn:hover { background:rgba(255,255,255,0.18); }
+    .turnBar .btnPrimary { background:rgba(11,116,255,0.7); border-color:rgba(11,116,255,0.5); }
+    .turnBar .btnPrimary:hover { background:rgba(11,116,255,0.85); }
+    .mySide { flex:1; display:flex; flex-direction:column; padding:8px 16px 12px; min-height:0; }
+    .mySide .bfArea { align-items:flex-start; }
+    .handTray { display:flex; gap:10px; overflow-x:auto; padding:10px 8px; justify-content:center; background:rgba(255,255,255,0.06); border-radius:14px; border:1px solid rgba(255,255,255,0.08); margin-top:auto; flex:0 0 auto; }
+    .handTray .cardImg { width:90px; height:126px; flex:0 0 auto; border:1px solid rgba(255,255,255,0.18); border-radius:10px; }
+    .handTray .cardImg:hover { transform:translateY(-8px) scale(1.06); box-shadow:0 12px 28px rgba(0,0,0,0.35); }
+    .handTray .cardImg.selected { box-shadow:0 0 0 3px rgba(251,191,36,0.6),0 8px 20px rgba(0,0,0,0.3); border-color:rgba(251,191,36,0.5); }
+    .gameBoard .emptyZone { color:rgba(255,255,255,0.35); font-size:12px; font-style:italic; }
+    .inspectFloat { position:absolute; top:12px; right:12px; width:200px; background:rgba(20,20,35,0.92); backdrop-filter:blur(8px); border-radius:var(--radius2); border:1px solid rgba(255,255,255,0.12); padding:10px; z-index:20; display:none; }
+    .inspectFloat.visible { display:block; }
+    .inspectFloat .inspectorImg { width:100%; border-radius:10px; border:1px solid rgba(255,255,255,0.12); }
+    .inspectFloat .inspectorTitle { font-weight:800; font-size:13px; color:#fff; margin-top:8px; }
+    .inspectFloat .inspectorSub { font-size:11px; color:rgba(255,255,255,0.55); margin-top:4px; }
+    .inspectFloat .btn { width:100%; margin-top:6px; font-size:11px; padding:6px 10px; }
     @media (max-width:980px) {
       .body { grid-template-columns:1fr; }
       .sidebar { border-right:none; border-bottom:1px solid var(--border); }
@@ -168,6 +204,10 @@ function getClientHtml() {
       .cardModalContent { max-width:95vw; max-height:90vh; padding:16px; }
       .cardModalImg { max-height:45vh; width:auto; margin:0 auto; display:block; }
       .appRoot.matchActive .body { grid-template-columns:1fr; }
+      .gameBoard { height:auto; min-height:100vh; border-radius:0; }
+      .handTray { justify-content:flex-start; }
+      .handTray .cardImg { width:72px; height:100px; }
+      .inspectFloat { position:fixed; top:auto; bottom:0; right:0; left:0; width:100%; border-radius:16px 16px 0 0; }
     }
   </style>
 
@@ -308,6 +348,7 @@ function getClientHtml() {
                     <div class="pill" id="handCountPill">Cards in hand: <span class="kicker" id="handCountVal">?</span></div>
                     <div class="pill" id="mulliganCountPill">Mulligans taken: <span class="kicker" id="mulliganCountVal">0</span></div>
                   </div>
+                  <div id="mulliganHand" class="mulliganHand"></div>
                   <div class="row" style="justify-content:flex-start;gap:10px;margin-top:10px;">
                     <button id="btnKeep" class="btn btnPrimary" style="flex:1;max-width:160px;">Keep hand</button>
                     <button id="btnMulligan" class="btn" style="flex:1;max-width:160px;">Mulligan</button>
@@ -320,36 +361,20 @@ function getClientHtml() {
             </div>
           </div>
 
-          <div id="gamePanel" class="card" style="margin-top:14px;display:none;">
-            <div class="row">
-              <div><div style="font-weight:800;">Game</div><div id="gameSummary" class="small"></div></div>
-              <div class="row" style="justify-content:flex-end;">
-                <button id="btnGameRefresh" class="btn">Refresh</button>
-                <button id="btnGameDraw" class="btn">Draw</button>
-                <button id="btnGameEndTurn" class="btn btnPrimary">End turn</button>
+          <div id="gamePanel" style="margin-top:14px;display:none;">
+            <div class="gameBoard" id="gameBoard">
+              <div class="gameBoardInner">
+                <div class="oppSide" id="oppSide"></div>
+                <div class="turnBar" id="turnBar"></div>
+                <div class="mySide" id="mySide"></div>
               </div>
-            </div>
-            <div class="gameGrid" style="margin-top:12px;">
-              <div class="min0">
-                <div class="label">Table</div>
-                <div id="table" style="display:flex;flex-direction:column;gap:12px;"></div>
-                <div class="row" style="margin-top:12px;justify-content:flex-start;gap:8px;align-items:baseline;">
-                  <div class="label" style="margin:0;">Hand</div>
-                  <span class="kicker" id="myHandCount"></span>
-                </div>
-                <div id="handRow" class="handRow"></div>
-              </div>
-              <div class="card" style="box-shadow:none;background:rgba(255,255,255,0.65);">
-                <div class="label">Selected</div>
+              <div class="inspectFloat" id="inspectFloat">
                 <img id="inspectorImg" class="inspectorImg" />
-                <div id="inspectorTitle" style="font-weight:800;margin-top:10px;"></div>
-                <div id="inspectorSub" class="small" style="margin-top:4px;"></div>
-                <div class="row" style="margin-top:12px;justify-content:flex-start;gap:10px;">
-                  <button id="btnPlaySelected" class="btn btnPrimary" style="flex:1;">Play to battlefield</button>
-                  <button id="btnToGraveyard" class="btn" title="Move from battlefield to graveyard">To GY</button>
-                </div>
-                <button id="btnInspect" class="btn btnGhost" style="width:100%;margin-top:8px;">Inspect card</button>
-                <div class="small" style="margin-top:10px;color:var(--muted2);">v1: clicking a card selects it. "Play" moves from your hand → battlefield. "To GY" moves from battlefield → graveyard.</div>
+                <div id="inspectorTitle" class="inspectorTitle"></div>
+                <div id="inspectorSub" class="inspectorSub"></div>
+                <button id="btnPlaySelected" class="btn btnPrimary">Play to battlefield</button>
+                <button id="btnToGraveyard" class="btn">To graveyard</button>
+                <button id="btnInspect" class="btn btnGhost">Inspect</button>
               </div>
             </div>
           </div>
@@ -1121,6 +1146,17 @@ function getClientHtml() {
       $('#btnKeep').disabled = kept;
       const allKept = !!match?.game?.keptBySeat && Object.values(match.game.keptBySeat).every(Boolean);
       $('#mulliganMsg').textContent = allKept ? 'All players kept. Game advancing shortly.' : (kept ? 'Waiting for other players to keep\u2026' : '');
+      const mulliganHandEl = $('#mulliganHand');
+      mulliganHandEl.innerHTML = '';
+      const myZones = match?.game?.zones?.[seat];
+      const handCards = Array.isArray(myZones?.hand) ? myZones.hand : [];
+      if (handCards.length) {
+        for (const id of handCards) {
+          mulliganHandEl.appendChild(renderCardImg(id, { zone: 'hand', seat }));
+        }
+      } else {
+        mulliganHandEl.innerHTML = '<div class="small">No cards in hand.</div>';
+      }
     }
   }
 
@@ -1146,14 +1182,23 @@ function getClientHtml() {
   function setSelected(sel) {
     state.selected = sel || { id: null, zone: null, seat: null };
     const c = state.selected.id ? cardMeta(state.selected.id) : null;
+    const panel = $('#inspectFloat');
     const img = $('#inspectorImg'); const title = $('#inspectorTitle'); const sub = $('#inspectorSub');
-    if (!c) { img.src = ''; img.style.display = 'none'; title.textContent = ''; sub.textContent = ''; $('#btnPlaySelected').disabled = true; $('#btnToGraveyard').disabled = true; $('#btnInspect').disabled = true; return; }
-    img.style.display = ''; img.src = c.imageNormal || c.imageSmall || '';
+    $$('.cardImg').forEach(el => el.classList.remove('selected'));
+    if (!c) {
+      if (panel) panel.classList.remove('visible');
+      img.src = ''; title.textContent = ''; sub.textContent = '';
+      $('#btnPlaySelected').disabled = true; $('#btnToGraveyard').disabled = true; $('#btnInspect').disabled = true;
+      return;
+    }
+    if (panel) panel.classList.add('visible');
+    img.src = c.imageNormal || c.imageSmall || '';
     title.textContent = c.name || state.selected.id;
     sub.textContent = (c.typeLine || '') + (state.selected.zone ? ' \u2022 ' + state.selected.zone : '');
     $('#btnPlaySelected').disabled = !(state.selected.zone === 'hand' && state.selected.seat === state.lastMatch?.viewerSeat);
     $('#btnToGraveyard').disabled = !(state.selected.zone === 'battlefield' && state.selected.seat === state.lastMatch?.viewerSeat);
     $('#btnInspect').disabled = !c;
+    $$('.cardImg[data-card-id="' + state.selected.id + '"]').forEach(el => el.classList.add('selected'));
   }
 
   function openCardModal(cardId, zone) {
@@ -1178,6 +1223,7 @@ function getClientHtml() {
     const options = opts || {};
     const c = cardMeta(id); const img = document.createElement('img');
     img.className = 'cardImg'; img.src = c?.imageSmall || c?.imageNormal || ''; img.alt = c?.name || id;
+    img.dataset.cardId = id;
     if (state.selected?.id === id && state.selected?.zone === options.zone && state.selected?.seat === options.seat) img.classList.add('selected');
     img.onclick = () => setSelected({ id, zone: options.zone || null, seat: options.seat || null });
     if (options.onDblClick) img.ondblclick = options.onDblClick;
@@ -1185,61 +1231,111 @@ function getClientHtml() {
     return img;
   }
 
-  function renderSeat(match, seat) {
+  function renderBoardSeat(match, seat, isViewer) {
     const zones = match?.game?.zones?.[seat];
     const p = (match.players || []).find(x => x.seat === seat);
-    const name = p ? (p.isBot ? (p.username + ' (bot)') : ('@' + p.username)) : ('Seat ' + seat);
+    const name = p ? (p.isBot ? (p.username + ' (Bot)') : ('@' + p.username)) : ('Seat ' + seat);
     const life = match?.game?.lifeBySeat?.[seat];
-    const panel = document.createElement('div'); panel.className = 'card'; panel.style.boxShadow = 'none'; panel.style.background = 'rgba(255,255,255,0.65)';
-    panel.innerHTML = \`
-      <div class="row"><div style="font-weight:800;">\${escapeHtml(name)}</div><div class="pill">Life: <span class="kicker">\${life == null ? '?' : String(life)}</span></div></div>
-      <div class="zonePills">
-        <div class="zonePill">Library: <span class="kicker" id="libcount-\${seat}"></span></div>
-        <div class="zonePill">Hand: <span class="kicker" id="handcount-\${seat}"></span></div>
-        <div class="zonePill">GY: <span class="kicker" id="gycount-\${seat}"></span></div>
-        <div class="zonePill">Exile: <span class="kicker" id="excount-\${seat}"></span></div>
-        <div class="zonePill">Command: <span class="kicker" id="cmdcount-\${seat}"></span></div>
-      </div>
-      <div class="row" style="margin-top:10px;justify-content:flex-start;gap:8px;align-items:baseline;">
-        <div class="label" style="margin:0;">Battlefield</div>
-        <span class="kicker" id="bfcount-\${seat}"></span>
-      </div>
-      <div class="battlefield" id="bf-\${seat}"></div>
-    \`;
-    const lib = zones?.library; const hand = zones?.hand; const gy = zones?.graveyard; const ex = zones?.exile; const cmd = zones?.command; const bf = zones?.battlefield;
-    panel.querySelector('#libcount-' + seat).textContent = String(Array.isArray(lib) ? lib.length : Number(lib?.count || 0));
-    panel.querySelector('#handcount-' + seat).textContent = String(Array.isArray(hand) ? hand.length : Number(hand?.count || 0));
-    panel.querySelector('#gycount-' + seat).textContent = String(Array.isArray(gy) ? gy.length : 0);
-    panel.querySelector('#excount-' + seat).textContent = String(Array.isArray(ex) ? ex.length : 0);
-    panel.querySelector('#cmdcount-' + seat).textContent = String(Array.isArray(cmd) ? cmd.length : 0);
-    const bfHost = panel.querySelector('#bf-' + seat);
-    if (Array.isArray(bf) && bf.length) { for (const id of bf) bfHost.appendChild(renderCardImg(id, { zone: 'battlefield', seat })); }
-    else { const empty = document.createElement('div'); empty.className = 'small'; empty.textContent = 'No permanents.'; bfHost.appendChild(empty); }
-    panel.querySelector('#bfcount-' + seat).textContent = String(Array.isArray(bf) ? bf.length : 0);
-    return panel;
+
+    const el = document.createElement('div');
+    el.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;';
+
+    const bar = document.createElement('div');
+    bar.className = 'seatBar';
+    bar.innerHTML = '<div class="seatName">' + escapeHtml(name) + '</div>'
+      + '<div class="lifeBadge"><span class="lifeIcon">\u2764</span> ' + (life == null ? '?' : String(life)) + '</div>';
+    el.appendChild(bar);
+
+    const lib = zones?.library; const hand = zones?.hand;
+    const gy = zones?.graveyard; const ex = zones?.exile; const cmd = zones?.command;
+    const zr = document.createElement('div');
+    zr.className = 'zoneRow';
+    const counts = [
+      ['Lib', Array.isArray(lib) ? lib.length : Number(lib?.count || 0)],
+      ['Hand', Array.isArray(hand) ? hand.length : Number(hand?.count || 0)],
+      ['GY', Array.isArray(gy) ? gy.length : 0],
+      ['Exile', Array.isArray(ex) ? ex.length : 0],
+    ];
+    if (Array.isArray(cmd) && cmd.length) counts.push(['Cmd', cmd.length]);
+    for (const [label, n] of counts) {
+      const b = document.createElement('div');
+      b.className = 'zoneBadge';
+      b.textContent = label + ' ' + n;
+      zr.appendChild(b);
+    }
+    el.appendChild(zr);
+
+    const bf = Array.isArray(zones?.battlefield) ? zones.battlefield : [];
+    const bfArea = document.createElement('div');
+    bfArea.className = 'bfArea';
+    if (bf.length) {
+      for (const id of bf) bfArea.appendChild(renderCardImg(id, { zone: 'battlefield', seat }));
+    } else {
+      bfArea.innerHTML = '<div class="emptyZone">No permanents</div>';
+    }
+    el.appendChild(bfArea);
+
+    return el;
+  }
+
+  function renderTurnBar(match) {
+    const bar = $('#turnBar');
+    const activeSeat = match.game?.activePlayerSeat;
+    const activePlayer = (match.players || []).find(p => p.seat === activeSeat);
+    const activeName = activeSeat === match.viewerSeat ? 'You' : (activePlayer ? (activePlayer.isBot ? activePlayer.username : ('@' + activePlayer.username)) : ('Seat ' + activeSeat));
+    const step = match.game?.step || 'begin';
+    const stepLabel = step.charAt(0).toUpperCase() + step.slice(1);
+    const isMyTurn = activeSeat === match.viewerSeat;
+
+    bar.innerHTML = '<div class="turnInfo">Turn <span class="turnHighlight">' + (match.game?.turn || '?') + '</span></div>'
+      + '<div class="turnInfo">' + (isMyTurn ? '<span class="turnHighlight">Your turn</span>' : escapeHtml(activeName) + "'s turn") + '</div>'
+      + '<div class="turnInfo">' + escapeHtml(stepLabel) + '</div>'
+      + '<button id="btnGameDraw" class="btn">Draw</button>'
+      + '<button id="btnGameEndTurn" class="btn btnPrimary"' + (isMyTurn ? '' : ' disabled') + '>End turn</button>';
+
+    bar.querySelector('#btnGameDraw').onclick = drawDebug;
+    bar.querySelector('#btnGameEndTurn').onclick = endTurn;
   }
 
   function renderGame(match) {
     const show = !!match && match.phase === 'playing' && !!match.viewerSeat;
     $('#gamePanel').style.display = show ? '' : 'none';
     if (!show) return;
-    const activeSeat = match.game?.activePlayerSeat;
-    const activePlayer = (match.players || []).find(p => p.seat === activeSeat);
-    const activeName = activeSeat === match.viewerSeat ? 'You' : (activePlayer ? (activePlayer.isBot ? activePlayer.username : ('@' + activePlayer.username)) : ('Seat ' + activeSeat));
-    const phase = match.game?.step || 'begin';
-    const phaseLabel = phase === 'begin' ? 'Begin' : phase === 'main' ? 'Main' : phase.charAt(0).toUpperCase() + phase.slice(1);
-    $('#gameSummary').textContent = 'Turn ' + (match.game?.turn || '?') + ' \u2014 Active: ' + activeName + ' \u2014 Phase: ' + phaseLabel;
-    const table = $('#table'); table.innerHTML = '';
-    const seats = (match.players || []).map(p => p.seat).sort((a,b) => a - b);
-    for (const seat of seats) table.appendChild(renderSeat(match, seat));
-    const seat = match.viewerSeat; const zones = match?.game?.zones?.[seat]; const hand = Array.isArray(zones?.hand) ? zones.hand : [];
-    const handRow = $('#handRow'); handRow.innerHTML = '';
-    if (!hand.length) { const empty = document.createElement('div'); empty.className = 'small'; empty.textContent = 'Hand empty.'; handRow.appendChild(empty); }
-    else { for (const id of hand) handRow.appendChild(renderCardImg(id, { zone: 'hand', seat, onDblClick: async () => { setSelected({ id, zone: 'hand', seat }); await playSelectedToBattlefield(); } })); }
-    $('#myHandCount').textContent = String(hand.length);
-    if (state.selected?.id) { if (!collectVisibleCardIds(match).includes(state.selected.id)) setSelected({ id: null, zone: null, seat: null }); else setSelected(state.selected); }
-    else setSelected({ id: null, zone: null, seat: null });
-    $('#btnGameEndTurn').disabled = !(match?.game?.activePlayerSeat === match?.viewerSeat);
+
+    const mySeat = match.viewerSeat;
+    const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
+    const oppSeats = seats.filter(s => s !== mySeat);
+
+    const oppEl = $('#oppSide'); oppEl.innerHTML = '';
+    for (const seat of oppSeats) {
+      oppEl.appendChild(renderBoardSeat(match, seat, false));
+    }
+
+    renderTurnBar(match);
+
+    const myEl = $('#mySide'); myEl.innerHTML = '';
+    myEl.appendChild(renderBoardSeat(match, mySeat, true));
+
+    const zones = match?.game?.zones?.[mySeat];
+    const hand = Array.isArray(zones?.hand) ? zones.hand : [];
+    const handTray = document.createElement('div');
+    handTray.className = 'handTray';
+    if (!hand.length) {
+      handTray.innerHTML = '<div class="emptyZone">No cards in hand</div>';
+    } else {
+      for (const id of hand) {
+        handTray.appendChild(renderCardImg(id, {
+          zone: 'hand', seat: mySeat,
+          onDblClick: async () => { setSelected({ id, zone: 'hand', seat: mySeat }); await playSelectedToBattlefield(); }
+        }));
+      }
+    }
+    myEl.appendChild(handTray);
+
+    if (state.selected?.id) {
+      if (!collectVisibleCardIds(match).includes(state.selected.id)) setSelected(null);
+      else setSelected(state.selected);
+    } else { setSelected(null); }
   }
 
   async function refreshMatch() {
@@ -1363,9 +1459,6 @@ function getClientHtml() {
     $('#btnStartGame').onclick = startGame;
     $('#btnMulligan').onclick = mulligan;
     $('#btnKeep').onclick = keepHand;
-    $('#btnGameRefresh').onclick = refreshMatch;
-    $('#btnGameDraw').onclick = drawDebug;
-    $('#btnGameEndTurn').onclick = endTurn;
     $('#btnPlaySelected').onclick = playSelectedToBattlefield;
     $('#btnToGraveyard').onclick = moveSelectedToGraveyard;
     $('#btnInspect').onclick = () => { if (state.selected?.id) openCardModal(state.selected.id, state.selected.zone); };
