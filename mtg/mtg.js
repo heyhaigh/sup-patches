@@ -124,6 +124,8 @@ function getClientHtml() {
     .zonePills { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
     .zonePill { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid var(--border); background:rgba(255,255,255,0.75); border-radius:999px; font-size:12px; color:var(--muted); font-weight:650; }
     .inspectorImg { width:100%; border-radius:14px; border:1px solid var(--border); background:rgba(18,21,26,0.06); aspect-ratio:63/88; object-fit:cover; }
+    .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(18,21,26,0.15); border-top-color:var(--primary); border-radius:50%; animation:spin 0.6s linear infinite; vertical-align:middle; margin-right:6px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
     @media (max-width:980px) {
       .body { grid-template-columns:1fr; }
       .sidebar { border-right:none; border-bottom:1px solid var(--border); }
@@ -783,7 +785,9 @@ function getClientHtml() {
 
   async function createQuickstartStandard() {
     const color = $('#qsStandard').value;
-    $('#qsStandardMsg').textContent = 'Creating\u2026';
+    const btn = $('#btnCreateQsStandard');
+    btn.disabled = true;
+    $('#qsStandardMsg').innerHTML = '<span class="spinner"></span>Building Standard deck\u2026';
     try {
       const deck = await supExec('api_createQuickstartStandardDeck', { color });
       await loadDecks();
@@ -794,13 +798,17 @@ function getClientHtml() {
       const msg = String(err?.message || err || '');
       $('#qsStandardMsg').textContent = 'Failed: ' + msg;
       toast(msg, { type: 'error', title: 'Quickstart failed' });
+    } finally {
+      btn.disabled = false;
     }
   }
 
   async function createQuickstartCommanderFromPopular() {
     const name = $('#qsPopularCommander').value;
     if (!name) return;
-    $('#qsCommanderMsg').textContent = 'Creating\u2026';
+    const btn = $('#btnCreateQsCommanderPopular');
+    btn.disabled = true;
+    $('#qsCommanderMsg').innerHTML = '<span class="spinner"></span>Building Commander deck \u2014 fetching cards from Scryfall\u2026';
     try {
       const deck = await supExec('api_createQuickstartCommanderDeck', { commanderName: name });
       await loadDecks();
@@ -811,6 +819,8 @@ function getClientHtml() {
       const msg = String(err?.message || err || '');
       $('#qsCommanderMsg').textContent = 'Failed: ' + msg;
       toast(msg, { type: 'error', title: 'Quickstart failed' });
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -830,7 +840,9 @@ function getClientHtml() {
   async function createQuickstartCommanderFromChosen() {
     const card = state.qsCommanderChosen;
     if (!card?.id) return;
-    $('#qsCommanderMsg').textContent = 'Creating\u2026';
+    const btn = $('#btnCreateQsCommanderChosen');
+    btn.disabled = true;
+    $('#qsCommanderMsg').innerHTML = '<span class="spinner"></span>Building Commander deck \u2014 fetching cards from Scryfall\u2026';
     try {
       const deck = await supExec('api_createQuickstartCommanderDeck', { commanderId: card.id });
       await loadDecks();
@@ -841,6 +853,8 @@ function getClientHtml() {
       const msg = String(err?.message || err || '');
       $('#qsCommanderMsg').textContent = 'Failed: ' + msg;
       toast(msg, { type: 'error', title: 'Quickstart failed' });
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -1360,14 +1374,23 @@ function scryfallSearchAll(query, opts) {
     const order = options.order || 'name';
     const unique = options.unique || 'cards';
     const maxPages = Math.max(1, Math.min(8, Number(options.maxPages) || 4));
+    const cache = sup.global.get(GLOBAL_SCRYFALL_CACHE_KEY) || {};
+    let dirty = false;
     const out = [];
     for (let page = 1; page <= maxPages; page++) {
         const url = `${SCRYFALL.search}?q=${encodeURIComponent(query)}&order=${encodeURIComponent(order)}&unique=${encodeURIComponent(unique)}&page=${page}`;
-        const json = scryfallFetchJsonCached(url);
+        let json = scryfallCacheGet(cache, url);
+        if (!json) {
+            const res = sup.fetch(url, { headers: { "User-Agent": "SupMTG/0 (contact: @heyhaigh)", Accept: "application/json" } });
+            json = res.json();
+            scryfallCacheSet(cache, url, json);
+            dirty = true;
+        }
         const data = Array.isArray(json?.data) ? json.data : [];
         for (const c of data) out.push(c);
         if (!json?.has_more) break;
     }
+    if (dirty) sup.global.set(GLOBAL_SCRYFALL_CACHE_KEY, cache);
     return out;
 }
 
@@ -1413,7 +1436,7 @@ function buildQuickstartCommanderDeck(commanderCard) {
     if (leg.commander !== 'legal') throw new Error(`${cmd.name} is not legal in Commander (${leg.commander || 'unknown'}).`);
     const colors = Array.isArray(cmd.color_identity) ? cmd.color_identity : [];
     const idFilter = scryfallIdFilterForColors(colors);
-    const pool = scryfallSearchAll(`legal:commander ${idFilter} -t:land -type:basic`, { order: 'edhrec', maxPages: 6 });
+    const pool = scryfallSearchAll(`legal:commander ${idFilter} -t:land -type:basic`, { order: 'edhrec', maxPages: 2 });
     const cards = {}; const cardMeta = {};
     cards[cmd.id] = 1; cardMeta[cmd.id] = { name: cmd.name, typeLine: cmd.type_line || '' };
     const chosen = [];
