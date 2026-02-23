@@ -115,13 +115,9 @@ function getClientHtml() {
     .toastSub { margin-top:2px; font-size:12px; color:var(--muted); line-height:1.25; }
     .toastClose { margin-left:auto; border:none; background:transparent; color:var(--muted); cursor:pointer; font-size:14px; padding:2px 6px; border-radius:10px; }
     .toastClose:hover { background:rgba(18,21,26,0.06); color:var(--text); }
-    .gameGrid { display:grid; grid-template-columns:1fr 320px; gap:12px; min-height:0; }
-    .battlefield { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-start; }
     .cardImg { width:64px; height:90px; border-radius:12px; border:1px solid var(--border); object-fit:cover; background:rgba(18,21,26,0.06); cursor:pointer; user-select:none; transition:transform 120ms ease,box-shadow 120ms ease; }
     .cardImg:hover { transform:translateY(-1px); box-shadow:var(--shadow2); }
     .cardImg.selected { box-shadow:0 0 0 3px rgba(11,116,255,0.35),var(--shadow2); border-color:rgba(11,116,255,0.35); }
-    .handRow { display:flex; gap:10px; overflow:auto; padding:8px; border-radius:14px; background:rgba(255,255,255,0.65); border:1px solid var(--border); }
-    .handRow .cardImg { width:78px; height:110px; flex:0 0 auto; }
     .mulliganHand { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; padding:16px 12px; border-radius:14px; background:rgba(18,21,26,0.04); border:1px solid var(--border); margin:12px 0; }
     .mulliganHand .cardImg { width:100px; height:140px; border-radius:12px; flex:0 0 auto; transition:transform 160ms ease,box-shadow 160ms ease; }
     .mulliganHand .cardImg:hover { transform:translateY(-6px) scale(1.04); box-shadow:0 12px 24px rgba(0,0,0,0.15); }
@@ -200,7 +196,6 @@ function getClientHtml() {
       .sidebar { border-right:none; border-bottom:1px solid var(--border); }
       .split { grid-template-columns:1fr; }
       .grid2,.list,.cols2 { grid-template-columns:1fr; }
-      .gameGrid { grid-template-columns:1fr; }
       .cardModalContent { max-width:95vw; max-height:90vh; padding:16px; }
       .cardModalImg { max-height:45vh; width:auto; margin:0 auto; display:block; }
       .appRoot.matchActive .body { grid-template-columns:1fr; }
@@ -1192,7 +1187,7 @@ function getClientHtml() {
       return;
     }
     if (panel) panel.classList.add('visible');
-    img.src = c.imageSmall || c.imageNormal || '';
+    img.src = c.imageNormal || c.imageSmall || '';
     title.textContent = c.name || state.selected.id;
     sub.textContent = (c.typeLine || '') + (state.selected.zone ? ' \u2022 ' + state.selected.zone : '');
     $('#btnPlaySelected').disabled = !(state.selected.zone === 'hand' && state.selected.seat === state.lastMatch?.viewerSeat);
