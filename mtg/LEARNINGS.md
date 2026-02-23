@@ -1,0 +1,49 @@
+# MTG Learnings
+
+## Template Literal Escaping (Critical)
+
+When using `sup.html()` with a template literal that contains a `<script>` block, inner template literals (backticks and `${}`) must be escaped:
+
+```javascript
+// Inside getClientHtml()'s template literal:
+// BAD — terminates the outer template literal
+const msg = `Hello ${name}`;
+
+// GOOD — escaped for the outer template literal context
+const msg = \`Hello \${name}\`;
+```
+
+This applies to ALL backticks and `${}` inside the `<script>` block when the HTML is returned via a JS template literal.
+
+## Selector Helpers
+
+Use separate `$` and `$$` helpers to avoid confusion:
+
+```javascript
+const $ = (sel) => document.querySelector(sel);       // Single element
+const $$ = (sel) => Array.from(document.querySelectorAll(sel)); // Array
+```
+
+Never redeclare `const $` — it's a `SyntaxError: Identifier '$' has already been declared`.
+
+## Scryfall API
+
+- Rate limit: 50-100ms between requests recommended
+- `/cards/collection` accepts up to 75 identifiers per request (batch lookups)
+- `order=edhrec` is useful for Commander deck building (sorts by EDHREC popularity)
+- `order=popular` works well for Standard quickstart
+- Basic land resolution: `!"Plains" t:basic t:land` with `order=released` to get a stable ID
+- Cache globally via `sup.global.set()` with 7-day TTL to avoid repeated API calls
+
+## SupChat State Scopes
+
+| Scope | Use |
+|-------|-----|
+| `sup.user.set()` | Deck library (per-user, persists across chats) |
+| `sup.chat.set()` | Match state (per-chat, shared between players) |
+| `sup.global.set()` | Scryfall cache (shared across all users/chats) |
+| `sup.message.set()` | Not used in launch app (for button reroll pattern) |
+
+## supExec Bridge Resilience
+
+SupChat's preview mode often doesn't have the `sup` context available until the user clicks "Share with chat" or refreshes. The `supExec()` wrapper retries on context errors with exponential backoff.
