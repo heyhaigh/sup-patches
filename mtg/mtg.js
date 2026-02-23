@@ -48,7 +48,7 @@ function getClientHtml() {
       --success: #16a34a; --warning: #f59e0b;
       --sidebarBg: rgba(255,255,255,0.85); --sidebarBlur: blur(10px);
     }
-    .appRoot { width:100%; height:100%; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"; overflow:hidden; }
+    .appRoot { width:100%; height:100%; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"; overflow:clip; overflow-clip-margin:0; }
     .layout { height:100%; display:grid; grid-template-rows:auto 1fr; }
     .topbar { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.70); backdrop-filter:blur(10px); }
     .brand { display:flex; gap:12px; align-items:center; min-width:0; }
@@ -72,6 +72,7 @@ function getClientHtml() {
     .sectionTitle { font-size:18px; font-weight:700; letter-spacing:-0.02em; margin:0; }
     .sectionSub { font-size:13px; color:var(--muted); margin-top:4px; }
     .card { border:1px solid var(--border); background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px; }
+    #tab-play .card { position:relative; z-index:5; }
     .cardSubtle { background:rgba(255,255,255,0.75); }
     .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
     .label { font-size:12px; color:var(--muted); font-weight:600; margin:0 0 6px 2px; }
@@ -126,16 +127,62 @@ function getClientHtml() {
     .inspectorImg { width:100%; border-radius:14px; border:1px solid var(--border); background:rgba(18,21,26,0.06); aspect-ratio:63/88; object-fit:cover; }
     .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(18,21,26,0.15); border-top-color:var(--primary); border-radius:50%; animation:spin 0.6s linear infinite; vertical-align:middle; margin-right:6px; }
     @keyframes spin { to { transform:rotate(360deg); } }
+    .devPanel { display:none; margin:0 0 12px 0; padding:12px; border-radius:var(--radius2); border:1px solid rgba(245,158,11,0.3); background:rgba(245,158,11,0.06); font-size:12px; }
+    .devPanel.visible { display:block; }
+    .devTitle { font-weight:700; color:var(--warning); margin:0 0 8px 0; }
+    .devSection { margin:8px 0 0 0; }
+    .devSection .label { color:rgba(245,158,11,0.8); }
+    .devPre { font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; background:rgba(255,255,255,0.8); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:8px; overflow:auto; max-height:200px; white-space:pre-wrap; word-break:break-all; margin:4px 0 0 0; }
+    .devToggle { background:transparent; border:1px solid transparent; border-radius:999px; padding:4px 8px; cursor:pointer; font-size:14px; line-height:1; color:var(--muted2); transition:border-color 120ms ease,background 120ms ease; user-select:none; }
+    .devToggle:hover { background:rgba(18,21,26,0.06); }
+    .devToggle.active { border-color:rgba(245,158,11,0.4); background:rgba(245,158,11,0.08); }
+    .cardModalOverlay { position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; animation:cardModalIn 160ms ease; }
+    @keyframes cardModalIn { from{opacity:0;} to{opacity:1;} }
+    .cardModalContent { background:var(--surface); border-radius:var(--radius); box-shadow:0 20px 60px rgba(0,0,0,0.18); max-width:420px; width:90vw; max-height:85vh; overflow:auto; padding:20px; position:relative; }
+    .cardModalClose { position:absolute; top:12px; right:12px; width:32px; height:32px; border-radius:999px; border:1px solid var(--border); background:rgba(255,255,255,0.9); color:var(--text); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 120ms ease,transform 120ms ease; z-index:2; }
+    .cardModalClose:hover { background:rgba(255,255,255,1); transform:scale(1.05); }
+    .cardModalImg { width:100%; border-radius:var(--radius2); border:1px solid var(--border); aspect-ratio:63/88; object-fit:cover; background:rgba(18,21,26,0.06); }
+    .cardModalName { font-size:18px; font-weight:800; letter-spacing:-0.02em; margin:14px 0 0 0; }
+    .cardModalMana { font-size:13px; color:var(--muted); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; margin:4px 0 0 0; }
+    .cardModalType { font-size:13px; color:var(--muted); font-weight:600; margin:8px 0 0 0; }
+    .cardModalOracle { font-size:13px; line-height:1.5; margin:12px 0 0 0; padding:12px; border-radius:var(--radius2); border:1px solid var(--border); background:var(--surface2); white-space:pre-wrap; word-break:break-word; }
+    .cardModalZone { margin-top:10px; }
+    .matchBar { display:none; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.70); backdrop-filter:blur(10px); }
+    .matchBarLeft { display:flex; align-items:center; gap:10px; min-width:0; }
+    .matchBarTitle { font-weight:700; font-size:14px; letter-spacing:-0.01em; }
+    .matchBarSub { font-size:12px; color:var(--muted); }
+    .appRoot.matchActive .topbar { display:none; }
+    .appRoot.matchActive .sidebar { display:none; }
+    .appRoot.matchActive .body { grid-template-columns:1fr; }
+    .appRoot.matchActive .matchBar { display:flex; }
+    .appRoot.matchActive #devPanel { display:none !important; }
+    .appRoot.matchActive #tab-play > .row:first-child { display:none; }
+    .appRoot.matchActive #tab-play > .grid2 { display:none; }
+    .appRoot.matchActive #tab-play > .card:last-child { display:none; }
     @media (max-width:980px) {
       .body { grid-template-columns:1fr; }
       .sidebar { border-right:none; border-bottom:1px solid var(--border); }
       .split { grid-template-columns:1fr; }
       .grid2,.list,.cols2 { grid-template-columns:1fr; }
       .gameGrid { grid-template-columns:1fr; }
+      .cardModalContent { max-width:95vw; max-height:90vh; padding:16px; }
+      .cardModalImg { max-height:45vh; width:auto; margin:0 auto; display:block; }
+      .appRoot.matchActive .body { grid-template-columns:1fr; }
     }
   </style>
 
   <div id="toasts" class="toasts"></div>
+  <div id="cardModal" class="cardModalOverlay" style="display:none;">
+    <div class="cardModalContent">
+      <button class="cardModalClose" id="cardModalClose" aria-label="Close card inspector">&times;</button>
+      <img id="cardModalImg" class="cardModalImg" />
+      <div id="cardModalName" class="cardModalName"></div>
+      <div id="cardModalMana" class="cardModalMana"></div>
+      <div id="cardModalType" class="cardModalType"></div>
+      <div id="cardModalOracle" class="cardModalOracle"></div>
+      <div id="cardModalZone" class="cardModalZone small"></div>
+    </div>
+  </div>
   <div class="layout">
     <header class="topbar">
       <div class="brand">
@@ -145,8 +192,21 @@ function getClientHtml() {
           <div class="brandSub">Deck library + Scryfall search + match scaffolding</div>
         </div>
       </div>
-      <div class="userLabel" id="userLabel"></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="devToggle" class="devToggle" title="Dev panel (triple-click)">&#128027;</button>
+        <div class="userLabel" id="userLabel"></div>
+      </div>
     </header>
+    <div class="matchBar" id="matchBar">
+      <div class="matchBarLeft">
+        <div class="brandMark" style="width:24px;height:24px;border-radius:8px;" aria-hidden="true"></div>
+        <div>
+          <div class="matchBarTitle" id="matchBarTitle">Match</div>
+          <div class="matchBarSub" id="matchBarSub"></div>
+        </div>
+      </div>
+      <button id="btnLeaveMatch" class="btn" style="font-size:12px;padding:6px 14px;">Leave match</button>
+    </div>
     <div class="body">
       <nav class="sidebar">
         <div class="navSectionTitle">MTG</div>
@@ -166,6 +226,25 @@ function getClientHtml() {
       </nav>
       <main class="content">
         <div id="status" class="statusLine"></div>
+        <div id="devPanel" class="devPanel">
+          <div class="devTitle">&#128027; Dev — Sanity Checks</div>
+          <div class="devSection">
+            <div class="label">Play Config (computed)</div>
+            <pre id="devConfig" class="devPre">—</pre>
+          </div>
+          <div class="devSection">
+            <div class="label">Last Create Payload</div>
+            <pre id="devPayload" class="devPre">—</pre>
+          </div>
+          <div class="devSection">
+            <div class="label">Last Create Response</div>
+            <pre id="devResponse" class="devPre">—</pre>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button id="devCopyConfig" class="btn" style="font-size:11px;padding:6px 10px;">Copy Config JSON</button>
+            <button id="devCopyAll" class="btn" style="font-size:11px;padding:6px 10px;">Copy All</button>
+          </div>
+        </div>
 
         <section id="tab-play" class="tabPanel">
           <div class="row" style="margin-bottom:12px;">
@@ -224,14 +303,16 @@ function getClientHtml() {
                 <button id="btnAssignDeck" class="btn" style="width:100%;margin-top:10px;">Assign to my seat</button>
                 <button id="btnReady" class="btn btnPrimary" style="width:100%;margin-top:10px;">Ready</button>
                 <div id="mulliganPanel" style="margin-top:12px;display:none;">
-                  <div class="label">Mulligan</div>
-                  <div id="handInfo" class="small"></div>
+                  <div style="font-weight:750;margin-bottom:8px;">Mulligan</div>
+                  <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;">
+                    <div class="pill" id="handCountPill">Cards in hand: <span class="kicker" id="handCountVal">?</span></div>
+                    <div class="pill" id="mulliganCountPill">Mulligans taken: <span class="kicker" id="mulliganCountVal">0</span></div>
+                  </div>
                   <div class="row" style="justify-content:flex-start;gap:10px;margin-top:10px;">
-                    <button id="btnMulligan" class="btn">Mulligan</button>
-                    <button id="btnKeep" class="btn btnPrimary">Keep</button>
+                    <button id="btnKeep" class="btn btnPrimary" style="flex:1;max-width:160px;">Keep hand</button>
+                    <button id="btnMulligan" class="btn" style="flex:1;max-width:160px;">Mulligan</button>
                   </div>
                   <div id="mulliganMsg" class="small" style="margin-top:10px;"></div>
-                  <div class="small" style="margin-top:8px;color:var(--muted2);">v1 mulligan: redraw with one fewer card each time.</div>
                 </div>
                 <div id="lobbyMsg" class="small" style="margin-top:10px;"></div>
                 <div class="small" style="margin-top:8px;color:var(--muted2);">Start game requires: deck assigned + all players ready.</div>
@@ -252,7 +333,10 @@ function getClientHtml() {
               <div class="min0">
                 <div class="label">Table</div>
                 <div id="table" style="display:flex;flex-direction:column;gap:12px;"></div>
-                <div class="label" style="margin-top:12px;">Your hand</div>
+                <div class="row" style="margin-top:12px;justify-content:flex-start;gap:8px;align-items:baseline;">
+                  <div class="label" style="margin:0;">Hand</div>
+                  <span class="kicker" id="myHandCount"></span>
+                </div>
                 <div id="handRow" class="handRow"></div>
               </div>
               <div class="card" style="box-shadow:none;background:rgba(255,255,255,0.65);">
@@ -264,6 +348,7 @@ function getClientHtml() {
                   <button id="btnPlaySelected" class="btn btnPrimary" style="flex:1;">Play to battlefield</button>
                   <button id="btnToGraveyard" class="btn" title="Move from battlefield to graveyard">To GY</button>
                 </div>
+                <button id="btnInspect" class="btn btnGhost" style="width:100%;margin-top:8px;">Inspect card</button>
                 <div class="small" style="margin-top:10px;color:var(--muted2);">v1: clicking a card selects it. "Play" moves from your hand → battlefield. "To GY" moves from battlefield → graveyard.</div>
               </div>
             </div>
@@ -449,6 +534,31 @@ function getClientHtml() {
     $$('.tabBtn').forEach(btn => { btn.classList.toggle('active', btn.dataset.tab === tab); });
   }
 
+  function enterMatchMode() {
+    document.querySelector('.appRoot').classList.add('matchActive');
+    switchTab('play');
+    updateMatchBar();
+  }
+
+  function exitMatchMode() {
+    document.querySelector('.appRoot').classList.remove('matchActive');
+    state.activeMatchId = null;
+    state.lastMatch = null;
+    renderLobby(null);
+    $('#gamePanel').style.display = 'none';
+    $('#createResult').textContent = '';
+    $('#joinResult').textContent = '';
+  }
+
+  function updateMatchBar() {
+    const m = state.lastMatch;
+    if (!m) { $('#matchBarTitle').textContent = 'Match'; $('#matchBarSub').textContent = ''; return; }
+    const fmt = (m.format || 'standard').charAt(0).toUpperCase() + (m.format || 'standard').slice(1);
+    const phase = (m.phase || 'lobby').charAt(0).toUpperCase() + (m.phase || 'lobby').slice(1);
+    $('#matchBarTitle').textContent = fmt + ' Match';
+    $('#matchBarSub').textContent = m.matchId + ' \\u2022 ' + phase;
+  }
+
   function fmtUpdated(deck) {
     const d = new Date(deck.updatedAt || deck.createdAt || Date.now());
     return d.toLocaleString();
@@ -631,9 +741,67 @@ function getClientHtml() {
   function updateOpponentUI() {
     const fmt = $('#playFormat').value;
     const opp = $('#playOpponent').value;
-    if (fmt !== 'standard') { $('#playOpponent').value = 'human'; $('#playOpponent').disabled = true; $('#botOptions').style.display = 'none'; return; }
+    if (fmt !== 'standard') {
+      $('#playOpponent').value = 'human';
+      $('#playOpponent').disabled = true;
+      $('#botOptions').style.display = 'none';
+      if (typeof updateDevPanel === 'function') updateDevPanel();
+      return;
+    }
     $('#playOpponent').disabled = false;
-    $('#botOptions').style.display = opp === 'bot' ? '' : 'none';
+    const showBot = opp === 'bot';
+    $('#botOptions').style.display = showBot ? '' : 'none';
+    if (showBot && !$('#playBotDifficulty').value) $('#playBotDifficulty').value = 'easy';
+    if (typeof updateDevPanel === 'function') updateDevPanel();
+  }
+
+  function getPlayConfig() {
+    const format = $('#playFormat').value || 'standard';
+    const opponentRaw = $('#playOpponent').value || 'human';
+    const opponentType = format !== 'standard' ? 'human' : opponentRaw;
+    const botDifficulty = opponentType === 'bot' ? ($('#playBotDifficulty').value || 'easy') : null;
+    const deckId = $('#playDeck').value || null;
+    const deckName = deckId ? ($('#playDeck').selectedOptions[0]?.textContent || null) : null;
+    return { format, opponentType, botDifficulty, deckId, deckName };
+  }
+
+  const _devState = { clicks: 0, clickTimer: null, active: false, lastPayload: null, lastResponse: null, lastValidate: null };
+
+  function initDevPanel() {
+    try {
+      const saved = sessionStorage.getItem('mtg.devPanel');
+      if (saved === 'active') { _devState.active = true; $('#devPanel').classList.add('visible'); $('#devToggle').classList.add('active'); updateDevPanel(); }
+    } catch(e) { /* sessionStorage may be unavailable */ }
+  }
+
+  function toggleDevPanel() {
+    _devState.clicks++;
+    clearTimeout(_devState.clickTimer);
+    _devState.clickTimer = setTimeout(() => { _devState.clicks = 0; }, 500);
+    if (_devState.clicks < 3) return;
+    _devState.clicks = 0;
+    _devState.active = !_devState.active;
+    $('#devPanel').classList.toggle('visible', _devState.active);
+    $('#devToggle').classList.toggle('active', _devState.active);
+    try { sessionStorage.setItem('mtg.devPanel', _devState.active ? 'active' : ''); } catch(e) {}
+    if (_devState.active) updateDevPanel();
+  }
+
+  function updateDevPanel() {
+    if (!_devState.active) return;
+    try {
+      const config = getPlayConfig();
+      $('#devConfig').textContent = JSON.stringify(config, null, 2);
+    } catch(e) { $('#devConfig').textContent = 'Error: ' + e.message; }
+    if (_devState.lastPayload) $('#devPayload').textContent = JSON.stringify(_devState.lastPayload, null, 2);
+    if (_devState.lastResponse) $('#devResponse').textContent = JSON.stringify(_devState.lastResponse, null, 2);
+  }
+
+  function devLog(key, data) {
+    if (key === 'createPayload' || key === 'playConfig') _devState.lastPayload = data;
+    else if (key === 'createResult') _devState.lastResponse = data;
+    else if (key === 'validateResult') _devState.lastValidate = data;
+    updateDevPanel();
   }
 
   async function loadDecks() {
@@ -859,17 +1027,21 @@ function getClientHtml() {
   }
 
   async function validateAndCreateMatch() {
-    const format = $('#playFormat').value;
-    const deckId = $('#playDeck').value;
-    if (!deckId) { $('#createResult').textContent = 'No deck selected.'; toast('No deck selected.', { type: 'warn' }); return; }
-    const opponentType = $('#playOpponent').value;
-    const botDifficulty = $('#playBotDifficulty').value;
-    if (opponentType === 'bot' && format !== 'standard') { $('#createResult').textContent = 'Bot is only supported for Standard (v1).'; toast('Bot is only supported for Standard (v1).', { type: 'warn' }); return; }
+    const config = getPlayConfig();
+    devLog('playConfig', config);
+    if (!config.deckId) { $('#createResult').textContent = 'No deck selected.'; toast('No deck selected.', { type: 'warn' }); return; }
+    if (config.opponentType === 'bot' && config.format !== 'standard') { $('#createResult').textContent = 'Bot is only supported for Standard (v1).'; toast('Bot is only supported for Standard (v1).', { type: 'warn' }); return; }
+    if (config.opponentType === 'bot' && !config.botDifficulty) { $('#createResult').textContent = 'Bot difficulty not set.'; toast('Bot difficulty not set.', { type: 'warn' }); return; }
     $('#createResult').textContent = 'Validating\u2026';
-    const v = await supExec('api_validateDeck', { deckId });
+    const v = await supExec('api_validateDeck', { deckId: config.deckId });
+    devLog('validateResult', v);
     if (!v.ok) { $('#createResult').textContent = 'Invalid deck: ' + v.errors.join(' | '); toast('Deck validation failed.', { type: 'error', title: 'Invalid deck' }); return; }
     $('#createResult').textContent = 'Creating match\u2026';
-    const res = await supExec('api_createMatch', { format, hostDeckId: deckId, opponent: opponentType === 'bot' ? { type: 'bot', difficulty: botDifficulty } : { type: 'human' } });
+    const opponent = config.opponentType === 'bot' ? { type: 'bot', difficulty: config.botDifficulty } : { type: 'human' };
+    const payload = { format: config.format, hostDeckId: config.deckId, opponent };
+    devLog('createPayload', payload);
+    const res = await supExec('api_createMatch', payload);
+    devLog('createResult', res);
     if (!res?.ok) {
       const err = res?.error || 'unknown error';
       const errors = Array.isArray(res?.errors) ? res.errors : [];
@@ -880,6 +1052,7 @@ function getClientHtml() {
     $('#createResult').textContent = \`Match created. Share this matchId: \${res.matchId}\`;
     toast('Match created. Copy the matchId from the panel.', { type: 'success' });
     await refreshMatch();
+    enterMatchMode();
   }
 
   async function joinMatch() {
@@ -890,6 +1063,7 @@ function getClientHtml() {
     if (!res.ok) { $('#joinResult').textContent = 'Join failed: ' + (res.error || 'unknown error'); toast('Join failed: ' + (res.error || 'unknown error'), { type: 'error' }); return; }
     state.activeMatchId = matchId;
     $('#joinResult').textContent = 'Joined.'; toast('Joined match.', { type: 'success' }); await refreshMatch();
+    enterMatchMode();
   }
 
   function populateAssignDeckSelect(match) {
@@ -939,10 +1113,14 @@ function getClientHtml() {
       const handCount = getHandCountForMySeat(match);
       const mulligansTaken = Number(match?.game?.mulligansBySeat?.[seat] || 0);
       const kept = !!match?.game?.keptBySeat?.[seat];
-      $('#handInfo').textContent = 'Seat ' + seat + ' \u2022 Hand: ' + (handCount == null ? '?' : handCount) + ' \u2022 Mulligans: ' + mulligansTaken + (kept ? ' \u2022 Kept' : '');
-      $('#btnMulligan').disabled = kept; $('#btnKeep').disabled = kept;
+      $('#handCountVal').textContent = handCount == null ? '?' : String(handCount);
+      $('#mulliganCountVal').textContent = String(mulligansTaken);
+      const mcPill = $('#mulliganCountPill');
+      if (mcPill) mcPill.style.borderColor = mulligansTaken > 0 ? 'rgba(245,158,11,0.35)' : '';
+      $('#btnMulligan').disabled = kept;
+      $('#btnKeep').disabled = kept;
       const allKept = !!match?.game?.keptBySeat && Object.values(match.game.keptBySeat).every(Boolean);
-      $('#mulliganMsg').textContent = allKept ? 'All players kept. Game should advance to playing shortly.' : (kept ? 'Waiting for other players to keep\u2026' : 'Choose to mulligan or keep.');
+      $('#mulliganMsg').textContent = allKept ? 'All players kept. Game advancing shortly.' : (kept ? 'Waiting for other players to keep\u2026' : '');
     }
   }
 
@@ -969,12 +1147,31 @@ function getClientHtml() {
     state.selected = sel || { id: null, zone: null, seat: null };
     const c = state.selected.id ? cardMeta(state.selected.id) : null;
     const img = $('#inspectorImg'); const title = $('#inspectorTitle'); const sub = $('#inspectorSub');
-    if (!c) { img.src = ''; img.style.display = 'none'; title.textContent = ''; sub.textContent = ''; $('#btnPlaySelected').disabled = true; $('#btnToGraveyard').disabled = true; return; }
+    if (!c) { img.src = ''; img.style.display = 'none'; title.textContent = ''; sub.textContent = ''; $('#btnPlaySelected').disabled = true; $('#btnToGraveyard').disabled = true; $('#btnInspect').disabled = true; return; }
     img.style.display = ''; img.src = c.imageNormal || c.imageSmall || '';
     title.textContent = c.name || state.selected.id;
     sub.textContent = (c.typeLine || '') + (state.selected.zone ? ' \u2022 ' + state.selected.zone : '');
     $('#btnPlaySelected').disabled = !(state.selected.zone === 'hand' && state.selected.seat === state.lastMatch?.viewerSeat);
     $('#btnToGraveyard').disabled = !(state.selected.zone === 'battlefield' && state.selected.seat === state.lastMatch?.viewerSeat);
+    $('#btnInspect').disabled = !c;
+  }
+
+  function openCardModal(cardId, zone) {
+    const c = cardMeta(cardId);
+    if (!c) return;
+    $('#cardModalImg').src = c.imageNormal || c.imageSmall || '';
+    $('#cardModalImg').alt = c.name || cardId;
+    $('#cardModalName').textContent = c.name || cardId;
+    $('#cardModalMana').textContent = c.manaCost || '';
+    $('#cardModalMana').style.display = c.manaCost ? '' : 'none';
+    $('#cardModalType').textContent = c.typeLine || '';
+    $('#cardModalOracle').textContent = c.oracleText || 'No oracle text.';
+    $('#cardModalZone').textContent = zone ? ('Zone: ' + zone) : '';
+    $('#cardModal').style.display = '';
+  }
+
+  function closeCardModal() {
+    $('#cardModal').style.display = 'none';
   }
 
   function renderCardImg(id, opts) {
@@ -984,6 +1181,7 @@ function getClientHtml() {
     if (state.selected?.id === id && state.selected?.zone === options.zone && state.selected?.seat === options.seat) img.classList.add('selected');
     img.onclick = () => setSelected({ id, zone: options.zone || null, seat: options.seat || null });
     if (options.onDblClick) img.ondblclick = options.onDblClick;
+    else img.ondblclick = () => openCardModal(id, options.zone || null);
     return img;
   }
 
@@ -1002,7 +1200,10 @@ function getClientHtml() {
         <div class="zonePill">Exile: <span class="kicker" id="excount-\${seat}"></span></div>
         <div class="zonePill">Command: <span class="kicker" id="cmdcount-\${seat}"></span></div>
       </div>
-      <div class="label" style="margin-top:10px;">Battlefield</div>
+      <div class="row" style="margin-top:10px;justify-content:flex-start;gap:8px;align-items:baseline;">
+        <div class="label" style="margin:0;">Battlefield</div>
+        <span class="kicker" id="bfcount-\${seat}"></span>
+      </div>
       <div class="battlefield" id="bf-\${seat}"></div>
     \`;
     const lib = zones?.library; const hand = zones?.hand; const gy = zones?.graveyard; const ex = zones?.exile; const cmd = zones?.command; const bf = zones?.battlefield;
@@ -1014,6 +1215,7 @@ function getClientHtml() {
     const bfHost = panel.querySelector('#bf-' + seat);
     if (Array.isArray(bf) && bf.length) { for (const id of bf) bfHost.appendChild(renderCardImg(id, { zone: 'battlefield', seat })); }
     else { const empty = document.createElement('div'); empty.className = 'small'; empty.textContent = 'No permanents.'; bfHost.appendChild(empty); }
+    panel.querySelector('#bfcount-' + seat).textContent = String(Array.isArray(bf) ? bf.length : 0);
     return panel;
   }
 
@@ -1021,7 +1223,12 @@ function getClientHtml() {
     const show = !!match && match.phase === 'playing' && !!match.viewerSeat;
     $('#gamePanel').style.display = show ? '' : 'none';
     if (!show) return;
-    $('#gameSummary').textContent = 'Match ' + match.matchId + ' \u2022 turn ' + (match.game?.turn || '?') + ' \u2022 active seat: ' + (match.game?.activePlayerSeat || '?');
+    const activeSeat = match.game?.activePlayerSeat;
+    const activePlayer = (match.players || []).find(p => p.seat === activeSeat);
+    const activeName = activeSeat === match.viewerSeat ? 'You' : (activePlayer ? (activePlayer.isBot ? activePlayer.username : ('@' + activePlayer.username)) : ('Seat ' + activeSeat));
+    const phase = match.game?.step || 'begin';
+    const phaseLabel = phase === 'begin' ? 'Begin' : phase === 'main' ? 'Main' : phase.charAt(0).toUpperCase() + phase.slice(1);
+    $('#gameSummary').textContent = 'Turn ' + (match.game?.turn || '?') + ' \u2014 Active: ' + activeName + ' \u2014 Phase: ' + phaseLabel;
     const table = $('#table'); table.innerHTML = '';
     const seats = (match.players || []).map(p => p.seat).sort((a,b) => a - b);
     for (const seat of seats) table.appendChild(renderSeat(match, seat));
@@ -1029,6 +1236,7 @@ function getClientHtml() {
     const handRow = $('#handRow'); handRow.innerHTML = '';
     if (!hand.length) { const empty = document.createElement('div'); empty.className = 'small'; empty.textContent = 'Hand empty.'; handRow.appendChild(empty); }
     else { for (const id of hand) handRow.appendChild(renderCardImg(id, { zone: 'hand', seat, onDblClick: async () => { setSelected({ id, zone: 'hand', seat }); await playSelectedToBattlefield(); } })); }
+    $('#myHandCount').textContent = String(hand.length);
     if (state.selected?.id) { if (!collectVisibleCardIds(match).includes(state.selected.id)) setSelected({ id: null, zone: null, seat: null }); else setSelected(state.selected); }
     else setSelected({ id: null, zone: null, seat: null });
     $('#btnGameEndTurn').disabled = !(match?.game?.activePlayerSeat === match?.viewerSeat);
@@ -1040,6 +1248,7 @@ function getClientHtml() {
     state.lastMatch = match; await hydrateCardIndexForMatch(match);
     $('#matchDebug').textContent = JSON.stringify(match, null, 2);
     renderLobby(match); renderGame(match);
+    if (document.querySelector('.appRoot').classList.contains('matchActive')) updateMatchBar();
   }
 
   async function drawDebug() {
@@ -1086,17 +1295,32 @@ function getClientHtml() {
 
   async function mulligan() {
     if (!state.activeMatchId) return;
-    $('#mulliganMsg').textContent = 'Mulligan\u2026';
+    $('#btnMulligan').disabled = true;
+    $('#btnKeep').disabled = true;
+    $('#mulliganMsg').innerHTML = '<span class="spinner"></span> Drawing new hand\u2026';
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'MULLIGAN' } });
-    if (!res.ok) { $('#mulliganMsg').textContent = 'Failed: ' + (res.error || 'unknown'); toast('Mulligan failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    if (!res.ok) {
+      $('#mulliganMsg').textContent = 'Failed: ' + (res.error || 'unknown');
+      toast('Mulligan failed: ' + (res.error || 'unknown'), { type: 'error' });
+      $('#btnMulligan').disabled = false; $('#btnKeep').disabled = false;
+      return;
+    }
     await refreshMatch();
   }
 
   async function keepHand() {
     if (!state.activeMatchId) return;
-    $('#mulliganMsg').textContent = 'Keeping\u2026';
+    $('#btnKeep').disabled = true;
+    $('#btnMulligan').disabled = true;
+    $('#mulliganMsg').innerHTML = '<span class="spinner"></span> Keeping\u2026';
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'KEEP_HAND' } });
-    if (!res.ok) { $('#mulliganMsg').textContent = 'Failed: ' + (res.error || 'unknown'); toast('Keep failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    if (!res.ok) {
+      $('#mulliganMsg').textContent = 'Failed: ' + (res.error || 'unknown');
+      toast('Keep failed: ' + (res.error || 'unknown'), { type: 'error' });
+      $('#btnKeep').disabled = false; $('#btnMulligan').disabled = false;
+      return;
+    }
+    toast('Hand kept.', { type: 'success', ms: 1500 });
     await refreshMatch();
   }
 
@@ -1126,8 +1350,10 @@ function getClientHtml() {
     $('#btnDeleteDeck').onclick = deleteActiveDeck;
     $('#btnSearch').onclick = search;
     $('#searchQuery').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
-    $('#playFormat').onchange = () => { renderDeckSelectors(); updateOpponentUI(); };
-    $('#playOpponent').onchange = () => updateOpponentUI();
+    $('#playFormat').onchange = () => { renderDeckSelectors(); updateOpponentUI(); if (typeof updateDevPanel === 'function') updateDevPanel(); };
+    $('#playOpponent').onchange = () => { updateOpponentUI(); if (typeof updateDevPanel === 'function') updateDevPanel(); };
+    $('#playBotDifficulty').onchange = () => { if (typeof updateDevPanel === 'function') updateDevPanel(); };
+    $('#playDeck').onchange = () => { if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#btnValidateAndCreate').onclick = validateAndCreateMatch;
     $('#btnJoin').onclick = joinMatch;
     $('#btnRefreshMatch').onclick = refreshMatch;
@@ -1142,11 +1368,19 @@ function getClientHtml() {
     $('#btnGameEndTurn').onclick = endTurn;
     $('#btnPlaySelected').onclick = playSelectedToBattlefield;
     $('#btnToGraveyard').onclick = moveSelectedToGraveyard;
+    $('#btnInspect').onclick = () => { if (state.selected?.id) openCardModal(state.selected.id, state.selected.zone); };
+    $('#cardModalClose').onclick = closeCardModal;
+    $('#cardModal').onclick = (e) => { if (e.target === $('#cardModal')) closeCardModal(); };
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardModal(); });
     $('#btnCreateQsStandard').onclick = createQuickstartStandard;
     $('#btnCreateQsCommanderPopular').onclick = createQuickstartCommanderFromPopular;
     $('#btnQsCommanderSearch').onclick = quickstartCommanderSearch;
     $('#qsCommanderSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') quickstartCommanderSearch(); });
     $('#btnCreateQsCommanderChosen').onclick = createQuickstartCommanderFromChosen;
+    $('#devToggle').onclick = toggleDevPanel;
+    $('#devCopyConfig').onclick = () => { try { navigator.clipboard.writeText($('#devConfig').textContent); toast('Config copied.', { type: 'info', ms: 1500 }); } catch(e) { toast('Copy failed.', { type: 'warn' }); } };
+    $('#devCopyAll').onclick = () => { try { const all = { config: _devState.lastPayload, validate: _devState.lastValidate, response: _devState.lastResponse }; navigator.clipboard.writeText(JSON.stringify(all, null, 2)); toast('All dev data copied.', { type: 'info', ms: 1500 }); } catch(e) { toast('Copy failed.', { type: 'warn' }); } };
+    $('#btnLeaveMatch').onclick = () => { exitMatchMode(); toast('Left match.', { type: 'info', ms: 2000 }); };
   }
 
   async function boot() {
@@ -1157,7 +1391,7 @@ function getClientHtml() {
       const boot = await supExec('api_boot');
       state.user = boot.user;
       $('#userLabel').textContent = '@' + boot.user.username;
-      bindEvents(); switchTab('play'); await loadDecks();
+      bindEvents(); initDevPanel(); switchTab('play'); await loadDecks();
       if (!state.decks.length) { toast('No decks yet \u2014 use Deck Builder \u2192 Quick start to create one fast.', { type: 'info', ms: 5000 }); switchTab('builder'); }
       setStatus('Ready.'); setTimeout(() => setStatus(''), 1000);
       state.booted = true; state.booting = false;
@@ -1642,6 +1876,7 @@ function engineApplyAction(match, user, action) {
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
         const ok = engineMoveCard(match, seat, "hand", "battlefield", cardId); if (!ok.ok) return ok;
         match.log.push({ t: Date.now(), type: "PLAY", by: user.username, seat, cardId });
+        if (match.game.step === "begin") match.game.step = "main";
         return { ok: true, match };
     }
 
@@ -1652,6 +1887,7 @@ function engineApplyAction(match, user, action) {
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
         const ok = engineMoveCard(match, seat, "battlefield", "graveyard", cardId); if (!ok.ok) return ok;
         match.log.push({ t: Date.now(), type: "MOVE_TO_GY", by: user.username, seat, cardId });
+        if (match.game.step === "begin") match.game.step = "main";
         return { ok: true, match };
     }
 
@@ -1713,6 +1949,7 @@ function engineAdvanceTurn(match, opts) {
     const next = engineNextSeat(match, cur);
     if (next <= cur) match.game.turn = (Number(match.game.turn) || 1) + 1;
     match.game.activePlayerSeat = next; match.game.prioritySeat = next;
+    match.game.step = "begin";
     engineEnsureZones(match, next); engineDrawCards(match, next, 1);
     match.log.push({ t: Date.now(), type: "TURN_START", by: (opts || {}).by || "engine", turn: match.game.turn, seat: next });
 }
