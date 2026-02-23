@@ -163,7 +163,7 @@ function getClientHtml() {
     .appRoot.matchActive #tab-play > .grid2 { display:none; }
     .appRoot.matchActive #tab-play > .card:last-child { display:none; }
     /* Game board - Arena-style vertical split */
-    .gameBoard { display:flex; flex-direction:column; height:calc(100vh - 52px); min-height:480px; background:linear-gradient(180deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #1a1a2e 100%); border-radius:var(--radius); overflow:hidden; position:relative; }
+    .gameBoard { display:flex; flex-direction:column; height:calc(100vh - 52px); min-height:480px; background:linear-gradient(180deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #1a1a2e 100%); border-radius:var(--radius); overflow:hidden; position:relative; contain:layout style; }
     .gameBoardInner { display:flex; flex-direction:column; flex:1; min-height:0; }
     .oppSide { flex:1; display:flex; flex-direction:column; padding:12px 16px 8px; min-height:0; }
     .seatBar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
@@ -215,7 +215,7 @@ function getClientHtml() {
   <div id="cardModal" class="cardModalOverlay" style="display:none;">
     <div class="cardModalContent">
       <button class="cardModalClose" id="cardModalClose" aria-label="Close card inspector">&times;</button>
-      <img id="cardModalImg" class="cardModalImg" />
+      <img id="cardModalImg" class="cardModalImg" decoding="async" />
       <div id="cardModalName" class="cardModalName"></div>
       <div id="cardModalMana" class="cardModalMana"></div>
       <div id="cardModalType" class="cardModalType"></div>
@@ -369,7 +369,7 @@ function getClientHtml() {
                 <div class="mySide" id="mySide"></div>
               </div>
               <div class="inspectFloat" id="inspectFloat">
-                <img id="inspectorImg" class="inspectorImg" />
+                <img id="inspectorImg" class="inspectorImg" width="180" height="252" decoding="async" />
                 <div id="inspectorTitle" class="inspectorTitle"></div>
                 <div id="inspectorSub" class="inspectorSub"></div>
                 <button id="btnPlaySelected" class="btn btnPrimary">Play to battlefield</button>
@@ -1152,7 +1152,7 @@ function getClientHtml() {
       const handCards = Array.isArray(myZones?.hand) ? myZones.hand : [];
       if (handCards.length) {
         for (const id of handCards) {
-          mulliganHandEl.appendChild(renderCardImg(id, { zone: 'hand', seat }));
+          mulliganHandEl.appendChild(renderCardImg(id, { zone: 'hand', seat, w: 100, h: 140 }));
         }
       } else {
         mulliganHandEl.innerHTML = '<div class="small">No cards in hand.</div>';
@@ -1192,7 +1192,7 @@ function getClientHtml() {
       return;
     }
     if (panel) panel.classList.add('visible');
-    img.src = c.imageNormal || c.imageSmall || '';
+    img.src = c.imageSmall || c.imageNormal || '';
     title.textContent = c.name || state.selected.id;
     sub.textContent = (c.typeLine || '') + (state.selected.zone ? ' \u2022 ' + state.selected.zone : '');
     $('#btnPlaySelected').disabled = !(state.selected.zone === 'hand' && state.selected.seat === state.lastMatch?.viewerSeat);
@@ -1223,6 +1223,9 @@ function getClientHtml() {
     const options = opts || {};
     const c = cardMeta(id); const img = document.createElement('img');
     img.className = 'cardImg'; img.src = c?.imageSmall || c?.imageNormal || ''; img.alt = c?.name || id;
+    img.width = options.w || 64; img.height = options.h || 90;
+    img.decoding = 'async';
+    if (options.lazy) img.loading = 'lazy';
     img.dataset.cardId = id;
     if (state.selected?.id === id && state.selected?.zone === options.zone && state.selected?.seat === options.seat) img.classList.add('selected');
     img.onclick = () => setSelected({ id, zone: options.zone || null, seat: options.seat || null });
@@ -1269,7 +1272,7 @@ function getClientHtml() {
     const bfArea = document.createElement('div');
     bfArea.className = 'bfArea';
     if (bf.length) {
-      for (const id of bf) bfArea.appendChild(renderCardImg(id, { zone: 'battlefield', seat }));
+      for (const id of bf) bfArea.appendChild(renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer }));
     } else {
       bfArea.innerHTML = '<div class="emptyZone">No permanents</div>';
     }
@@ -1286,6 +1289,10 @@ function getClientHtml() {
     const step = match.game?.step || 'begin';
     const stepLabel = step.charAt(0).toUpperCase() + step.slice(1);
     const isMyTurn = activeSeat === match.viewerSeat;
+
+    const cacheKey = (match.game?.turn || '?') + ':' + activeSeat + ':' + step;
+    if (bar.dataset.cacheKey === cacheKey) return;
+    bar.dataset.cacheKey = cacheKey;
 
     bar.innerHTML = '<div class="turnInfo">Turn <span class="turnHighlight">' + (match.game?.turn || '?') + '</span></div>'
       + '<div class="turnInfo">' + (isMyTurn ? '<span class="turnHighlight">Your turn</span>' : escapeHtml(activeName) + "'s turn") + '</div>'
@@ -1325,7 +1332,7 @@ function getClientHtml() {
     } else {
       for (const id of hand) {
         handTray.appendChild(renderCardImg(id, {
-          zone: 'hand', seat: mySeat,
+          zone: 'hand', seat: mySeat, w: 90, h: 126,
           onDblClick: async () => { setSelected({ id, zone: 'hand', seat: mySeat }); await playSelectedToBattlefield(); }
         }));
       }
