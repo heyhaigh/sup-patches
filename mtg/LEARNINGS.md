@@ -15,6 +15,19 @@ const msg = \`Hello \${name}\`;
 
 This applies to ALL backticks and `${}` inside the `<script>` block when the HTML is returned via a JS template literal.
 
+**Also watch out for `\'` inside single-quoted strings.** In a template literal, `\'` is NOT a recognized escape — the backslash is silently dropped, producing a bare `'`. This breaks inner single-quoted JS strings:
+
+```javascript
+// BAD — \' becomes ' in template literal context, breaking the string
+'Atraxa, Praetors\' Voice'
+// Browser receives: 'Atraxa, Praetors' Voice'  ← SyntaxError!
+
+// GOOD — use double quotes for strings containing apostrophes
+"Atraxa, Praetors' Voice"
+```
+
+A single SyntaxError kills the entire `<script>` block — nothing runs.
+
 ## Selector Helpers
 
 Use separate `$` and `$$` helpers to avoid confusion:
