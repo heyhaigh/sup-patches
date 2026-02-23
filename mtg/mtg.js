@@ -387,14 +387,14 @@ function getClientHtml() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const popularCommanders = [
-    'Atraxa, Praetors\' Voice',
+    "Atraxa, Praetors' Voice",
     'Edgar Markov',
     'The Ur-Dragon',
     'Miirym, Sentinel Wyrm',
     'Krenko, Mob Boss',
     'Korvold, Fae-Cursed King',
     'Lathril, Blade of the Elves',
-    'Yuriko, the Tiger\'s Shadow',
+    "Yuriko, the Tiger's Shadow",
     'Muldrotha, the Gravetide',
     'Isshin, Two Heavens as One'
   ];
