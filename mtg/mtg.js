@@ -200,6 +200,22 @@ function getClientHtml() {
     .spellOverlay { position:fixed; top:0; left:0; width:100%; height:100%; z-index:100; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); pointer-events:none; }
     .spellOverlay img { width:240px; height:336px; border-radius:16px; box-shadow:0 0 60px rgba(124,58,237,0.5),0 20px 60px rgba(0,0,0,0.4); animation:spellCast 1.6s ease-out forwards; }
     @keyframes spellCast { 0%{transform:scale(0.3) rotate(-8deg);opacity:0} 15%{transform:scale(1.05) rotate(0deg);opacity:1} 70%{transform:scale(1) rotate(0deg);opacity:1} 100%{transform:scale(0.4) translateY(60vh) rotate(12deg);opacity:0} }
+    .cardWrap.tapped .cardImg { transform:rotate(90deg); }
+    .cardWrap.tapped { margin:10px 6px; }
+    .cardWrap.canAttack { box-shadow:0 0 8px 2px rgba(34,197,94,0.5); border-radius:12px; cursor:pointer; }
+    .cardWrap.attacking { transform:translateY(-20px); box-shadow:0 0 10px 3px rgba(239,68,68,0.5); border-radius:12px; }
+    .cardWrap.attacking .cardImg { border-color:rgba(239,68,68,0.7); }
+    .attackIcon { position:absolute; top:-8px; left:50%; transform:translateX(-50%); width:20px; height:20px; background:rgba(239,68,68,0.85); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.3); }
+    .cardWrap.canBlock { box-shadow:0 0 8px 2px rgba(34,197,94,0.5); border-radius:12px; cursor:pointer; }
+    .cardWrap.blocking { box-shadow:0 0 10px 3px rgba(59,130,246,0.5); border-radius:12px; }
+    .cardWrap.blocking .cardImg { border-color:rgba(59,130,246,0.7); }
+    .cardWrap.combatIneligible .cardImg { opacity:0.35; filter:saturate(0.2); }
+    .phaseBar { display:flex; gap:4px; align-items:center; }
+    .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.06); }
+    .phasePill.active { background:rgba(251,191,36,0.18); color:#fbbf24; border-color:rgba(251,191,36,0.35); }
+    .dmgFloat { position:absolute; font-size:24px; font-weight:900; color:#ef4444; text-shadow:0 2px 8px rgba(0,0,0,0.5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
+    @keyframes dmgFloatUp { 0%{opacity:1;transform:translateY(0) scale(1.2)} 60%{opacity:1;transform:translateY(-30px) scale(1)} 100%{opacity:0;transform:translateY(-50px) scale(0.8)} }
+    .combatBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; }
     .botThinking .spinner { width:14px; height:14px; border:2px solid rgba(251,191,36,0.3); border-top-color:#fbbf24; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
     .turnOrder { display:flex; gap:4px; align-items:center; }
     .turnDot { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); transition:all 200ms ease; }
@@ -545,6 +561,7 @@ function getClientHtml() {
     user: null, decks: [], activeTab: 'play', activeDeckId: null, activeDeck: null,
     activeMatchId: null, lastMatch: null, lastSearchResults: [], booting: false, booted: false,
     cardIndex: {}, selected: { id: null, zone: null, seat: null }, qsCommanderChosen: null,
+    combatMode: null, pendingAttackers: {}, pendingBlockers: {}, selectedBlocker: null,
   };
 
   function toast(msg, opts) {
@@ -1283,6 +1300,37 @@ function getClientHtml() {
     return 'unknown';
   }
 
+  function getCombatEligibleAttackers(match) {
+    var mySeat = match?.viewerSeat;
+    if (!mySeat) return [];
+    var bf = match?.game?.zones?.[mySeat]?.battlefield || [];
+    var out = [];
+    for (var i = 0; i < bf.length; i++) {
+      var cid = bf[i];
+      if (clientCardType(cid) !== 'creature') continue;
+      var cs = match?.game?.cardState?.[cid];
+      if (cs && cs.tapped) continue;
+      if (cs && cs.summoningSick) continue;
+      out.push(cid);
+    }
+    return out;
+  }
+
+  function getCombatEligibleBlockers(match) {
+    var mySeat = match?.viewerSeat;
+    if (!mySeat) return [];
+    var bf = match?.game?.zones?.[mySeat]?.battlefield || [];
+    var out = [];
+    for (var i = 0; i < bf.length; i++) {
+      var cid = bf[i];
+      if (clientCardType(cid) !== 'creature') continue;
+      var cs = match?.game?.cardState?.[cid];
+      if (cs && cs.tapped) continue;
+      out.push(cid);
+    }
+    return out;
+  }
+
   function renderCardImg(id, opts) {
     const options = opts || {};
     const c = cardMeta(id); const img = document.createElement('img');
@@ -1295,17 +1343,24 @@ function getClientHtml() {
     img.onclick = () => setSelected({ id, zone: options.zone || null, seat: options.seat || null });
     if (options.onDblClick) img.ondblclick = options.onDblClick;
     else img.ondblclick = () => openCardModal(id, options.zone || null);
-    // Wrap battlefield creatures with P/T badge + summoning sickness
+    // Wrap battlefield creatures with P/T badge + summoning sickness + tapped + attacking
     if (options.zone === 'battlefield' && clientCardType(id) === 'creature') {
       var wrap = document.createElement('div');
       wrap.className = 'cardWrap';
       var cs = options.cardState;
+      if (cs && cs.tapped) wrap.classList.add('tapped');
       if (cs && cs.summoningSick) {
         wrap.classList.add('summonSick');
         var ssIcon = document.createElement('div');
         ssIcon.className = 'summonSickIcon';
         ssIcon.textContent = '\u23F3';
         wrap.appendChild(ssIcon);
+      }
+      if (options.isAttacking) {
+        var atkIcon = document.createElement('div');
+        atkIcon.className = 'attackIcon';
+        atkIcon.textContent = '\u2694';
+        wrap.appendChild(atkIcon);
       }
       wrap.appendChild(img);
       var badge = document.createElement('div');
@@ -1365,10 +1420,53 @@ function getClientHtml() {
     const bf = Array.isArray(zones?.battlefield) ? zones.battlefield : [];
     const bfArea = document.createElement('div');
     bfArea.className = 'bfArea';
+    // Determine which cards are attacking (from combat state or pending)
+    var combatAttackers = match?.game?.combat?.attackers || {};
     if (bf.length) {
-      for (const id of bf) { var cs = match?.game?.cardState?.[id] || null; bfArea.appendChild(renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer, cardState: cs })); }
+      for (const id of bf) {
+        var cs = match?.game?.cardState?.[id] || null;
+        var isAtk = !!combatAttackers[id] || !!state.pendingAttackers[id];
+        var cardEl = renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer, cardState: cs, isAttacking: isAtk });
+        bfArea.appendChild(cardEl);
+      }
     } else {
       bfArea.innerHTML = '<div class="emptyZone">No permanents</div>';
+    }
+    // Apply combat CSS classes after creating elements
+    if (state.combatMode && bf.length) {
+      var eligibleAtk = isViewer ? getCombatEligibleAttackers(match) : [];
+      var eligibleBlk = isViewer ? getCombatEligibleBlockers(match) : [];
+      var cardEls = bfArea.querySelectorAll('.cardWrap');
+      for (var cei = 0; cei < cardEls.length; cei++) {
+        var cWrap = cardEls[cei];
+        var cid = cWrap.dataset.cardId;
+        if (!cid) continue;
+        if (state.combatMode === 'selecting_attackers' && isViewer) {
+          if (state.pendingAttackers[cid]) {
+            cWrap.classList.add('attacking');
+          } else if (eligibleAtk.indexOf(cid) >= 0) {
+            cWrap.classList.add('canAttack');
+          } else if (clientCardType(cid) === 'creature') {
+            cWrap.classList.add('combatIneligible');
+          }
+        } else if (state.combatMode === 'selecting_blockers') {
+          if (isViewer) {
+            // Viewer's creatures
+            var isBlocking = false;
+            for (var bk in state.pendingBlockers) { if (state.pendingBlockers[bk] === cid) { isBlocking = true; break; } }
+            if (isBlocking) {
+              cWrap.classList.add('blocking');
+            } else if (eligibleBlk.indexOf(cid) >= 0) {
+              cWrap.classList.add('canBlock');
+            }
+          } else {
+            // Opponent attackers targeting viewer
+            if (combatAttackers[cid] && Number(combatAttackers[cid]) === match.viewerSeat) {
+              cWrap.classList.add('attacking');
+            }
+          }
+        }
+      }
     }
     el.appendChild(bfArea);
 
@@ -1380,44 +1478,86 @@ function getClientHtml() {
     const activeSeat = match.game?.activePlayerSeat;
     const activePlayer = (match.players || []).find(p => p.seat === activeSeat);
     const activeName = activeSeat === match.viewerSeat ? 'You' : (activePlayer ? (activePlayer.isBot ? activePlayer.username : ('@' + activePlayer.username)) : ('Seat ' + activeSeat));
-    const step = match.game?.step || 'begin';
-    const stepLabel = step.charAt(0).toUpperCase() + step.slice(1);
+    const step = match.game?.step || 'main1';
     const isMyTurn = activeSeat === match.viewerSeat;
+    const isMyPriority = match.game?.prioritySeat === match.viewerSeat;
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const isMulti = seats.length > 2;
+    const pendingAtkCount = Object.keys(state.pendingAttackers).length;
+    const pendingBlkCount = Object.keys(state.pendingBlockers).length;
 
     const mana = match.game?.manaBySeat?.[match.viewerSeat] || { current: 0, max: 0 };
-    const cacheKey = (match.game?.turn || '?') + ':' + activeSeat + ':' + step + ':' + seats.length + ':' + mana.current + '/' + mana.max;
+    const cacheKey = (match.game?.turn || '?') + ':' + activeSeat + ':' + step + ':' + seats.length + ':' + mana.current + '/' + mana.max + ':' + pendingAtkCount + ':' + pendingBlkCount + ':' + (state.combatMode || 'none');
     if (bar.dataset.cacheKey === cacheKey) return;
     bar.dataset.cacheKey = cacheKey;
 
-    let manaHtml = '<div class="manaBar">';
-    for (let i = 0; i < mana.max; i++) {
-      manaHtml += '<div class="manaGem ' + (i < mana.current ? 'full' : 'empty') + '"></div>';
+    var manaHtml = '<div class="manaBar">';
+    for (var mi = 0; mi < mana.max; mi++) {
+      manaHtml += '<div class="manaGem ' + (mi < mana.current ? 'full' : 'empty') + '"></div>';
     }
     manaHtml += '<div class="manaText">' + mana.current + '/' + mana.max + '</div></div>';
 
-    let turnOrderHtml = '';
+    var turnOrderHtml = '';
     if (isMulti) {
       turnOrderHtml = '<div class="turnOrder">';
-      for (const s of seats) {
-        const cls = s === activeSeat ? 'turnDot now' : 'turnDot';
-        const label = s === match.viewerSeat ? 'U' : String(s);
+      for (var tsi = 0; tsi < seats.length; tsi++) {
+        var s = seats[tsi];
+        var cls = s === activeSeat ? 'turnDot now' : 'turnDot';
+        var label = s === match.viewerSeat ? 'U' : String(s);
         turnOrderHtml += '<div class="' + cls + '">' + label + '</div>';
       }
       turnOrderHtml += '</div>';
     }
 
+    // Phase pills
+    var phaseHtml = '<div class="phaseBar">';
+    phaseHtml += '<div class="phasePill' + (step === 'main1' ? ' active' : '') + '">M1</div>';
+    phaseHtml += '<div class="phasePill' + ((step === 'combat_attackers' || step === 'combat_blockers') ? ' active' : '') + '">CMB</div>';
+    phaseHtml += '<div class="phasePill' + (step === 'main2' ? ' active' : '') + '">M2</div>';
+    phaseHtml += '</div>';
+
+    // Context-sensitive buttons
+    var buttonsHtml = '';
+    if (step === 'main1' && isMyTurn) {
+      buttonsHtml = '<button id="btnGoToCombat" class="btn btnPrimary">Go to Combat</button>'
+        + '<button id="btnGameEndTurn" class="btn">End Turn</button>';
+    } else if (step === 'combat_attackers' && isMyTurn) {
+      buttonsHtml = '<button id="btnConfirmAttackers" class="btn btnPrimary">Confirm Attack' + (pendingAtkCount ? ' (' + pendingAtkCount + ')' : '') + '</button>'
+        + '<button id="btnSkipCombat" class="btn">Skip Combat</button>';
+    } else if (step === 'combat_blockers' && isMyPriority) {
+      buttonsHtml = '<button id="btnConfirmBlockers" class="btn btnPrimary">Confirm Blocks' + (pendingBlkCount ? ' (' + pendingBlkCount + ')' : '') + '</button>'
+        + '<button id="btnNoBlocks" class="btn">No Blocks</button>';
+    } else if (step === 'main2' && isMyTurn) {
+      buttonsHtml = '<button id="btnGameEndTurn" class="btn btnPrimary">End Turn</button>';
+    } else if (step === 'combat_blockers' && !isMyPriority) {
+      var defenderPlayer = (match.players || []).find(function(p) { return p.seat === match.game?.prioritySeat; });
+      var defName = defenderPlayer ? (defenderPlayer.isBot ? defenderPlayer.username : ('@' + defenderPlayer.username)) : 'Opponent';
+      buttonsHtml = '<div class="combatBanner">\u2694 Waiting for ' + escapeHtml(defName) + ' to declare blockers\u2026</div>';
+    } else {
+      buttonsHtml = '<button id="btnGameEndTurn" class="btn btnPrimary" disabled>End Turn</button>';
+    }
+
     bar.innerHTML = '<div class="turnInfo">Turn <span class="turnHighlight">' + (match.game?.turn || '?') + '</span></div>'
       + '<div class="turnInfo">' + (isMyTurn ? '<span class="turnHighlight">Your turn</span>' : escapeHtml(activeName) + "'s turn") + '</div>'
-      + '<div class="turnInfo">' + escapeHtml(stepLabel) + '</div>'
+      + phaseHtml
       + manaHtml
       + turnOrderHtml
       + '<button id="btnGameDraw" class="btn">Draw</button>'
-      + '<button id="btnGameEndTurn" class="btn btnPrimary"' + (isMyTurn ? '' : ' disabled') + '>End turn</button>';
+      + buttonsHtml;
 
     bar.querySelector('#btnGameDraw').onclick = drawDebug;
-    bar.querySelector('#btnGameEndTurn').onclick = endTurn;
+    var endTurnBtn = bar.querySelector('#btnGameEndTurn');
+    if (endTurnBtn) endTurnBtn.onclick = endTurn;
+    var goToCombatBtn = bar.querySelector('#btnGoToCombat');
+    if (goToCombatBtn) goToCombatBtn.onclick = goToCombat;
+    var confirmAtkBtn = bar.querySelector('#btnConfirmAttackers');
+    if (confirmAtkBtn) confirmAtkBtn.onclick = confirmAttackers;
+    var skipCombatBtn = bar.querySelector('#btnSkipCombat');
+    if (skipCombatBtn) skipCombatBtn.onclick = skipCombat;
+    var confirmBlkBtn = bar.querySelector('#btnConfirmBlockers');
+    if (confirmBlkBtn) confirmBlkBtn.onclick = confirmBlockers;
+    var noBlocksBtn = bar.querySelector('#btnNoBlocks');
+    if (noBlocksBtn) noBlocksBtn.onclick = noBlocks;
   }
 
   function renderGame(match) {
@@ -1426,6 +1566,20 @@ function getClientHtml() {
     if (!show) return;
 
     const mySeat = match.viewerSeat;
+    const step = match.game?.step || 'main1';
+
+    // Auto-detect combat mode
+    if (step === 'combat_blockers' && match.game?.prioritySeat === mySeat) {
+      state.combatMode = 'selecting_blockers';
+    } else if (step === 'combat_attackers' && match.game?.activePlayerSeat === mySeat) {
+      state.combatMode = 'selecting_attackers';
+    } else if (step === 'main1' || step === 'main2') {
+      state.combatMode = null;
+      state.pendingAttackers = {};
+      state.pendingBlockers = {};
+      state.selectedBlocker = null;
+    }
+
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const oppSeats = seats.filter(s => s !== mySeat);
 
@@ -1461,6 +1615,45 @@ function getClientHtml() {
     }
     myEl.appendChild(handTray);
 
+    // Wire up combat clicks on battlefield cards
+    if (state.combatMode) {
+      var allWraps = document.querySelectorAll('#gameBoard .cardWrap[data-card-id]');
+      for (var wi = 0; wi < allWraps.length; wi++) {
+        (function(wrap) {
+          var cardId = wrap.dataset.cardId;
+          if (!cardId) return;
+          wrap.style.cursor = 'pointer';
+          wrap.onclick = function(e) {
+            e.stopPropagation();
+            // Show in inspector
+            var zone = 'battlefield';
+            var cardSeat = null;
+            // Find which seat this card belongs to
+            var allS = (match.players || []).map(function(p) { return p.seat; });
+            for (var si = 0; si < allS.length; si++) {
+              var sBf = match?.game?.zones?.[allS[si]]?.battlefield || [];
+              if (sBf.indexOf(cardId) >= 0) { cardSeat = allS[si]; break; }
+            }
+            setSelected({ id: cardId, zone: zone, seat: cardSeat });
+
+            if (state.combatMode === 'selecting_attackers' && cardSeat === mySeat) {
+              toggleAttacker(cardId);
+            } else if (state.combatMode === 'selecting_blockers') {
+              handleBlockerClick(cardId, cardSeat === mySeat);
+            }
+          };
+          // Also forward clicks on the img inside
+          var innerImg = wrap.querySelector('.cardImg');
+          if (innerImg) {
+            innerImg.onclick = function(e) {
+              e.stopPropagation();
+              wrap.onclick(e);
+            };
+          }
+        })(allWraps[wi]);
+      }
+    }
+
     if (state.selected?.id) {
       if (!collectVisibleCardIds(match).includes(state.selected.id)) setSelected(null);
       else setSelected(state.selected);
@@ -1486,6 +1679,11 @@ function getClientHtml() {
 
   async function endTurn() {
     if (!state.activeMatchId) return;
+    // Clear combat UI state
+    state.combatMode = null;
+    state.pendingAttackers = {};
+    state.pendingBlockers = {};
+    state.selectedBlocker = null;
     const hasBot = (state.lastMatch?.players || []).some(p => p.isBot);
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'END_TURN' } });
     if (!res.ok) { toast('End turn failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
@@ -1500,6 +1698,125 @@ function getClientHtml() {
       const botPlays = log.filter(e => e.type === 'BOT_PLAY' && e.t > Date.now() - 5000);
       if (botPlays.length) toast('Bot played ' + botPlays.length + ' card' + (botPlays.length > 1 ? 's' : '') + '.', { type: 'info', ms: 2000 });
       else { const botPass = log.find(e => e.type === 'BOT_PASS' && e.t > Date.now() - 5000); if (botPass) toast('Bot passed.', { type: 'info', ms: 1500 }); }
+    }
+  }
+
+  async function goToCombat() {
+    if (!state.activeMatchId) return;
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'GO_TO_COMBAT' } });
+    if (!res.ok) { toast('Go to combat failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    state.combatMode = 'selecting_attackers';
+    state.pendingAttackers = {};
+    await refreshMatch();
+  }
+
+  async function confirmAttackers() {
+    if (!state.activeMatchId) return;
+    var attackerCount = Object.keys(state.pendingAttackers).length;
+    if (!attackerCount) {
+      // No attackers selected — skip combat instead
+      await skipCombat();
+      return;
+    }
+    var hasBot = (state.lastMatch?.players || []).some(function(p) { return p.isBot; });
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'DECLARE_ATTACKERS', attackers: state.pendingAttackers } });
+    if (!res.ok) { toast('Declare attackers failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    state.pendingAttackers = {};
+    state.combatMode = null;
+    if (hasBot) {
+      var bar = $('#turnBar');
+      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> Bot is blocking\u2026</div>';
+      await new Promise(function(r) { setTimeout(r, 800 + Math.floor(Math.random() * 600)); });
+    }
+    await refreshMatch();
+  }
+
+  async function skipCombat() {
+    if (!state.activeMatchId) return;
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'SKIP_COMBAT' } });
+    if (!res.ok) { toast('Skip combat failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    state.combatMode = null;
+    state.pendingAttackers = {};
+    await refreshMatch();
+  }
+
+  async function confirmBlockers() {
+    if (!state.activeMatchId) return;
+    var blockerCount = Object.keys(state.pendingBlockers).length;
+    if (!blockerCount) {
+      await noBlocks();
+      return;
+    }
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'DECLARE_BLOCKERS', blockers: state.pendingBlockers } });
+    if (!res.ok) { toast('Declare blockers failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    state.combatMode = null;
+    state.pendingBlockers = {};
+    state.selectedBlocker = null;
+    var hasBot = (state.lastMatch?.players || []).some(function(p) { return p.isBot; });
+    if (hasBot) {
+      var bar = $('#turnBar');
+      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> Bot is thinking\u2026</div>';
+      await new Promise(function(r) { setTimeout(r, 800 + Math.floor(Math.random() * 600)); });
+    }
+    await refreshMatch();
+  }
+
+  async function noBlocks() {
+    if (!state.activeMatchId) return;
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'NO_BLOCKS' } });
+    if (!res.ok) { toast('No blocks failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    state.combatMode = null;
+    state.pendingBlockers = {};
+    state.selectedBlocker = null;
+    var hasBot = (state.lastMatch?.players || []).some(function(p) { return p.isBot; });
+    if (hasBot) {
+      var bar = $('#turnBar');
+      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> Bot is thinking\u2026</div>';
+      await new Promise(function(r) { setTimeout(r, 800 + Math.floor(Math.random() * 600)); });
+    }
+    await refreshMatch();
+  }
+
+  function toggleAttacker(cardId) {
+    if (!state.lastMatch) return;
+    var eligible = getCombatEligibleAttackers(state.lastMatch);
+    if (eligible.indexOf(cardId) < 0) return;
+    if (state.pendingAttackers[cardId]) {
+      delete state.pendingAttackers[cardId];
+    } else {
+      // Target the first opponent seat
+      var mySeat = state.lastMatch.viewerSeat;
+      var allSeats = (state.lastMatch.players || []).map(function(p) { return p.seat; }).sort(function(a,b) { return a - b; });
+      var targetSeat = null;
+      for (var i = 0; i < allSeats.length; i++) {
+        if (allSeats[i] !== mySeat) { targetSeat = allSeats[i]; break; }
+      }
+      if (targetSeat) state.pendingAttackers[cardId] = targetSeat;
+    }
+    renderGame(state.lastMatch);
+  }
+
+  function handleBlockerClick(cardId, isMine) {
+    if (isMine) {
+      // Select this creature as blocker
+      state.selectedBlocker = cardId;
+      toast('Blocker selected \u2014 now click an attacking creature to assign.', { type: 'info', ms: 1500 });
+      renderGame(state.lastMatch);
+    } else {
+      // Clicking opponent attacker — assign selectedBlocker
+      if (!state.selectedBlocker) {
+        toast('Select one of your creatures first, then click an attacker.', { type: 'warn', ms: 1500 });
+        return;
+      }
+      // Verify this is an attacker targeting us
+      var combat = state.lastMatch?.game?.combat;
+      if (!combat || !combat.attackers[cardId] || Number(combat.attackers[cardId]) !== state.lastMatch.viewerSeat) {
+        toast('That creature is not attacking you.', { type: 'warn', ms: 1500 });
+        return;
+      }
+      state.pendingBlockers[cardId] = state.selectedBlocker;
+      state.selectedBlocker = null;
+      renderGame(state.lastMatch);
     }
   }
 
@@ -2070,7 +2387,7 @@ function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponent
         v: 1, matchId, format, createdAt: now, phase: "lobby",
         hostUserId: hostUser.id, readyByUserId: { [hostUser.id]: false },
         players: [{ userId: hostUser.id, username: hostUser.username, joinedAt: now, seat: 1 }],
-        game: { turn: 0, activePlayerSeat: 1, prioritySeat: 1, step: "begin", stack: [], zones: {}, lifeBySeat: {}, manaBySeat: {}, mulligansBySeat: {}, keptBySeat: {}, cardState: {} },
+        game: { turn: 0, activePlayerSeat: 1, prioritySeat: 1, step: "main1", stack: [], zones: {}, lifeBySeat: {}, manaBySeat: {}, mulligansBySeat: {}, keptBySeat: {}, cardState: {}, combat: null },
         decks: { 1: { deckId: hostDeck.id, format: hostDeck.format, name: hostDeck.name, commander: hostDeck.commander, cards: hostDeck.cards, cardMeta: hostDeck.cardMeta || {} } },
         botsBySeat: {},
         log: [{ t: now, type: "MATCH_CREATED", by: hostUser.username, opponentType: opponentType || "human" }],
@@ -2165,7 +2482,7 @@ function engineApplyAction(match, user, action) {
         match.log.push({ t: Date.now(), type: "KEEP_HAND", by: user.username, seat });
         const allKept = match.players.every((p) => !!match.game.keptBySeat[p.seat]);
         if (allKept) {
-            match.phase = "playing"; match.game.step = "begin";
+            match.phase = "playing"; match.game.step = "main1";
             let startSeat = 1;
             if (matchHasBot(match) && match.players.length === 2) { const human = match.players.find((p) => !p.isBot); startSeat = human?.seat || 1; }
             else { const seats = match.players.map((p) => p.seat); startSeat = seats[sup.random.integer(0, Math.max(0, seats.length - 1))] || 1; }
@@ -2184,6 +2501,7 @@ function engineApplyAction(match, user, action) {
         if (match.phase !== "playing") return { ok: false, error: "can only play during playing phase" };
         const seat = player.seat;
         if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        if (match.game.step !== "main1" && match.game.step !== "main2") return { ok: false, error: "can only play cards during a main phase" };
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
         const deckMeta = match.decks?.[seat]?.cardMeta || {};
         const cmc = Number(deckMeta[cardId]?.cmc) || 0;
@@ -2193,7 +2511,6 @@ function engineApplyAction(match, user, action) {
         const ok = enginePlayCard(match, seat, cardId); if (!ok.ok) return ok;
         mana.current = Math.max(0, mana.current - cmc);
         match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId });
-        if (match.game.step === "begin") match.game.step = "main";
         return { ok: true, match };
     }
 
@@ -2201,10 +2518,10 @@ function engineApplyAction(match, user, action) {
         if (match.phase !== "playing") return { ok: false, error: "can only move during playing phase" };
         const seat = player.seat;
         if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        if (match.game.step !== "main1" && match.game.step !== "main2") return { ok: false, error: "can only move cards during a main phase" };
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
         const ok = engineMoveCard(match, seat, "battlefield", "graveyard", cardId); if (!ok.ok) return ok;
         match.log.push({ t: Date.now(), type: "MOVE_TO_GY", by: user.username, seat, cardId });
-        if (match.game.step === "begin") match.game.step = "main";
         return { ok: true, match };
     }
 
@@ -2212,6 +2529,7 @@ function engineApplyAction(match, user, action) {
         if (match.phase !== "playing") return { ok: false, error: "can only end turn during playing phase" };
         const seat = player.seat;
         if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        if (match.game.step !== "main1" && match.game.step !== "main2") return { ok: false, error: "can only end turn during a main phase" };
         engineAdvanceTurn(match, { by: user.username }); engineRunBotsIfActive(match);
         return { ok: true, match };
     }
@@ -2228,6 +2546,149 @@ function engineApplyAction(match, user, action) {
         }
         engineDrawCards(match, seat, Math.max(1, Math.min(7, Number(action.n) || 1)));
         match.log.push({ t: Date.now(), type: "DRAW", by: user.username, n: Math.max(1, Math.min(7, Number(action.n) || 1)) });
+        return { ok: true, match };
+    }
+
+    if (action.type === "GO_TO_COMBAT") {
+        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        var seat = player.seat;
+        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        if (match.game.step !== "main1") return { ok: false, error: "can only go to combat from main phase 1" };
+        match.game.step = "combat_attackers";
+        match.game.combat = { attackers: {}, blockers: {}, resolved: false };
+        match.log.push({ t: Date.now(), type: "COMBAT_BEGIN", by: user.username, seat: seat });
+        return { ok: true, match };
+    }
+
+    if (action.type === "DECLARE_ATTACKERS") {
+        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        var seat = player.seat;
+        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        if (match.game.step !== "combat_attackers") return { ok: false, error: "not in attacker declaration step" };
+        var attackers = action.attackers || {};
+        if (!match.game.combat) match.game.combat = { attackers: {}, blockers: {}, resolved: false };
+        if (!match.game.cardState) match.game.cardState = {};
+        engineEnsureZones(match, seat);
+        var myBf = match.game.zones[seat].battlefield;
+        var attackerIds = Object.keys(attackers);
+        for (var ai = 0; ai < attackerIds.length; ai++) {
+            var cid = attackerIds[ai];
+            if (myBf.indexOf(cid) < 0) return { ok: false, error: "card " + cid + " not on your battlefield" };
+            if (!engineIsCreature(match, seat, cid)) return { ok: false, error: "card " + cid + " is not a creature" };
+            var cs = match.game.cardState[cid];
+            if (cs && cs.tapped) return { ok: false, error: "card " + cid + " is tapped" };
+            if (cs && cs.summoningSick) return { ok: false, error: "card " + cid + " has summoning sickness" };
+            var targetSeat = attackers[cid];
+            if (targetSeat === seat) return { ok: false, error: "cannot attack yourself" };
+            var validSeats = engineSeatOrder(match);
+            if (validSeats.indexOf(Number(targetSeat)) < 0) return { ok: false, error: "invalid target seat " + targetSeat };
+        }
+        // Store attackers and tap them
+        match.game.combat.attackers = {};
+        for (var ai2 = 0; ai2 < attackerIds.length; ai2++) {
+            var cid2 = attackerIds[ai2];
+            match.game.combat.attackers[cid2] = attackers[cid2];
+            if (!match.game.cardState[cid2]) match.game.cardState[cid2] = { tapped: false, summoningSick: false, damage: 0 };
+            match.game.cardState[cid2].tapped = true;
+        }
+        match.log.push({ t: Date.now(), type: "ATTACKERS_DECLARED", by: user.username, seat: seat, count: attackerIds.length });
+        // Determine defenders
+        var defenderSeats = {};
+        for (var ak in match.game.combat.attackers) { defenderSeats[match.game.combat.attackers[ak]] = true; }
+        var hasHumanDefender = false;
+        var humanDefenderSeat = null;
+        for (var ds in defenderSeats) {
+            var defPlayer = (match.players || []).find(function(p) { return p.seat === Number(ds); });
+            if (defPlayer && !defPlayer.isBot) { hasHumanDefender = true; humanDefenderSeat = Number(ds); }
+        }
+        if (!hasHumanDefender) {
+            // All defenders are bots — auto-block and resolve
+            for (var ds2 in defenderSeats) {
+                var botDef = (match.players || []).find(function(p) { return p.seat === Number(ds2) && p.isBot; });
+                if (botDef) engineBotDeclareBlockers(match, botDef);
+            }
+            engineResolveCombatDamage(match);
+            match.game.step = "main2";
+        } else {
+            // Human defender — wait for blocks
+            match.game.step = "combat_blockers";
+            match.game.prioritySeat = humanDefenderSeat;
+        }
+        return { ok: true, match };
+    }
+
+    if (action.type === "SKIP_COMBAT") {
+        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        var seat = player.seat;
+        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        if (match.game.step !== "combat_attackers") return { ok: false, error: "not in attacker declaration step" };
+        match.game.step = "main2";
+        match.game.combat = null;
+        match.log.push({ t: Date.now(), type: "COMBAT_SKIPPED", by: user.username, seat: seat });
+        return { ok: true, match };
+    }
+
+    if (action.type === "DECLARE_BLOCKERS") {
+        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        if (match.game.step !== "combat_blockers") return { ok: false, error: "not in blocker declaration step" };
+        var seat = player.seat;
+        if (match.game.prioritySeat != null && seat !== match.game.prioritySeat) return { ok: false, error: "not your priority to declare blockers" };
+        if (!match.game.combat) return { ok: false, error: "no combat in progress" };
+        var blockerMap = action.blockers || {};
+        if (!match.game.cardState) match.game.cardState = {};
+        engineEnsureZones(match, seat);
+        var myBf2 = match.game.zones[seat].battlefield;
+        var usedBlockers = {};
+        var blockerKeys = Object.keys(blockerMap);
+        for (var bi = 0; bi < blockerKeys.length; bi++) {
+            var attackerId = blockerKeys[bi];
+            var blockerId = blockerMap[attackerId];
+            // Validate attacker is targeting this seat
+            if (!match.game.combat.attackers[attackerId] || Number(match.game.combat.attackers[attackerId]) !== seat) {
+                return { ok: false, error: "attacker " + attackerId + " is not attacking you" };
+            }
+            // Validate blocker on our BF
+            if (myBf2.indexOf(blockerId) < 0) return { ok: false, error: "blocker " + blockerId + " not on your battlefield" };
+            if (!engineIsCreature(match, seat, blockerId)) return { ok: false, error: "blocker " + blockerId + " is not a creature" };
+            var bcs = match.game.cardState[blockerId];
+            if (bcs && bcs.tapped) return { ok: false, error: "blocker " + blockerId + " is tapped" };
+            if (usedBlockers[blockerId]) return { ok: false, error: "blocker " + blockerId + " already assigned" };
+            usedBlockers[blockerId] = true;
+        }
+        // Store blockers
+        for (var bi2 = 0; bi2 < blockerKeys.length; bi2++) {
+            match.game.combat.blockers[blockerKeys[bi2]] = blockerMap[blockerKeys[bi2]];
+        }
+        match.log.push({ t: Date.now(), type: "BLOCKERS_DECLARED", by: user.username, seat: seat, count: blockerKeys.length });
+        engineResolveCombatDamage(match);
+        // Check if active player is bot (bot was attacking)
+        var activePlayer2 = (match.players || []).find(function(p) { return p.seat === match.game.activePlayerSeat; });
+        if (activePlayer2 && activePlayer2.isBot) {
+            engineAdvanceTurn(match, { by: "bot" });
+            engineRunBotsIfActive(match);
+        } else {
+            match.game.step = "main2";
+            match.game.prioritySeat = match.game.activePlayerSeat;
+        }
+        return { ok: true, match };
+    }
+
+    if (action.type === "NO_BLOCKS") {
+        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        if (match.game.step !== "combat_blockers") return { ok: false, error: "not in blocker declaration step" };
+        var seat = player.seat;
+        if (match.game.prioritySeat != null && seat !== match.game.prioritySeat) return { ok: false, error: "not your priority to declare blockers" };
+        if (!match.game.combat) return { ok: false, error: "no combat in progress" };
+        match.log.push({ t: Date.now(), type: "BLOCKERS_DECLARED", by: user.username, seat: seat, count: 0 });
+        engineResolveCombatDamage(match);
+        var activePlayer3 = (match.players || []).find(function(p) { return p.seat === match.game.activePlayerSeat; });
+        if (activePlayer3 && activePlayer3.isBot) {
+            engineAdvanceTurn(match, { by: "bot" });
+            engineRunBotsIfActive(match);
+        } else {
+            match.game.step = "main2";
+            match.game.prioritySeat = match.game.activePlayerSeat;
+        }
         return { ok: true, match };
     }
 
@@ -2268,17 +2729,27 @@ function engineAdvanceTurn(match, opts) {
     const next = engineNextSeat(match, cur);
     if (next <= cur) match.game.turn = (Number(match.game.turn) || 1) + 1;
     match.game.activePlayerSeat = next; match.game.prioritySeat = next;
-    match.game.step = "begin";
+    match.game.step = "main1";
     if (!match.game.manaBySeat) match.game.manaBySeat = {};
     const mana = match.game.manaBySeat[next] || { current: 0, max: 0 };
     mana.max = Math.min(10, mana.max + 1);
     mana.current = mana.max;
     match.game.manaBySeat[next] = mana;
     engineEnsureZones(match, next); engineDrawCards(match, next, 1);
-    if (match.game.cardState) {
-        var bf = match.game.zones?.[next]?.battlefield || [];
-        for (var ci = 0; ci < bf.length; ci++) { if (match.game.cardState[bf[ci]]) match.game.cardState[bf[ci]].summoningSick = false; }
+    if (!match.game.cardState) match.game.cardState = {};
+    // Clear summoning sickness for incoming player
+    var bf = match.game.zones?.[next]?.battlefield || [];
+    for (var ci = 0; ci < bf.length; ci++) { if (match.game.cardState[bf[ci]]) match.game.cardState[bf[ci]].summoningSick = false; }
+    // Untap all permanents for incoming player
+    for (var ui = 0; ui < bf.length; ui++) { if (match.game.cardState[bf[ui]]) match.game.cardState[bf[ui]].tapped = false; }
+    // Clear combat damage from ALL creatures across ALL seats
+    var allSeats = engineSeatOrder(match);
+    for (var si = 0; si < allSeats.length; si++) {
+        var sBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
+        for (var di = 0; di < sBf.length; di++) { if (match.game.cardState[sBf[di]]) match.game.cardState[sBf[di]].damage = 0; }
     }
+    // Clear combat state
+    match.game.combat = null;
     match.log.push({ t: Date.now(), type: "TURN_START", by: (opts || {}).by || "engine", turn: match.game.turn, seat: next });
 }
 
@@ -2288,6 +2759,84 @@ function engineRunBotsIfActive(match) {
         const botPlayer = (match.players || []).find((p) => p.isBot && p.seat === match.game?.activePlayerSeat);
         if (!botPlayer) break;
         engineBotTakeTurn(match, botPlayer);
+    }
+}
+
+function engineGetCreaturePower(match, seat, cardId) {
+    return Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.power) || 0;
+}
+function engineGetCreatureToughness(match, seat, cardId) {
+    return Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.toughness) || 0;
+}
+
+function engineFindSeatForCard(match, cardId) {
+    var seats = engineSeatOrder(match);
+    for (var i = 0; i < seats.length; i++) {
+        var bf = match.game.zones?.[seats[i]]?.battlefield || [];
+        if (bf.indexOf(cardId) >= 0) return seats[i];
+    }
+    return null;
+}
+
+function engineResolveCombatDamage(match) {
+    if (!match.game.combat) return;
+    var attackers = match.game.combat.attackers || {};
+    var blockers = match.game.combat.blockers || {};
+    if (!match.game.cardState) match.game.cardState = {};
+    if (!match.game.lifeBySeat) match.game.lifeBySeat = {};
+    var attackerIds = Object.keys(attackers);
+    for (var i = 0; i < attackerIds.length; i++) {
+        var atkId = attackerIds[i];
+        var defSeat = Number(attackers[atkId]);
+        var atkSeat = engineFindSeatForCard(match, atkId);
+        if (!atkSeat) continue;
+        var atkPower = engineGetCreaturePower(match, atkSeat, atkId);
+        var blockerId = blockers[atkId];
+        if (blockerId) {
+            // Blocked — simultaneous damage
+            var blkSeat = engineFindSeatForCard(match, blockerId);
+            if (!blkSeat) continue;
+            var blkPower = engineGetCreaturePower(match, blkSeat, blockerId);
+            var blkToughness = engineGetCreatureToughness(match, blkSeat, blockerId);
+            var atkToughness = engineGetCreatureToughness(match, atkSeat, atkId);
+            if (!match.game.cardState[atkId]) match.game.cardState[atkId] = { tapped: false, summoningSick: false, damage: 0 };
+            if (!match.game.cardState[blockerId]) match.game.cardState[blockerId] = { tapped: false, summoningSick: false, damage: 0 };
+            match.game.cardState[atkId].damage = (Number(match.game.cardState[atkId].damage) || 0) + blkPower;
+            match.game.cardState[blockerId].damage = (Number(match.game.cardState[blockerId].damage) || 0) + atkPower;
+            match.log.push({ t: Date.now(), type: "COMBAT_DAMAGE", atk: atkId, blk: blockerId, atkDmg: blkPower, blkDmg: atkPower });
+        } else {
+            // Unblocked — damage to player
+            if (match.game.lifeBySeat[defSeat] != null) {
+                match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - atkPower);
+            }
+            match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: atkPower, by: atkId });
+        }
+    }
+    engineCheckLethalDamage(match);
+    match.game.combat.resolved = true;
+    match.log.push({ t: Date.now(), type: "COMBAT_RESOLVED" });
+}
+
+function engineCheckLethalDamage(match) {
+    if (!match.game.cardState) return;
+    var allSeats = engineSeatOrder(match);
+    for (var si = 0; si < allSeats.length; si++) {
+        var seat = allSeats[si];
+        engineEnsureZones(match, seat);
+        var bf = match.game.zones[seat].battlefield;
+        // Iterate backwards since we may remove elements
+        for (var ci = bf.length - 1; ci >= 0; ci--) {
+            var cid = bf[ci];
+            if (!engineIsCreature(match, seat, cid)) continue;
+            var cs = match.game.cardState[cid];
+            if (!cs) continue;
+            var dmg = Number(cs.damage) || 0;
+            var tough = engineGetCreatureToughness(match, seat, cid);
+            if (dmg >= tough && tough > 0) {
+                engineMoveCard(match, seat, "battlefield", "graveyard", cid);
+                match.log.push({ t: Date.now(), type: "CREATURE_DIED", seat: seat, cardId: cid, damage: dmg, toughness: tough });
+            }
+        }
     }
 }
 
@@ -2380,7 +2929,194 @@ function engineBotTakeTurn(match, botPlayer) {
     } else {
         match.log.push({ t: Date.now(), type: "BOT_PASS", by: "bot", seat, difficulty: diff });
     }
+    // Bot combat phase
+    var didAttack = engineBotDeclareAttackers(match, botPlayer);
+    if (didAttack) {
+        // Find defenders
+        var combatDefSeats = {};
+        for (var ck in match.game.combat.attackers) { combatDefSeats[match.game.combat.attackers[ck]] = true; }
+        var botHasHumanDefender = false;
+        var botHumanDefSeat = null;
+        for (var cds in combatDefSeats) {
+            var cdsPlayer = (match.players || []).find(function(p) { return p.seat === Number(cds); });
+            if (cdsPlayer && !cdsPlayer.isBot) { botHasHumanDefender = true; botHumanDefSeat = Number(cds); }
+        }
+        if (botHasHumanDefender) {
+            // Pause for human to declare blockers
+            match.game.step = "combat_blockers";
+            match.game.prioritySeat = botHumanDefSeat;
+            return; // Don't advance turn — wait for human
+        } else {
+            // All bot defenders — auto-block and resolve
+            for (var cds2 in combatDefSeats) {
+                var botDef2 = (match.players || []).find(function(p) { return p.seat === Number(cds2) && p.isBot; });
+                if (botDef2) engineBotDeclareBlockers(match, botDef2);
+            }
+            engineResolveCombatDamage(match);
+        }
+    }
     engineAdvanceTurn(match, { by: "bot" });
+}
+
+function engineBotDeclareAttackers(match, botPlayer) {
+    var seat = botPlayer.seat;
+    var diff = botDifficultyNormalize(botPlayer.difficulty);
+    engineEnsureZones(match, seat);
+    if (!match.game.cardState) match.game.cardState = {};
+    var bf = match.game.zones[seat].battlefield;
+    var eligible = [];
+    for (var i = 0; i < bf.length; i++) {
+        var cid = bf[i];
+        if (!engineIsCreature(match, seat, cid)) continue;
+        var cs = match.game.cardState[cid];
+        if (cs && cs.tapped) continue;
+        if (cs && cs.summoningSick) continue;
+        eligible.push(cid);
+    }
+    if (!eligible.length) return false;
+    // Find a target seat (first opponent)
+    var allSeats = engineSeatOrder(match);
+    var targetSeat = null;
+    for (var si = 0; si < allSeats.length; si++) {
+        if (allSeats[si] !== seat) { targetSeat = allSeats[si]; break; }
+    }
+    if (!targetSeat) return false;
+    var chosen = [];
+    if (diff === "easy") {
+        // Easy: attack with everything
+        chosen = eligible.slice();
+    } else if (diff === "medium") {
+        // Medium: attack only if board advantage
+        var oppBf = match.game.zones?.[targetSeat]?.battlefield || [];
+        var oppCreatureCount = 0;
+        for (var oi = 0; oi < oppBf.length; oi++) { if (engineIsCreature(match, targetSeat, oppBf[oi])) oppCreatureCount++; }
+        if (eligible.length > oppCreatureCount) {
+            chosen = eligible.slice();
+        } else {
+            // Compute total power
+            var myPower = 0; var oppPower = 0;
+            for (var ei = 0; ei < eligible.length; ei++) { myPower += engineGetCreaturePower(match, seat, eligible[ei]); }
+            for (var oi2 = 0; oi2 < oppBf.length; oi2++) { if (engineIsCreature(match, targetSeat, oppBf[oi2])) oppPower += engineGetCreaturePower(match, targetSeat, oppBf[oi2]); }
+            if (myPower > oppPower) chosen = eligible.slice();
+        }
+    } else {
+        // Hard: only attack with creatures that have 3+ power, or if they survive/trade favorably
+        var oppBf2 = match.game.zones?.[targetSeat]?.battlefield || [];
+        var oppMaxToughness = 0;
+        for (var oi3 = 0; oi3 < oppBf2.length; oi3++) {
+            if (engineIsCreature(match, targetSeat, oppBf2[oi3])) {
+                var ot = engineGetCreatureToughness(match, targetSeat, oppBf2[oi3]);
+                if (ot > oppMaxToughness) oppMaxToughness = ot;
+            }
+        }
+        for (var ei2 = 0; ei2 < eligible.length; ei2++) {
+            var pw = engineGetCreaturePower(match, seat, eligible[ei2]);
+            var tw = engineGetCreatureToughness(match, seat, eligible[ei2]);
+            if (pw >= 3 || pw >= oppMaxToughness || tw > oppMaxToughness) {
+                chosen.push(eligible[ei2]);
+            }
+        }
+    }
+    if (!chosen.length) return false;
+    // Set up combat
+    match.game.combat = { attackers: {}, blockers: {}, resolved: false };
+    for (var ci = 0; ci < chosen.length; ci++) {
+        match.game.combat.attackers[chosen[ci]] = targetSeat;
+        if (!match.game.cardState[chosen[ci]]) match.game.cardState[chosen[ci]] = { tapped: false, summoningSick: false, damage: 0 };
+        match.game.cardState[chosen[ci]].tapped = true;
+    }
+    match.game.step = "combat_attackers";
+    match.log.push({ t: Date.now(), type: "ATTACKERS_DECLARED", by: "bot", seat: seat, count: chosen.length });
+    return true;
+}
+
+function engineBotDeclareBlockers(match, botPlayer) {
+    var seat = botPlayer.seat;
+    var diff = botDifficultyNormalize(botPlayer.difficulty);
+    engineEnsureZones(match, seat);
+    if (!match.game.combat) return;
+    if (!match.game.cardState) match.game.cardState = {};
+    var bf = match.game.zones[seat].battlefield;
+    // Find eligible blockers (untapped creatures)
+    var eligibleBlockers = [];
+    for (var i = 0; i < bf.length; i++) {
+        var cid = bf[i];
+        if (!engineIsCreature(match, seat, cid)) continue;
+        var cs = match.game.cardState[cid];
+        if (cs && cs.tapped) continue;
+        eligibleBlockers.push(cid);
+    }
+    // Get attackers targeting this seat
+    var incomingAttackers = [];
+    var attackers = match.game.combat.attackers || {};
+    for (var ak in attackers) {
+        if (Number(attackers[ak]) === seat) incomingAttackers.push(ak);
+    }
+    if (!eligibleBlockers.length || !incomingAttackers.length) return;
+    if (diff === "easy") {
+        // Easy: block randomly — shuffle blockers, assign 1:1
+        var shuffled = eligibleBlockers.slice();
+        for (var si = shuffled.length - 1; si > 0; si--) { var ri = sup.random.integer(0, si); var tmp = shuffled[si]; shuffled[si] = shuffled[ri]; shuffled[ri] = tmp; }
+        var maxBlocks = Math.min(shuffled.length, incomingAttackers.length);
+        for (var bi = 0; bi < maxBlocks; bi++) {
+            match.game.combat.blockers[incomingAttackers[bi]] = shuffled[bi];
+        }
+    } else if (diff === "medium") {
+        // Medium: only block if our creature kills the attacker
+        var usedB = {};
+        for (var ai = 0; ai < incomingAttackers.length; ai++) {
+            var atkId = incomingAttackers[ai];
+            var atkSeat = engineFindSeatForCard(match, atkId);
+            if (!atkSeat) continue;
+            var atkTough = engineGetCreatureToughness(match, atkSeat, atkId);
+            for (var bi2 = 0; bi2 < eligibleBlockers.length; bi2++) {
+                var blkId = eligibleBlockers[bi2];
+                if (usedB[blkId]) continue;
+                var blkPow = engineGetCreaturePower(match, seat, blkId);
+                if (blkPow >= atkTough) {
+                    match.game.combat.blockers[atkId] = blkId;
+                    usedB[blkId] = true;
+                    break;
+                }
+            }
+        }
+    } else {
+        // Hard: scoring system
+        var usedH = {};
+        for (var ai2 = 0; ai2 < incomingAttackers.length; ai2++) {
+            var atkId2 = incomingAttackers[ai2];
+            var atkSeat2 = engineFindSeatForCard(match, atkId2);
+            if (!atkSeat2) continue;
+            var atkPow2 = engineGetCreaturePower(match, atkSeat2, atkId2);
+            var atkTough2 = engineGetCreatureToughness(match, atkSeat2, atkId2);
+            var bestBlk = null;
+            var bestScore = -999;
+            for (var bi3 = 0; bi3 < eligibleBlockers.length; bi3++) {
+                var blkId2 = eligibleBlockers[bi3];
+                if (usedH[blkId2]) continue;
+                var blkPow2 = engineGetCreaturePower(match, seat, blkId2);
+                var blkTough2 = engineGetCreatureToughness(match, seat, blkId2);
+                var score = 0;
+                // Kill attacker?
+                if (blkPow2 >= atkTough2) score += 10;
+                // Survive?
+                if (atkPow2 < blkTough2) score += 5;
+                // Die without killing?
+                if (atkPow2 >= blkTough2 && blkPow2 < atkTough2) score -= 3;
+                // Block big attacker bonus
+                if (atkPow2 >= 4) score += 3;
+                if (score > bestScore) { bestScore = score; bestBlk = blkId2; }
+            }
+            if (bestBlk && bestScore > 0) {
+                match.game.combat.blockers[atkId2] = bestBlk;
+                usedH[bestBlk] = true;
+            }
+        }
+    }
+    var blockerCount = Object.keys(match.game.combat.blockers).length;
+    if (blockerCount) {
+        match.log.push({ t: Date.now(), type: "BLOCKERS_DECLARED", by: "bot", seat: seat, count: blockerCount });
+    }
 }
 
 function expandDeckToList(cardsById) {
