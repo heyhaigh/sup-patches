@@ -35,7 +35,6 @@ function launch() {
 function getClientHtml() {
     return /* html */ `
 <div class="appRoot">
-  <script>document.addEventListener('DOMContentLoaded',function(){var d=document.getElementById('tabDiag');if(d)d.textContent='EARLY SCRIPT OK — big script may be truncated';});</script>
   <style>
     :root {
       --bg: #f6f7f9; --surface: #ffffff; --surface2: #fbfbfc;
@@ -351,9 +350,9 @@ function getClientHtml() {
     <div class="body">
       <nav class="sidebar">
         <div class="navSectionTitle">MTG</div>
-        <button class="navBtn tabBtn active" data-tab="play" onclick="switchTab('play')"><span class="navDot"></span>Play</button>
-        <button class="navBtn tabBtn" data-tab="decks" onclick="switchTab('decks')"><span class="navDot"></span>Decks</button>
-        <button class="navBtn tabBtn" data-tab="builder" onclick="switchTab('builder')"><span class="navDot"></span>Deck Builder</button>
+        <button class="navBtn tabBtn active" data-tab="play"><span class="navDot"></span>Play</button>
+        <button class="navBtn tabBtn" data-tab="decks"><span class="navDot"></span>Decks</button>
+        <button class="navBtn tabBtn" data-tab="builder"><span class="navDot"></span>Deck Builder</button>
         <div class="noteBox">
           <div class="navSectionTitle" style="margin:0 0 6px 0;">Notes</div>
           <ul>
@@ -366,8 +365,6 @@ function getClientHtml() {
         </div>
       </nav>
       <main class="content">
-        <noscript><div style="background:red;color:white;padding:10px;font-weight:bold;">JS NOT RUNNING</div></noscript>
-        <div id="tabDiag" style="background:#222;color:#0f0;padding:8px 12px;font-family:monospace;font-size:13px;border-radius:8px;margin-bottom:8px;">WAITING FOR JS...</div>
         <div id="status" class="statusLine"></div>
         <div id="devPanel" class="devPanel">
           <div class="devTitle">&#128027; Dev — Sanity Checks</div>
@@ -624,16 +621,6 @@ function getClientHtml() {
     lastLogIndex: 0,
   };
 
-  /* Diagnostic: confirm JS is executing */
-  (function() {
-    var d = document.getElementById('tabDiag');
-    if (d) d.textContent = 'JS OK | panels: ' +
-      (document.getElementById('tab-play') ? 'play ' : '') +
-      (document.getElementById('tab-decks') ? 'decks ' : '') +
-      (document.getElementById('tab-builder') ? 'builder ' : '') +
-      '| click a tab to test';
-  })();
-
   /* Tab buttons work immediately via event delegation — no boot() needed */
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('.tabBtn');
@@ -678,24 +665,13 @@ function getClientHtml() {
   function switchTab(tab) {
     state.activeTab = tab;
     var names = ['play', 'decks', 'builder'];
-    var diag = ['switchTab(' + tab + ')'];
     for (var i = 0; i < names.length; i++) {
       var el = document.getElementById('tab-' + names[i]);
-      if (!el) { diag.push(names[i] + ':MISSING'); continue; }
-      if (names[i] === tab) {
-        el.style.cssText = 'display:block;visibility:visible;height:auto;overflow:visible;opacity:1;';
-        el.removeAttribute('hidden');
-        diag.push(names[i] + ':SHOW computed=' + getComputedStyle(el).display);
-      } else {
-        el.style.cssText = 'display:none;visibility:hidden;height:0;overflow:hidden;opacity:0;';
-        diag.push(names[i] + ':hide');
-      }
+      if (!el) continue;
+      el.style.display = (names[i] === tab) ? '' : 'none';
     }
     $$('.tabBtn').forEach(btn => { btn.classList.toggle('active', btn.dataset.tab === tab); });
     var c = document.querySelector('.content'); if (c) c.scrollTop = 0;
-    /* Write diagnostic to the banner — impossible to miss */
-    var d = document.getElementById('tabDiag');
-    if (d) d.textContent = diag.join(' | ');
   }
 
   function enterMatchMode() {

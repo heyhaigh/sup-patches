@@ -28,6 +28,36 @@ This applies to ALL backticks and `${}` inside the `<script>` block when the HTM
 
 A single SyntaxError kills the entire `<script>` block — nothing runs.
 
+### Regex Patterns (The Sneakiest Case)
+
+Regex escape sequences like `\d`, `\s`, `\w`, `\b`, `\/` are **NOT recognized JS string escapes**, so the template literal silently drops the backslash. This breaks regex patterns AND can cause parse errors that kill the entire script:
+
+```javascript
+// BAD — template literal eats the backslashes
+// \d becomes d, \s becomes s, \/ becomes /
+var re = /([+-]\d+)\/([+-]\d+)/g;
+// Browser receives: /([+-]d+)/([+-]d+)/g  ← PARSE ERROR!
+// The unescaped / splits the regex, creating invalid syntax.
+
+// GOOD — double-escape all backslashes in regex patterns
+var re = /([+-]\\d+)\\/([+-]\\d+)/g;
+// Browser receives: /([+-]\d+)\/([+-]\d+)/g  ← correct!
+```
+
+**Full list of regex escapes that need doubling inside template literals:**
+- `\d` → `\\d` (digit)
+- `\s` → `\\s` (whitespace)
+- `\w` → `\\w` (word char)
+- `\b` → `\\b` (word boundary)
+- `\D`, `\S`, `\W`, `\B` → same pattern
+- `\/` → `\\/` (literal forward slash — **this one causes parse errors**)
+
+**Why this is hard to catch:**
+- `node -c` validates the server-side .js file syntax (template literal is valid JS)
+- The parse error only occurs in the **browser** when it tries to parse the rendered `<script>` content
+- No error is visible — the script silently fails to execute
+- Diagnostic: add a small separate `<script>` tag that writes to a visible DOM element; if the main script's diagnostic never appears, there's a parse error
+
 ## Selector Helpers
 
 Use separate `$` and `$$` helpers to avoid confusion:
