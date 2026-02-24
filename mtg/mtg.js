@@ -67,6 +67,8 @@ function getClientHtml() {
     .noteBox { margin-top:14px; padding:12px; border-radius:14px; background:rgba(255,255,255,0.8); border:1px solid var(--border); box-shadow:0 8px 20px rgba(0,0,0,0.04); }
     .noteBox ul { margin:8px 0 0 16px; padding:0; color:var(--muted); font-size:12px; line-height:1.35; }
     .content { padding:16px; min-height:0; overflow:auto; }
+    .tabPanel { display:none !important; }
+    .tabPanel.activeTab { display:block !important; }
     .statusLine { font-size:12px; color:var(--muted); margin:0 0 12px 2px; min-height:16px; }
     .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
     .sectionTitle { font-size:18px; font-weight:700; letter-spacing:-0.02em; margin:0; }
@@ -385,7 +387,7 @@ function getClientHtml() {
           </div>
         </div>
 
-        <section id="tab-play" class="tabPanel">
+        <section id="tab-play" class="tabPanel activeTab">
           <div class="row" style="margin-bottom:12px;">
             <div><div class="sectionTitle">Play</div><div class="sectionSub">Create or join a match.</div></div>
           </div>
@@ -491,7 +493,7 @@ function getClientHtml() {
           </div>
         </section>
 
-        <section id="tab-decks" class="tabPanel" style="display:none;">
+        <section id="tab-decks" class="tabPanel">
           <div class="row" style="margin-bottom:12px;">
             <div><div class="sectionTitle">Decks</div><div class="sectionSub">Your deck library.</div></div>
             <button id="btnNewDeck" class="btn btnPrimary">New Deck</button>
@@ -499,7 +501,7 @@ function getClientHtml() {
           <div id="deckList" class="list"></div>
         </section>
 
-        <section id="tab-builder" class="tabPanel" style="display:none;">
+        <section id="tab-builder" class="tabPanel">
           <div class="row" style="margin-bottom:12px;">
             <div><div class="sectionTitle">Deck Builder</div><div class="sectionSub">Quick start or customize. Saves as drafts anytime.</div></div>
           </div>
@@ -663,9 +665,9 @@ function getClientHtml() {
 
   function switchTab(tab) {
     state.activeTab = tab;
-    $$('.tabPanel').forEach(el => { el.style.setProperty('display', 'none', 'important'); });
+    $$('.tabPanel').forEach(el => { el.classList.remove('activeTab'); });
     var target = $('#tab-' + tab);
-    if (target) target.style.setProperty('display', 'block', 'important');
+    if (target) target.classList.add('activeTab');
     $$('.tabBtn').forEach(btn => { btn.classList.toggle('active', btn.dataset.tab === tab); });
     var c = document.querySelector('.content'); if (c) c.scrollTop = 0;
   }
@@ -936,11 +938,6 @@ function getClientHtml() {
   }
 
   function toggleDevPanel() {
-    _devState.clicks++;
-    clearTimeout(_devState.clickTimer);
-    _devState.clickTimer = setTimeout(() => { _devState.clicks = 0; }, 500);
-    if (_devState.clicks < 3) return;
-    _devState.clicks = 0;
     _devState.active = !_devState.active;
     $('#devPanel').classList.toggle('visible', _devState.active);
     $('#devToggle').classList.toggle('active', _devState.active);
@@ -2700,12 +2697,18 @@ function getClientHtml() {
   async function boot() {
     if (state.booted || state.booting) return;
     state.booting = true;
+    // Always bind events early so tabs work even if boot fails
+    bindEvents(); initDevPanel();
     setStatus('Waiting for Sup context\u2026');
     try {
       const boot = await supExec('api_boot');
-      state.user = boot.user;
-      $('#userLabel').textContent = '@' + boot.user.username;
-      bindEvents(); initDevPanel(); switchTab('play'); await loadDecks();
+      state.user = boot?.user || null;
+      if (state.user?.username) {
+        $('#userLabel').textContent = '@' + state.user.username;
+      } else {
+        $('#userLabel').textContent = '';
+      }
+      switchTab('play'); await loadDecks();
       if (!state.decks.length) { toast('No decks yet \u2014 use Deck Builder \u2192 Quick start to create one fast.', { type: 'info', ms: 5000 }); switchTab('builder'); }
       setStatus('Ready.'); setTimeout(() => setStatus(''), 1000);
       state.booted = true; state.booting = false;
