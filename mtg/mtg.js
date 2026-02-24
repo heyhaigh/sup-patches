@@ -663,8 +663,9 @@ function getClientHtml() {
 
   function switchTab(tab) {
     state.activeTab = tab;
-    $$('.tabPanel').forEach(el => { el.style.display = 'none'; });
-    $('#tab-' + tab).style.display = 'block';
+    $$('.tabPanel').forEach(el => { el.style.setProperty('display', 'none', 'important'); });
+    var target = $('#tab-' + tab);
+    if (target) target.style.setProperty('display', 'block', 'important');
     $$('.tabBtn').forEach(btn => { btn.classList.toggle('active', btn.dataset.tab === tab); });
     var c = document.querySelector('.content'); if (c) c.scrollTop = 0;
   }
