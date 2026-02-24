@@ -2492,12 +2492,13 @@ function getClientHtml() {
   async function boot() {
     if (state.booted || state.booting) return;
     state.booting = true;
+    bindEvents();
     setStatus('Waiting for Sup context\u2026');
     try {
       const boot = await supExec('api_boot');
       state.user = boot.user;
       $('#userLabel').textContent = '@' + boot.user.username;
-      bindEvents(); initDevPanel(); switchTab('play'); await loadDecks();
+      initDevPanel(); switchTab('play'); await loadDecks();
       if (!state.decks.length) { toast('No decks yet \u2014 use Deck Builder \u2192 Quick start to create one fast.', { type: 'info', ms: 5000 }); switchTab('builder'); }
       setStatus('Ready.'); setTimeout(() => setStatus(''), 1000);
       state.booted = true; state.booting = false;
