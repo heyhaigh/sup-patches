@@ -53,50 +53,50 @@ Loyalty counters, multiple activated abilities, attackable permanents — each i
 
 ---
 
-## Phase 1: The Game Exists (Mana + Combat + Win/Loss)
+## ~~Phase 1: The Game Exists (Mana + Combat + Win/Loss)~~ ✅ COMPLETE
 
 **Goal:** A playable game where mana creates resource tension, creatures fight in combat, and someone wins.
 
-**This is the MVP. Ship it completely before starting Phase 2.**
+~~**This is the MVP. Ship it completely before starting Phase 2.**~~
 
-### 1A. Mana System
+### ~~1A. Mana System~~ ✅
 
-**Engine changes:**
-- New match game state fields: `manaMax`, `manaCurrent` per seat
-- At turn start: increment `manaMax` (cap 10), set `manaCurrent = manaMax`
-- `PLAY_CARD` action: validate `card.cmc <= manaCurrent`, deduct cost on success
-- Filter lands from deck building (type_line containing "Land" with no other card type)
-- Adjust deck size targets: Standard 30, Commander 60
+~~**Engine changes:**~~
+- ~~New match game state fields: `manaMax`, `manaCurrent` per seat~~
+- ~~At turn start: increment `manaMax` (cap 10), set `manaCurrent = manaMax`~~
+- ~~`PLAY_CARD` action: validate `card.cmc <= manaCurrent`, deduct cost on success~~
+- ~~Filter lands from deck building (type_line containing "Land" with no other card type)~~
+- ~~Adjust deck size targets: Standard 30, Commander 60~~
 
-**Client changes:**
-- **Mana crystal bar** in turn bar area — current/max as gem icons (MTG purple/colorless aesthetic)
-- Cards in hand that cost more than current mana are **dimmed** (opacity 0.5, desaturated)
-- Insufficient mana → flash bar red, brief "Not enough mana" toast near the card
-- When card is played, animate gems depleting left-to-right
+~~**Client changes:**~~
+- ~~**Mana crystal bar** in turn bar area — current/max as gem icons (MTG purple/colorless aesthetic)~~
+- ~~Cards in hand that cost more than current mana are **dimmed** (opacity 0.5, desaturated)~~
+- ~~Insufficient mana → flash bar red, brief "Not enough mana" toast near the card~~
+- ~~When card is played, animate gems depleting left-to-right~~
 
-**Bot update:**
-- Bot respects mana costs: plays highest CMC card it can afford each turn (matches existing heuristic but now with actual cost checking)
+~~**Bot update:**~~
+- ~~Bot respects mana costs: plays highest CMC card it can afford each turn (matches existing heuristic but now with actual cost checking)~~
 
-### 1B. Card Type Differentiation
+### ~~1B. Card Type Differentiation~~ ✅
 
-**Engine changes:**
-- Parse `type_line` from Scryfall data to determine card behavior:
-  - **Creatures:** enter battlefield, have `power`/`toughness`, persist, can attack/block
-  - **Instants/Sorceries:** resolve immediately, go to graveyard (never hit battlefield)
-  - **Enchantments:** enter battlefield, persist (effects non-functional initially except auras in Phase 2)
-  - **Artifacts:** enter battlefield, persist (same as enchantments)
-- Creatures gain state: `tapped`, `summoningSick`, `damage`
-- `power` and `toughness` parsed from Scryfall card data and stored in card state
+~~**Engine changes:**~~
+- ~~Parse `type_line` from Scryfall data to determine card behavior:~~
+  - ~~**Creatures:** enter battlefield, have `power`/`toughness`, persist, can attack/block~~
+  - ~~**Instants/Sorceries:** resolve immediately, go to graveyard (never hit battlefield)~~
+  - ~~**Enchantments:** enter battlefield, persist (effects non-functional initially except auras in Phase 2)~~
+  - ~~**Artifacts:** enter battlefield, persist (same as enchantments)~~
+- ~~Creatures gain state: `tapped`, `summoningSick`, `damage`~~
+- ~~`power` and `toughness` parsed from Scryfall card data and stored in card state~~
 
-**Client changes:**
-- **P/T badge** on all creatures (bottom-right, small overlay) — shows `power/toughness`
-- When creature has damage: show `power/remainingToughness` with remaining in red
-- **Spell cast animation** for instants/sorceries: card art briefly displayed center-screen (1-2s) then animates to graveyard
-- Summoning sickness indicator: dimmed creature + small hourglass/zzz icon
+~~**Client changes:**~~
+- ~~**P/T badge** on all creatures (bottom-right, small overlay) — shows `power/toughness`~~
+- ~~When creature has damage: show `power/remainingToughness` with remaining in red~~
+- ~~**Spell cast animation** for instants/sorceries: card art briefly displayed center-screen (1-2s) then animates to graveyard~~
+- ~~Summoning sickness indicator: dimmed creature + small hourglass/zzz icon~~
 
-### 1C. Combat System
+### ~~1C. Combat System~~ ✅
 
-**Turn phase restructure:**
+~~**Turn phase restructure:**~~
 ```
 BEGIN TURN → mana refills, untap all permanents
     ↓
@@ -109,59 +109,59 @@ MAIN PHASE 2 → play cards from hand
 END TURN → damage clears, pass to next player
 ```
 
-**Phase indicator:** Turn bar highlights current phase. Context-sensitive button: "Go to Combat" during Main 1, "Go to Main Phase" after combat, "End Turn" during Main 2.
+~~**Phase indicator:** Turn bar highlights current phase. Context-sensitive button: "Go to Combat" during Main 1, "Go to Main Phase" after combat, "End Turn" during Main 2.~~
 
-**Declare attackers (active player):**
-- All eligible creatures get a subtle green glow border
-- Click/tap creatures to toggle attacker status
-- Selected attackers: slide forward ~20px toward opponent, red border, sword icon
-- Summoning sick creatures: dimmed, cannot be selected
-- Tapped creatures: dimmed, cannot be selected
-- "Confirm Attack" button (or skip combat if no attackers selected)
+~~**Declare attackers (active player):**~~
+- ~~All eligible creatures get a subtle green glow border~~
+- ~~Click/tap creatures to toggle attacker status~~
+- ~~Selected attackers: slide forward ~20px toward opponent, red border, sword icon~~
+- ~~Summoning sick creatures: dimmed, cannot be selected~~
+- ~~Tapped creatures: dimmed, cannot be selected~~
+- ~~"Confirm Attack" button (or skip combat if no attackers selected)~~
 
-**Declare blockers (defending player):**
-- Attacking creatures highlighted in red on opponent's side
-- Defender's untapped creatures get green glow (eligible blockers)
-- Click/tap your creature, then click/tap an attacking creature to assign block
-- SVG line/arrow connects blocker to attacker
-- Each creature can only block one attacker (multi-block is a v2 feature)
-- "Confirm Blocks" or "No Blocks" button
+~~**Declare blockers (defending player):**~~
+- ~~Attacking creatures highlighted in red on opponent's side~~
+- ~~Defender's untapped creatures get green glow (eligible blockers)~~
+- ~~Click/tap your creature, then click/tap an attacking creature to assign block~~
+- ~~SVG line/arrow connects blocker to attacker~~
+- ~~Each creature can only block one attacker (multi-block is a v2 feature)~~
+- ~~"Confirm Blocks" or "No Blocks" button~~
 
-**Damage resolution (automatic):**
-1. Unblocked attackers deal power as damage to defending player → floating red number from life total
-2. Blocked creatures deal damage to each other simultaneously (attacker power → blocker, blocker power → attacker)
-3. Creatures with damage >= toughness die → red flash, skull icon, animate to graveyard
-4. Damage clears at end of turn
+~~**Damage resolution (automatic):**~~
+1. ~~Unblocked attackers deal power as damage to defending player → floating red number from life total~~
+2. ~~Blocked creatures deal damage to each other simultaneously (attacker power → blocker, blocker power → attacker)~~
+3. ~~Creatures with damage >= toughness die → red flash, skull icon, animate to graveyard~~
+4. ~~Damage clears at end of turn~~
 
-**Tapping:**
-- Creatures tap (CSS rotate 90deg) when they attack
-- Tapped creatures cannot block
-- All permanents untap at beginning of controller's turn
+~~**Tapping:**~~
+- ~~Creatures tap (CSS rotate 90deg) when they attack~~
+- ~~Tapped creatures cannot block~~
+- ~~All permanents untap at beginning of controller's turn~~
 
-**Bot combat AI (Phase 1 — basic):**
-- Easy: attacks with everything, blocks randomly
-- Medium: only attacks when board advantage exists, blocks to trade up
-- Hard: evaluates attack for expected damage vs. creature loss, blocks to maximize trades
+~~**Bot combat AI (Phase 1 — basic):**~~
+- ~~Easy: attacks with everything, blocks randomly~~
+- ~~Medium: only attacks when board advantage exists, blocks to trade up~~
+- ~~Hard: evaluates attack for expected damage vs. creature loss, blocks to maximize trades~~
 
-### 1D. Life Totals + Win/Loss
+### ~~1D. Life Totals + Win/Loss~~ ✅
 
-**Engine changes:**
-- `lifeBySeat` already exists — now actually modified by combat damage
-- `dealDamageToPlayer(seat, amount)` action
-- `checkStateBasedActions()` — runs after every action: checks life <= 0, creatures with lethal damage, empty library on draw
-- `concede(seat)` action
-- Game state: `status: 'playing' | 'finished'`, `winner: seat | null`
-- Deck-out: if library empty when drawing, that player loses
+~~**Engine changes:**~~
+- ~~`lifeBySeat` already exists — now actually modified by combat damage~~
+- ~~`dealDamageToPlayer(seat, amount)` action~~
+- ~~`checkStateBasedActions()` — runs after every action: checks life <= 0, creatures with lethal damage, empty library on draw~~
+- ~~`concede(seat)` action~~
+- ~~Game state: `status: 'playing' | 'finished'`, `winner: seat | null`~~
+- ~~Deck-out: if library empty when drawing, that player loses~~
 
-**Client changes:**
-- Life totals: animate on change (count up/down over ~0.5s), flash red on damage, green on healing
-- **Win/loss overlay:** semi-transparent dark backdrop, "VICTORY" or "DEFEAT" with scale-up animation
-- Final stats: life totals, creatures killed, damage dealt, turns played
-- Buttons: "Play Again" (same decks), "Change Decks", "Main Menu"
-- **Concede button** in game menu (with confirmation dialog)
-- **Game log:** scrollable text feed showing major events ("Player dealt 3 damage", "Creature destroyed"). Cheap to build, massively improves game feel + debugging.
+~~**Client changes:**~~
+- ~~Life totals: animate on change (count up/down over ~0.5s), flash red on damage, green on healing~~
+- ~~**Win/loss overlay:** semi-transparent dark backdrop, "VICTORY" or "DEFEAT" with scale-up animation~~
+- ~~Final stats: life totals, creatures killed, damage dealt, turns played~~
+- ~~Buttons: "Play Again" (same decks), "Change Decks", "Main Menu"~~
+- ~~**Concede button** in game menu (with confirmation dialog)~~
+- **Game log:** scrollable text feed showing major events ("Player dealt 3 damage", "Creature destroyed"). Cheap to build, massively improves game feel + debugging. *(deferred to Phase 2/3)*
 
-**Life totals:** Standard = 20, Commander = 40
+~~**Life totals:** Standard = 20, Commander = 40~~
 
 ---
 
@@ -316,7 +316,7 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 
 | Phase | Name | Scope | Cumulative Result |
 |-------|------|-------|-------------------|
-| **1** | The Game Exists | **Large (8-13 sessions)** | Mana, combat, life totals, win/loss. It's a game. |
+| **1** | ~~The Game Exists~~ | ~~**Large (8-13 sessions)**~~ ✅ | Mana, combat, life totals, win/loss. It's a game. |
 | **2** | The Game Is Strategic | **Large (5-8 sessions)** | Keywords, auras, targeting, combat AI, animations. Worth replaying. |
 | **3** | The Game Is Polished | **Medium (3-5 sessions)** | Polish, edge cases, mobile UX, game over. Worth sharing. |
 | **4** | Classic Mode (Lands) | **Large (4-6 sessions)** | Traditional land mechanics as opt-in mode. Full MTG card pool. |
@@ -327,20 +327,20 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 
 ---
 
-## Implementation Order Within Phase 1
+## ~~Implementation Order Within Phase 1~~ ✅ ALL COMPLETE
 
-Ship each sub-step as a working state:
+~~Ship each sub-step as a working state:~~
 
-1. **Mana system** (1A) — cards cost mana, bar displays, dimming, bot respects costs
-2. **Card type differentiation** (1B) — creatures have P/T, instants/sorceries go to GY, summoning sickness
-3. **Turn phases** — restructure to begin/main1/combat/main2/end, phase indicator in turn bar
-4. **Declare attackers** — toggle selection, visual feedback, confirm button, tapping
-5. **Declare blockers** — assignment UI, SVG lines, confirm button
-6. **Damage resolution** — unblocked → player damage, blocked → creature damage, death
-7. **Life totals + win/loss** (1D) — life changes, game over screen, concede
-8. **Bot combat AI** — basic attack/block heuristics
+1. ~~**Mana system** (1A) — cards cost mana, bar displays, dimming, bot respects costs~~
+2. ~~**Card type differentiation** (1B) — creatures have P/T, instants/sorceries go to GY, summoning sickness~~
+3. ~~**Turn phases** — restructure to begin/main1/combat/main2/end, phase indicator in turn bar~~
+4. ~~**Declare attackers** — toggle selection, visual feedback, confirm button, tapping~~
+5. ~~**Declare blockers** — assignment UI, SVG lines, confirm button~~
+6. ~~**Damage resolution** — unblocked → player damage, blocked → creature damage, death~~
+7. ~~**Life totals + win/loss** (1D) — life changes, game over screen, concede~~
+8. ~~**Bot combat AI** — basic attack/block heuristics~~
 
-**Critical rule: Each step must be fully working and tested before the next begins.**
+~~**Critical rule: Each step must be fully working and tested before the next begins.**~~
 
 ---
 
