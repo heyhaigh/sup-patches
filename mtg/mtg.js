@@ -2031,6 +2031,11 @@ function getClientHtml() {
           [String(myStats.creaturesKilled || 0), 'Kills'],
           [String(myStats.damageDealt || 0), 'Damage']
         ];
+        if (match.format === 'commander' && match.game.commanderDamage) {
+          var myCdMap = match.game.commanderDamage[match.viewerSeat] || {};
+          var totalCd = 0; for (var cdKey in myCdMap) { totalCd += myCdMap[cdKey]; }
+          statItems.push([String(totalCd), 'Cmdr Dmg']);
+        }
         for (var sti = 0; sti < statItems.length; sti++) {
           var sd = document.createElement('div');
           sd.className = 'gameOverStat';
@@ -3038,6 +3043,10 @@ function engineApplyAction(match, user, action) {
             match.game.mulligansBySeat[seat] = 0; match.game.keptBySeat[seat] = false;
             if (p.isBot) match.game.keptBySeat[seat] = true;
         }
+        if (match.format === "commander") {
+            match.game.commanderDamage = {};
+            for (var cdp = 0; cdp < match.players.length; cdp++) { match.game.commanderDamage[match.players[cdp].seat] = {}; }
+        }
         match.phase = "mulligan"; match.game.turn = 1; match.game.step = "mulligan";
         match.log.push({ t: Date.now(), type: "GAME_START", by: user.username });
         return { ok: true, match };
@@ -3547,6 +3556,15 @@ function engineEnsureCardState(match, cardId) {
     if (!match.game.cardState[cardId].damageSourceIds) match.game.cardState[cardId].damageSourceIds = [];
 }
 
+function engineTrackCommanderDamage(match, atkSeat, atkId, defSeat, amount) {
+    if (!match.game.commanderDamage || amount <= 0) return;
+    // Check if attacker is a commander
+    var deckData = match.decks?.[atkSeat];
+    if (!deckData || deckData.commander !== atkId) return;
+    if (!match.game.commanderDamage[defSeat]) match.game.commanderDamage[defSeat] = {};
+    match.game.commanderDamage[defSeat][atkId] = (match.game.commanderDamage[defSeat][atkId] || 0) + amount;
+}
+
 function engineApplyPlayerDamage(match, atkSeat, atkId, defSeat, amount) {
     if (amount <= 0) return;
     if (match.game.lifeBySeat[defSeat] != null) {
@@ -3556,6 +3574,7 @@ function engineApplyPlayerDamage(match, atkSeat, atkId, defSeat, amount) {
     if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
     match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + amount;
     match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: amount, by: atkId });
+    engineTrackCommanderDamage(match, atkSeat, atkId, defSeat, amount);
     if (engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
         match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + amount;
         match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: amount, by: atkId });
@@ -3744,6 +3763,22 @@ function engineCheckGameOver(match) {
             match.game.losers.push(s);
             var lp = (match.players || []).find(function(p) { return p.seat === s; });
             match.log.push({ t: Date.now(), type: "PLAYER_ELIMINATED", seat: s, by: lp ? lp.username : "seat " + s, reason: "life" });
+        }
+    }
+    // Check commander damage (21+)
+    if (match.game.commanderDamage) {
+        for (var ci = 0; ci < seats.length; ci++) {
+            var cs = seats[ci];
+            if (match.game.losers.indexOf(cs) >= 0) continue;
+            var cdMap = match.game.commanderDamage[cs] || {};
+            for (var cmdId in cdMap) {
+                if (cdMap[cmdId] >= 21) {
+                    match.game.losers.push(cs);
+                    var clp = (match.players || []).find(function(p) { return p.seat === cs; });
+                    match.log.push({ t: Date.now(), type: "PLAYER_ELIMINATED", seat: cs, by: clp ? clp.username : "seat " + cs, reason: "commander_damage" });
+                    break;
+                }
+            }
         }
     }
     // Determine winner
