@@ -216,6 +216,21 @@ function getClientHtml() {
     .dmgFloat { position:absolute; font-size:24px; font-weight:900; color:#ef4444; text-shadow:0 2px 8px rgba(0,0,0,0.5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
     @keyframes dmgFloatUp { 0%{opacity:1;transform:translateY(0) scale(1.2)} 60%{opacity:1;transform:translateY(-30px) scale(1)} 100%{opacity:0;transform:translateY(-50px) scale(0.8)} }
     .combatBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; }
+    .gameOverOverlay { position:absolute; inset:0; z-index:40; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; animation:gameOverIn 0.4s ease; }
+    @keyframes gameOverIn { from{opacity:0} to{opacity:1} }
+    .gameOverTitle { font-size:48px; font-weight:900; letter-spacing:-0.03em; text-shadow:0 4px 20px rgba(0,0,0,0.5); animation:gameOverPop 0.5s ease; }
+    @keyframes gameOverPop { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
+    .gameOverTitle.victory { color:#22c55e; }
+    .gameOverTitle.defeat { color:#ef4444; }
+    .gameOverStats { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
+    .gameOverStat { padding:8px 14px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); border-radius:10px; text-align:center; }
+    .gameOverStatVal { font-size:20px; font-weight:800; color:#fff; }
+    .gameOverStatLabel { font-size:11px; color:rgba(255,255,255,0.6); margin-top:2px; }
+    .gameOverBtns { display:flex; gap:10px; margin-top:8px; }
+    .lifeBadge.critical { background:rgba(239,68,68,0.25); border-color:rgba(239,68,68,0.4); animation:lifePulse 1s ease infinite; }
+    @keyframes lifePulse { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 12px rgba(239,68,68,0.4)} }
+    .lifeBadge.flash { animation:lifeFlash 0.4s ease; }
+    @keyframes lifeFlash { 0%{background:rgba(239,68,68,0.5)} 100%{background:rgba(255,255,255,0.12)} }
     .botThinking .spinner { width:14px; height:14px; border:2px solid rgba(251,191,36,0.3); border-top-color:#fbbf24; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
     .turnOrder { display:flex; gap:4px; align-items:center; }
     .turnDot { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); transition:all 200ms ease; }
@@ -616,10 +631,34 @@ function getClientHtml() {
     document.querySelector('.appRoot').classList.remove('matchActive');
     state.activeMatchId = null;
     state.lastMatch = null;
+    state.prevLifeBySeat = {};
     renderLobby(null);
     $('#gamePanel').style.display = 'none';
     $('#createResult').textContent = '';
     $('#joinResult').textContent = '';
+  }
+
+  async function playAgain() {
+    var m = state.lastMatch;
+    if (!m) { exitMatchMode(); return; }
+    var format = m.format || 'standard';
+    var deckId = m.decks?.[m.viewerSeat]?.deckId || null;
+    var hasBots = (m.players || []).some(function(p) { return p.isBot; });
+    var botDiff = null;
+    if (hasBots) {
+      var botP = (m.players || []).find(function(p) { return p.isBot; });
+      botDiff = botP ? (botP.difficulty || 'easy') : 'easy';
+    }
+    if (!deckId) { exitMatchMode(); toast('Could not determine deck. Returning to menu.', { type: 'warn' }); return; }
+    var opponent = hasBots ? { type: 'bot', difficulty: botDiff } : { type: 'human' };
+    var payload = { format: format, hostDeckId: deckId, opponent: opponent };
+    var res = await supExec('api_createMatch', payload);
+    if (!res?.ok) { toast('Failed to create rematch: ' + (res?.error || 'unknown'), { type: 'error' }); return; }
+    state.activeMatchId = res.matchId;
+    state.prevLifeBySeat = {};
+    toast('New match created!', { type: 'success', ms: 2000 });
+    await refreshMatch();
+    enterMatchMode();
   }
 
   function updateMatchBar() {
@@ -1394,8 +1433,23 @@ function getClientHtml() {
 
     const bar = document.createElement('div');
     bar.className = 'seatBar';
+    var critThresh = match.format === 'commander' ? 10 : 5;
+    var lifeCritical = life != null && life <= critThresh && life > 0;
+    var lifeBadgeClass = 'lifeBadge' + (lifeCritical ? ' critical' : '');
+    // Detect life change for flash
+    if (!state.prevLifeBySeat) state.prevLifeBySeat = {};
+    var prevLife = state.prevLifeBySeat[seat];
+    var lifeFlash = prevLife != null && life != null && life < prevLife;
+    state.prevLifeBySeat[seat] = life;
     bar.innerHTML = '<div class="seatName">' + escapeHtml(name) + '</div>'
-      + '<div class="lifeBadge"><span class="lifeIcon">\u2764</span> ' + (life == null ? '?' : String(life)) + '</div>';
+      + '<div class="' + lifeBadgeClass + '"><span class="lifeIcon">\u2764</span> ' + (life == null ? '?' : String(life)) + '</div>';
+    if (lifeFlash) {
+      var badge = bar.querySelector('.lifeBadge');
+      if (badge) {
+        badge.classList.add('flash');
+        setTimeout(function() { badge.classList.remove('flash'); }, 400);
+      }
+    }
     el.appendChild(bar);
 
     const lib = zones?.library; const hand = zones?.hand;
@@ -1475,6 +1529,11 @@ function getClientHtml() {
 
   function renderTurnBar(match) {
     const bar = $('#turnBar');
+    if (match.game?.status === 'finished') {
+      bar.innerHTML = '<div class="turnInfo">Game Over</div>';
+      bar.dataset.cacheKey = 'finished';
+      return;
+    }
     const activeSeat = match.game?.activePlayerSeat;
     const activePlayer = (match.players || []).find(p => p.seat === activeSeat);
     const activeName = activeSeat === match.viewerSeat ? 'You' : (activePlayer ? (activePlayer.isBot ? activePlayer.username : ('@' + activePlayer.username)) : ('Seat ' + activeSeat));
@@ -1543,7 +1602,8 @@ function getClientHtml() {
       + manaHtml
       + turnOrderHtml
       + '<button id="btnGameDraw" class="btn">Draw</button>'
-      + buttonsHtml;
+      + buttonsHtml
+      + '<button id="btnConcede" class="btn" style="color:rgba(239,68,68,0.7);border-color:rgba(239,68,68,0.2);background:transparent;margin-left:auto;">Concede</button>';
 
     bar.querySelector('#btnGameDraw').onclick = drawDebug;
     var endTurnBtn = bar.querySelector('#btnGameEndTurn');
@@ -1558,10 +1618,12 @@ function getClientHtml() {
     if (confirmBlkBtn) confirmBlkBtn.onclick = confirmBlockers;
     var noBlocksBtn = bar.querySelector('#btnNoBlocks');
     if (noBlocksBtn) noBlocksBtn.onclick = noBlocks;
+    var concedeBtn = bar.querySelector('#btnConcede');
+    if (concedeBtn) concedeBtn.onclick = concede;
   }
 
   function renderGame(match) {
-    const show = !!match && match.phase === 'playing' && !!match.viewerSeat;
+    const show = !!match && (match.phase === 'playing' || match.phase === 'finished') && !!match.viewerSeat;
     $('#gamePanel').style.display = show ? '' : 'none';
     if (!show) return;
 
@@ -1658,6 +1720,58 @@ function getClientHtml() {
       if (!collectVisibleCardIds(match).includes(state.selected.id)) setSelected(null);
       else setSelected(state.selected);
     } else { setSelected(null); }
+
+    // Game over overlay
+    var existingOverlay = document.querySelector('#gameBoard .gameOverOverlay');
+    if (match.game?.status === 'finished') {
+      if (!existingOverlay) {
+        var overlay = document.createElement('div');
+        overlay.className = 'gameOverOverlay';
+        var isVictory = match.game.winner === match.viewerSeat;
+        var titleEl = document.createElement('div');
+        titleEl.className = 'gameOverTitle ' + (isVictory ? 'victory' : 'defeat');
+        titleEl.textContent = isVictory ? 'VICTORY' : 'DEFEAT';
+        overlay.appendChild(titleEl);
+
+        var myStats = match.game.stats?.[match.viewerSeat] || { damageDealt: 0, creaturesKilled: 0 };
+        var myLife = match.game.lifeBySeat?.[match.viewerSeat] || 0;
+        var turns = match.game.turn || 0;
+        var statsRow = document.createElement('div');
+        statsRow.className = 'gameOverStats';
+        var statItems = [
+          [String(turns), 'Turns'],
+          [String(myLife), 'Life'],
+          [String(myStats.creaturesKilled || 0), 'Kills'],
+          [String(myStats.damageDealt || 0), 'Damage']
+        ];
+        for (var sti = 0; sti < statItems.length; sti++) {
+          var sd = document.createElement('div');
+          sd.className = 'gameOverStat';
+          sd.innerHTML = '<div class="gameOverStatVal">' + statItems[sti][0] + '</div><div class="gameOverStatLabel">' + statItems[sti][1] + '</div>';
+          statsRow.appendChild(sd);
+        }
+        overlay.appendChild(statsRow);
+
+        var btns = document.createElement('div');
+        btns.className = 'gameOverBtns';
+        var btnAgain = document.createElement('button');
+        btnAgain.className = 'btn btnPrimary';
+        btnAgain.textContent = 'Play Again';
+        btnAgain.onclick = playAgain;
+        var btnMenu = document.createElement('button');
+        btnMenu.className = 'btn';
+        btnMenu.textContent = 'Main Menu';
+        btnMenu.onclick = function() { exitMatchMode(); };
+        btns.appendChild(btnAgain);
+        btns.appendChild(btnMenu);
+        overlay.appendChild(btns);
+
+        var board = document.getElementById('gameBoard');
+        if (board) board.appendChild(overlay);
+      }
+    } else if (existingOverlay) {
+      existingOverlay.remove();
+    }
   }
 
   async function refreshMatch() {
@@ -1675,6 +1789,15 @@ function getClientHtml() {
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'DRAW', n: 1 } });
     if (!res.ok) { $('#matchActionResult').textContent = 'Action failed: ' + res.error; toast('Action failed: ' + res.error, { type: 'error' }); return; }
     $('#matchActionResult').textContent = 'OK'; await refreshMatch();
+  }
+
+  async function concede() {
+    if (!state.activeMatchId) return;
+    if (!confirm('Concede this game?')) return;
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'CONCEDE' } });
+    if (!res.ok) { toast('Concede failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    toast('You conceded.', { type: 'info', ms: 3000 });
+    await refreshMatch();
   }
 
   async function endTurn() {
@@ -2387,7 +2510,7 @@ function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponent
         v: 1, matchId, format, createdAt: now, phase: "lobby",
         hostUserId: hostUser.id, readyByUserId: { [hostUser.id]: false },
         players: [{ userId: hostUser.id, username: hostUser.username, joinedAt: now, seat: 1 }],
-        game: { turn: 0, activePlayerSeat: 1, prioritySeat: 1, step: "main1", stack: [], zones: {}, lifeBySeat: {}, manaBySeat: {}, mulligansBySeat: {}, keptBySeat: {}, cardState: {}, combat: null },
+        game: { turn: 0, activePlayerSeat: 1, prioritySeat: 1, step: "main1", stack: [], zones: {}, lifeBySeat: {}, manaBySeat: {}, mulligansBySeat: {}, keptBySeat: {}, cardState: {}, combat: null, status: "playing", winner: null, losers: [], stats: {} },
         decks: { 1: { deckId: hostDeck.id, format: hostDeck.format, name: hostDeck.name, commander: hostDeck.commander, cards: hostDeck.cards, cardMeta: hostDeck.cardMeta || {} } },
         botsBySeat: {},
         log: [{ t: now, type: "MATCH_CREATED", by: hostUser.username, opponentType: opponentType || "human" }],
@@ -2406,6 +2529,10 @@ function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponent
 function engineApplyAction(match, user, action) {
     const player = match.players.find((p) => p.userId === user.id);
     if (!player) return { ok: false, error: "user not in match" };
+
+    if (match.game?.status === "finished" && action.type !== "DRAW") {
+        return { ok: false, error: "game is over" };
+    }
 
     if (action.type === "ASSIGN_DECK") {
         if (match.phase !== "lobby") return { ok: false, error: "can only assign deck in lobby" };
@@ -2450,6 +2577,8 @@ function engineApplyAction(match, user, action) {
             match.game.lifeBySeat[seat] = match.format === "commander" ? 40 : 20;
             if (!match.game.manaBySeat) match.game.manaBySeat = {};
             match.game.manaBySeat[seat] = { current: 0, max: 0 };
+            if (!match.game.stats) match.game.stats = {};
+            match.game.stats[seat] = { damageDealt: 0, creaturesKilled: 0 };
             match.game.mulligansBySeat[seat] = 0; match.game.keptBySeat[seat] = false;
             if (p.isBot) match.game.keptBySeat[seat] = true;
         }
@@ -2535,17 +2664,18 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "DRAW") {
-        const seat = player.seat; engineEnsureZones(match, seat);
-        if (match.game.zones[seat].library.length === 0) {
-            const deck = match.decks[seat]; if (!deck) return { ok: false, error: "no deck assigned" };
-            const expanded = expandDeckToList(deck.cards);
-            const commanderId = match.format === "commander" ? deck.commander : null;
-            const library = commanderId ? expanded.filter((id) => id !== commanderId) : expanded.slice();
-            shuffleInPlace(library); match.game.zones[seat].library = library;
-            if (commanderId && (!match.game.zones[seat].command || match.game.zones[seat].command.length === 0)) match.game.zones[seat].command = [commanderId];
+        var seat = player.seat; engineEnsureZones(match, seat);
+        var drawN = Math.max(1, Math.min(7, Number(action.n) || 1));
+        var drawRes = engineDrawCards(match, seat, drawN);
+        if (drawRes.deckOut) {
+            if (!match.game.losers) match.game.losers = [];
+            if (match.game.losers.indexOf(seat) < 0) {
+                match.game.losers.push(seat);
+                match.log.push({ t: Date.now(), type: "DECK_OUT", seat: seat });
+                engineCheckGameOver(match);
+            }
         }
-        engineDrawCards(match, seat, Math.max(1, Math.min(7, Number(action.n) || 1)));
-        match.log.push({ t: Date.now(), type: "DRAW", by: user.username, n: Math.max(1, Math.min(7, Number(action.n) || 1)) });
+        match.log.push({ t: Date.now(), type: "DRAW", by: user.username, n: drawN });
         return { ok: true, match };
     }
 
@@ -2661,6 +2791,7 @@ function engineApplyAction(match, user, action) {
         }
         match.log.push({ t: Date.now(), type: "BLOCKERS_DECLARED", by: user.username, seat: seat, count: blockerKeys.length });
         engineResolveCombatDamage(match);
+        if (match.game?.status === "finished") return { ok: true, match };
         // Check if active player is bot (bot was attacking)
         var activePlayer2 = (match.players || []).find(function(p) { return p.seat === match.game.activePlayerSeat; });
         if (activePlayer2 && activePlayer2.isBot) {
@@ -2681,6 +2812,7 @@ function engineApplyAction(match, user, action) {
         if (!match.game.combat) return { ok: false, error: "no combat in progress" };
         match.log.push({ t: Date.now(), type: "BLOCKERS_DECLARED", by: user.username, seat: seat, count: 0 });
         engineResolveCombatDamage(match);
+        if (match.game?.status === "finished") return { ok: true, match };
         var activePlayer3 = (match.players || []).find(function(p) { return p.seat === match.game.activePlayerSeat; });
         if (activePlayer3 && activePlayer3.isBot) {
             engineAdvanceTurn(match, { by: "bot" });
@@ -2689,6 +2821,16 @@ function engineApplyAction(match, user, action) {
             match.game.step = "main2";
             match.game.prioritySeat = match.game.activePlayerSeat;
         }
+        return { ok: true, match };
+    }
+
+    if (action.type === "CONCEDE") {
+        if (match.game?.status === "finished") return { ok: false, error: "game is already over" };
+        var seat = player.seat;
+        if (!match.game.losers) match.game.losers = [];
+        if (match.game.losers.indexOf(seat) < 0) match.game.losers.push(seat);
+        match.log.push({ t: Date.now(), type: "CONCEDE", by: user.username, seat: seat });
+        engineCheckGameOver(match);
         return { ok: true, match };
     }
 
@@ -2701,8 +2843,10 @@ function engineEnsureZones(match, seat) {
 }
 
 function engineDrawCards(match, seat, n) {
-    engineEnsureZones(match, seat); const zones = match.game.zones[seat];
-    for (let i = 0; i < Math.max(0, Math.min(7, Number(n) || 0)); i++) { const top = zones.library.shift(); if (!top) break; zones.hand.push(top); }
+    engineEnsureZones(match, seat); var zones = match.game.zones[seat];
+    var deckOut = false;
+    for (var i = 0; i < Math.max(0, Math.min(7, Number(n) || 0)); i++) { var top = zones.library.shift(); if (!top) { deckOut = true; break; } zones.hand.push(top); }
+    return { ok: true, deckOut: deckOut };
 }
 
 function engineMoveCard(match, seat, fromZone, toZone, cardId) {
@@ -2735,7 +2879,15 @@ function engineAdvanceTurn(match, opts) {
     mana.max = Math.min(10, mana.max + 1);
     mana.current = mana.max;
     match.game.manaBySeat[next] = mana;
-    engineEnsureZones(match, next); engineDrawCards(match, next, 1);
+    engineEnsureZones(match, next); var drawResult = engineDrawCards(match, next, 1);
+    if (drawResult.deckOut) {
+        if (!match.game.losers) match.game.losers = [];
+        if (match.game.losers.indexOf(next) < 0) {
+            match.game.losers.push(next);
+            match.log.push({ t: Date.now(), type: "DECK_OUT", seat: next });
+            engineCheckGameOver(match);
+        }
+    }
     if (!match.game.cardState) match.game.cardState = {};
     // Clear summoning sickness for incoming player
     var bf = match.game.zones?.[next]?.battlefield || [];
@@ -2754,9 +2906,10 @@ function engineAdvanceTurn(match, opts) {
 }
 
 function engineRunBotsIfActive(match) {
-    let guard = 0;
+    var guard = 0;
     while (guard++ < 6) {
-        const botPlayer = (match.players || []).find((p) => p.isBot && p.seat === match.game?.activePlayerSeat);
+        if (match.game?.status === "finished") break;
+        var botPlayer = (match.players || []).find(function(p) { return p.isBot && p.seat === match.game?.activePlayerSeat; });
         if (!botPlayer) break;
         engineBotTakeTurn(match, botPlayer);
     }
@@ -2809,10 +2962,14 @@ function engineResolveCombatDamage(match) {
             if (match.game.lifeBySeat[defSeat] != null) {
                 match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - atkPower);
             }
+            if (!match.game.stats) match.game.stats = {};
+            if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
+            match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + atkPower;
             match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: atkPower, by: atkId });
         }
     }
     engineCheckLethalDamage(match);
+    engineCheckGameOver(match);
     match.game.combat.resolved = true;
     match.log.push({ t: Date.now(), type: "COMBAT_RESOLVED" });
 }
@@ -2834,9 +2991,47 @@ function engineCheckLethalDamage(match) {
             var tough = engineGetCreatureToughness(match, seat, cid);
             if (dmg >= tough && tough > 0) {
                 engineMoveCard(match, seat, "battlefield", "graveyard", cid);
+                // Track kills for opposing seats
+                if (!match.game.stats) match.game.stats = {};
+                var otherSeats = engineSeatOrder(match);
+                for (var ki = 0; ki < otherSeats.length; ki++) {
+                    if (otherSeats[ki] !== seat) {
+                        if (!match.game.stats[otherSeats[ki]]) match.game.stats[otherSeats[ki]] = { damageDealt: 0, creaturesKilled: 0 };
+                        match.game.stats[otherSeats[ki]].creaturesKilled = (match.game.stats[otherSeats[ki]].creaturesKilled || 0) + 1;
+                    }
+                }
                 match.log.push({ t: Date.now(), type: "CREATURE_DIED", seat: seat, cardId: cid, damage: dmg, toughness: tough });
             }
         }
+    }
+}
+
+function engineCheckGameOver(match) {
+    if (!match.game) return;
+    if (match.game.status === "finished") return;
+    if (!match.game.losers) match.game.losers = [];
+    var seats = engineSeatOrder(match);
+    // Check life totals
+    for (var i = 0; i < seats.length; i++) {
+        var s = seats[i];
+        if (match.game.losers.indexOf(s) >= 0) continue;
+        if (match.game.lifeBySeat[s] != null && match.game.lifeBySeat[s] <= 0) {
+            match.game.losers.push(s);
+            var lp = (match.players || []).find(function(p) { return p.seat === s; });
+            match.log.push({ t: Date.now(), type: "PLAYER_ELIMINATED", seat: s, by: lp ? lp.username : "seat " + s, reason: "life" });
+        }
+    }
+    // Determine winner
+    var alive = [];
+    for (var j = 0; j < seats.length; j++) {
+        if (match.game.losers.indexOf(seats[j]) < 0) alive.push(seats[j]);
+    }
+    if (alive.length <= 1 && seats.length >= 2) {
+        match.game.status = "finished";
+        match.phase = "finished";
+        match.game.winner = alive.length === 1 ? alive[0] : null;
+        var wp = match.game.winner ? (match.players || []).find(function(p) { return p.seat === match.game.winner; }) : null;
+        match.log.push({ t: Date.now(), type: "GAME_OVER", winner: match.game.winner, winnerName: wp ? wp.username : null });
     }
 }
 
@@ -2875,6 +3070,7 @@ function enginePlayCard(match, seat, cardId) {
 }
 
 function engineBotTakeTurn(match, botPlayer) {
+    if (match.game?.status === "finished") return;
     const seat = botPlayer.seat; const diff = botDifficultyNormalize(botPlayer.difficulty);
     engineEnsureZones(match, seat);
     const hand = Array.isArray(match.game.zones[seat].hand) ? match.game.zones[seat].hand : [];
@@ -2955,7 +3151,7 @@ function engineBotTakeTurn(match, botPlayer) {
             engineResolveCombatDamage(match);
         }
     }
-    engineAdvanceTurn(match, { by: "bot" });
+    if (match.game?.status !== "finished") engineAdvanceTurn(match, { by: "bot" });
 }
 
 function engineBotDeclareAttackers(match, botPlayer) {

@@ -114,8 +114,8 @@ Turn the card viewer into an actual game. Three pillars:
 
 - **Mana system** ✅ — Hearthstone-style auto-increment (no lands, CMC-based, cap at 10). Standard deck size → 30 cards, Commander → 60. Purple gem mana bar in turn bar, unplayable cards dimmed, CMC shown in inspector, bot is mana-aware.
 - **Combat system** ✅ — Declare attackers → declare blockers → damage resolution. Creatures tap on attack, have summoning sickness, die when damage >= toughness. Phase-aware turn bar (M1/CMB/M2 pills). Bot attack/block AI with difficulty scaling. Human blocker declaration with click-to-assign UX.
-- **Life totals + win/loss** — Standard 20 / Commander 40. Unblocked attackers deal damage. Life reaches 0 = loss. Concede option. Deck-out loss.
-- **Card type differentiation** — Creatures have P/T + combat. Instants/sorceries resolve and go to GY. Enchantments/artifacts persist.
+- **Life totals + win/loss** ✅ — Standard 20 / Commander 40. Unblocked attackers deal damage. Life reaches 0 = loss. Concede option. Deck-out loss. Game over overlay with stats (turns, life, kills, damage). Play Again / Main Menu buttons. Life badge pulses red at low HP, flashes on damage taken.
+- **Card type differentiation** ✅ — Creatures have P/T + combat. Instants/sorceries resolve and go to GY (spell cast overlay animation). Enchantments/artifacts persist on battlefield.
 - **Turn phases** ✅ — Main 1 → Combat (Attackers → Blockers) → Main 2 → End. Phase pill indicator in turn bar. Cards only playable in main phases.
 - **Bot combat AI** ✅ — Easy (attack all, block random), Medium (attack with advantage, block to trade up), Hard (scoring-based attack/block decisions).
 
