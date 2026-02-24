@@ -216,13 +216,13 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 - Bot plays removal/damage spells on biggest threat
 - ~~Bot respects flying/reach blocking rules~~ ✅
 
-### 2E. Visual Polish
+### ~~2E. Visual Polish~~ ✅
 
-- Damage numbers floating from combat (red for damage, green for lifelink healing)
-- Death animations (red flash → skull → animate to graveyard)
-- Spell cast overlay (instant/sorcery card art center-screen for 1-2s)
+- ~~Damage numbers floating from combat (red for damage, green for lifelink healing)~~ ✅
+- ~~Death animations (red flash → skull → animate to graveyard)~~ ✅
+- ~~Spell cast overlay (instant/sorcery card art center-screen for 1-2s)~~ ✅ (pre-existing)
 - Mana crystal depletion animation
-- Card slide animations between zones (hand → battlefield, battlefield → graveyard)
+- ~~Card slide animations between zones (hand → battlefield, battlefield → graveyard)~~ ✅
 
 ---
 

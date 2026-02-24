@@ -232,6 +232,9 @@ function getClientHtml() {
     .phasePill.active { background:rgba(251,191,36,0.18); color:#fbbf24; border-color:rgba(251,191,36,0.35); }
     .dmgFloat { position:absolute; font-size:24px; font-weight:900; color:#ef4444; text-shadow:0 2px 8px rgba(0,0,0,0.5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
     @keyframes dmgFloatUp { 0%{opacity:1;transform:translateY(0) scale(1.2)} 60%{opacity:1;transform:translateY(-30px) scale(1)} 100%{opacity:0;transform:translateY(-50px) scale(0.8)} }
+    .dmgFloatHeal { position:absolute; font-size:24px; font-weight:900; color:#22c55e; text-shadow:0 2px 8px rgba(0,0,0,0.5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
+    .deathOverlay { position:absolute; z-index:25; border-radius:10px; pointer-events:none; display:flex; align-items:center; justify-content:center; font-size:32px; animation:deathFade 0.8s ease-out forwards; }
+    @keyframes deathFade { 0%{background:rgba(239,68,68,0.4);opacity:1} 30%{background:rgba(239,68,68,0.2);opacity:1} 100%{background:transparent;opacity:0} }
     .combatBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; }
     .gameOverOverlay { position:absolute; inset:0; z-index:40; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; animation:gameOverIn 0.4s ease; }
     @keyframes gameOverIn { from{opacity:0} to{opacity:1} }
@@ -598,6 +601,7 @@ function getClientHtml() {
     cardIndex: {}, selected: { id: null, zone: null, seat: null }, qsCommanderChosen: null,
     combatMode: null, pendingAttackers: {}, pendingBlockers: {}, selectedBlocker: null,
     targetingMode: null,
+    lastLogIndex: 0,
   };
 
   function toast(msg, opts) {
@@ -653,6 +657,7 @@ function getClientHtml() {
     state.activeMatchId = null;
     state.lastMatch = null;
     state.prevLifeBySeat = {};
+    state.lastLogIndex = 0;
     renderLobby(null);
     $('#gamePanel').style.display = 'none';
     $('#createResult').textContent = '';
@@ -1504,6 +1509,7 @@ function getClientHtml() {
     var cardId = state.targetingMode.cardId;
     var targetId = state.targetingMode.selectedTarget;
     state.targetingMode = null;
+    showCardFlyAnimation(cardId);
     var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: cardId, targetId: targetId } });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     await refreshMatch();
@@ -1660,6 +1666,7 @@ function getClientHtml() {
 
     const el = document.createElement('div');
     el.className = 'seatPanel' + (isActive ? ' active' : '');
+    el.dataset.seat = seat;
 
     const bar = document.createElement('div');
     bar.className = 'seatBar';
@@ -2050,6 +2057,10 @@ function getClientHtml() {
     if (!state.activeMatchId) { $('#matchDebug').textContent = 'No active match.'; renderLobby(null); $('#gamePanel').style.display = 'none'; return; }
     const match = await supExec('api_getMatch', { matchId: state.activeMatchId });
     state.lastMatch = match; await hydrateCardIndexForMatch(match);
+    if (!state.lastLogIndex && match?.log?.length && match.phase === 'playing') {
+      state.lastLogIndex = match.log.length;
+    }
+    processAnimationEvents(match);
     $('#matchDebug').textContent = JSON.stringify(match, null, 2);
     renderLobby(match); renderGame(match);
     if (document.querySelector('.appRoot').classList.contains('matchActive')) updateMatchBar();
@@ -2296,6 +2307,124 @@ function getClientHtml() {
     setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 1700);
   }
 
+  function getGameBoardRelativeRect(el) {
+    var board = document.getElementById('gameBoard');
+    if (!board || !el) return null;
+    var er = el.getBoundingClientRect();
+    var br = board.getBoundingClientRect();
+    return { left: er.left - br.left, top: er.top - br.top, width: er.width, height: er.height };
+  }
+
+  function processAnimationEvents(newMatch) {
+    var log = newMatch?.log;
+    if (!Array.isArray(log)) return;
+    var startIdx = state.lastLogIndex || 0;
+    state.lastLogIndex = log.length;
+    if (startIdx >= log.length) return;
+
+    for (var i = startIdx; i < log.length; i++) {
+      var entry = log[i];
+      if (entry.t < Date.now() - 5000) continue;
+
+      if (entry.type === 'COMBAT_DAMAGE') {
+        if (entry.atkDmg > 0) showCreatureDmgFloat(entry.atk, entry.atkDmg);
+        if (entry.blkDmg > 0) showCreatureDmgFloat(entry.blk, entry.blkDmg);
+      }
+      if (entry.type === 'PLAYER_DAMAGE' || entry.type === 'TRAMPLE_DAMAGE') {
+        showPlayerDmgFloat(entry.seat, entry.damage);
+      }
+      if (entry.type === 'LIFELINK') {
+        showLifelinkFloat(entry.seat, entry.amount);
+      }
+      if (entry.type === 'CREATURE_DIED') {
+        showDeathOverlay(entry.cardId);
+      }
+    }
+  }
+
+  function showCreatureDmgFloat(cardId, amount) {
+    var el = document.querySelector('.cardWrap[data-card-id="' + cardId + '"]');
+    if (!el) return;
+    var rect = getGameBoardRelativeRect(el);
+    if (!rect) return;
+    var board = document.getElementById('gameBoard');
+    var floater = document.createElement('div');
+    floater.className = 'dmgFloat';
+    floater.textContent = '-' + amount;
+    var jitter = Math.round(Math.random() * 20 - 10);
+    floater.style.left = (rect.left + rect.width / 2 - 10 + jitter) + 'px';
+    floater.style.top = (rect.top + rect.height / 3) + 'px';
+    board.appendChild(floater);
+    setTimeout(function() { if (floater.parentNode) floater.parentNode.removeChild(floater); }, 1200);
+  }
+
+  function showPlayerDmgFloat(seat, amount) {
+    var badge = document.querySelector('.seatPanel[data-seat="' + seat + '"] .lifeBadge');
+    if (!badge) return;
+    var rect = getGameBoardRelativeRect(badge);
+    if (!rect) return;
+    var board = document.getElementById('gameBoard');
+    var floater = document.createElement('div');
+    floater.className = 'dmgFloat';
+    floater.textContent = '-' + amount;
+    floater.style.left = (rect.left + rect.width / 2 - 10) + 'px';
+    floater.style.top = (rect.top - 5) + 'px';
+    board.appendChild(floater);
+    setTimeout(function() { if (floater.parentNode) floater.parentNode.removeChild(floater); }, 1200);
+  }
+
+  function showLifelinkFloat(seat, amount) {
+    var badge = document.querySelector('.seatPanel[data-seat="' + seat + '"] .lifeBadge');
+    if (!badge) return;
+    var rect = getGameBoardRelativeRect(badge);
+    if (!rect) return;
+    var board = document.getElementById('gameBoard');
+    var floater = document.createElement('div');
+    floater.className = 'dmgFloatHeal';
+    floater.textContent = '+' + amount;
+    floater.style.left = (rect.left + rect.width / 2 + 10) + 'px';
+    floater.style.top = (rect.top - 5) + 'px';
+    board.appendChild(floater);
+    setTimeout(function() { if (floater.parentNode) floater.parentNode.removeChild(floater); }, 1200);
+  }
+
+  function showDeathOverlay(cardId) {
+    var el = document.querySelector('.cardWrap[data-card-id="' + cardId + '"]');
+    if (!el) return;
+    var rect = getGameBoardRelativeRect(el);
+    if (!rect) return;
+    var board = document.getElementById('gameBoard');
+    var overlay = document.createElement('div');
+    overlay.className = 'deathOverlay';
+    overlay.textContent = '\u2620';
+    overlay.style.left = rect.left + 'px';
+    overlay.style.top = rect.top + 'px';
+    overlay.style.width = rect.width + 'px';
+    overlay.style.height = rect.height + 'px';
+    board.appendChild(overlay);
+    setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 800);
+  }
+
+  function showCardFlyAnimation(cardId) {
+    var srcEl = document.querySelector('.handTray .cardImg[data-card-id="' + cardId + '"]');
+    if (!srcEl) return;
+    var srcRect = srcEl.getBoundingClientRect();
+    var bfArea = document.querySelector('#mySide .bfArea');
+    if (!bfArea) return;
+    var tgtRect = bfArea.getBoundingClientRect();
+    var clone = document.createElement('img');
+    clone.src = srcEl.src;
+    clone.style.cssText = 'position:fixed;z-index:50;pointer-events:none;border-radius:10px;width:' + srcRect.width + 'px;height:' + srcRect.height + 'px;left:' + srcRect.left + 'px;top:' + srcRect.top + 'px;';
+    document.body.appendChild(clone);
+    var tgtX = tgtRect.left + tgtRect.width / 2 - srcRect.width / 2;
+    var tgtY = tgtRect.top + tgtRect.height / 2 - srcRect.height / 2;
+    clone.animate([
+      { left: srcRect.left + 'px', top: srcRect.top + 'px', opacity: 1, transform: 'scale(1)' },
+      { left: tgtX + 'px', top: tgtY + 'px', opacity: 0.7, transform: 'scale(0.7)' }
+    ], { duration: 350, easing: 'ease-in-out', fill: 'forwards' });
+    setTimeout(function() { if (clone.parentNode) clone.parentNode.removeChild(clone); }, 400);
+  }
+
   async function playSelectedToBattlefield() {
     const sel = state.selected; if (!state.activeMatchId || !sel?.id) return;
     if (!(sel.zone === 'hand' && sel.seat === state.lastMatch?.viewerSeat)) { toast('Select a card in your hand to play.', { type: 'warn' }); return; }
@@ -2305,6 +2434,7 @@ function getClientHtml() {
       return;
     }
     var isSpell = (clientCardType(sel.id) === 'instant' || clientCardType(sel.id) === 'sorcery');
+    if (!isSpell) showCardFlyAnimation(sel.id);
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: sel.id } });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     if (isSpell) showSpellCastAnimation(sel.id);
@@ -3163,6 +3293,7 @@ function engineDrawCards(match, seat, n) {
     return { ok: true, deckOut: deckOut };
 }
 
+var _auraCleanupGuard = false;
 function engineMoveCard(match, seat, fromZone, toZone, cardId) {
     engineEnsureZones(match, seat); const zones = match.game.zones[seat];
     const from = zones[fromZone]; const to = zones[toZone];
@@ -3173,8 +3304,14 @@ function engineMoveCard(match, seat, fromZone, toZone, cardId) {
     if (fromZone === "battlefield" && match.game.cardState?.[cardId]) { delete match.game.cardState[cardId]; }
     // Aura cleanup when card leaves battlefield
     if (fromZone === "battlefield" && match.game.auraAttachments) {
-        // If this card is an aura, remove its attachment entry
+        // If this card is an aura, remove its attachment entry and check if enchanted creature now has lethal damage
+        var auraTargetId = match.game.auraAttachments[cardId] || null;
         if (match.game.auraAttachments[cardId]) { delete match.game.auraAttachments[cardId]; }
+        if (auraTargetId && !_auraCleanupGuard) {
+            _auraCleanupGuard = true;
+            engineCheckLethalDamage(match);
+            _auraCleanupGuard = false;
+        }
         // If this card is a creature, detach all auras and move them to their owner's GY
         var aurasToDetach = [];
         for (var auraId in match.game.auraAttachments) {
