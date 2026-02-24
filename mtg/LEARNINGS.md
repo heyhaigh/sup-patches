@@ -60,3 +60,7 @@ Never redeclare `const $` — it's a `SyntaxError: Identifier '$' has already be
 ## supExec Bridge Resilience
 
 SupChat's preview mode often doesn't have the `sup` context available until the user clicks "Share with chat" or refreshes. The `supExec()` wrapper retries on context errors with exponential backoff.
+
+## Workflow: Always Commit & Push After Plan Completion
+
+Every completed phase/plan improvement must be committed and pushed to git before considering it done. Don't wait for the user to ask — commit and push immediately after verifying the changes (syntax check, etc.).
