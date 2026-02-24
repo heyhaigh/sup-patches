@@ -1515,8 +1515,9 @@ function getClientHtml() {
     if (!state.targetingMode || !state.targetingMode.selectedTarget) return;
     var cardId = state.targetingMode.cardId;
     var targetId = state.targetingMode.selectedTarget;
+    var isSpellTarget = !!state.targetingMode.isSpell;
     state.targetingMode = null;
-    showCardFlyAnimation(cardId);
+    if (isSpellTarget) { showSpellCastAnimation(cardId); } else { showCardFlyAnimation(cardId); }
     var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: cardId, targetId: targetId } });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     await refreshMatch();
@@ -1787,6 +1788,21 @@ function getClientHtml() {
       }
     }
     el.appendChild(bfArea);
+
+    // Player seat targeting for spells (e.g., "target player" damage spells)
+    if (state.targetingMode && !isViewer) {
+      var seatTargetId = 'seat:' + seat;
+      if (state.targetingMode.validTargets.indexOf(seatTargetId) >= 0) {
+        el.style.cursor = 'pointer';
+        el.style.outline = '2px solid rgba(239,68,68,0.6)';
+        el.style.outlineOffset = '-2px';
+        if (state.targetingMode.selectedTarget === seatTargetId) {
+          el.style.outline = '3px solid rgba(239,68,68,1)';
+          el.style.background = 'rgba(239,68,68,0.08)';
+        }
+        (function(capturedSeatTarget) { el.onclick = function(e) { e.stopPropagation(); handleTargetClick(capturedSeatTarget); }; })(seatTargetId);
+      }
+    }
 
     return el;
   }
@@ -2469,6 +2485,75 @@ function getClientHtml() {
     setTimeout(function() { if (clone.parentNode) clone.parentNode.removeChild(clone); }, 400);
   }
 
+  function clientParseSpellEffects(oracleText) {
+    if (!oracleText) return [];
+    var effects = [];
+    var dmgRe = /deals\s+(\d+)\s+damage\s+to\s+(any target|target creature|target player|target opponent|each opponent)/gi;
+    var dm;
+    while ((dm = dmgRe.exec(oracleText)) !== null) {
+      var tType = dm[2].toLowerCase();
+      if (tType === 'target opponent') tType = 'target player';
+      effects.push({ type: 'damage', amount: parseInt(dm[1], 10), targetType: tType });
+    }
+    var destRe = /destroy\s+target\s+(creature|permanent)/gi;
+    var de;
+    while ((de = destRe.exec(oracleText)) !== null) { effects.push({ type: 'destroy', targetType: de[1].toLowerCase() }); }
+    var drawRe = /draw\s+(\w+)\s+cards?/gi;
+    var dr;
+    var wordToNum = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
+    while ((dr = drawRe.exec(oracleText)) !== null) { var n = parseInt(dr[1], 10); if (isNaN(n)) n = wordToNum[dr[1].toLowerCase()] || 1; effects.push({ type: 'draw', amount: n }); }
+    var lifeRe = /gain\s+(\d+)\s+life/gi;
+    var lr;
+    while ((lr = lifeRe.exec(oracleText)) !== null) { effects.push({ type: 'gainLife', amount: parseInt(lr[1], 10) }); }
+    var buffRe = /target\s+creature\s+gets\s+([+-]\d+)\/([+-]\d+)\s+until\s+end\s+of\s+turn/gi;
+    var br;
+    while ((br = buffRe.exec(oracleText)) !== null) { effects.push({ type: 'tempBuff', power: parseInt(br[1], 10), toughness: parseInt(br[2], 10) }); }
+    return effects;
+  }
+
+  function clientSpellNeedsTarget(effects) {
+    for (var i = 0; i < effects.length; i++) {
+      var e = effects[i];
+      if (e.type === 'damage' && (e.targetType === 'target creature' || e.targetType === 'target player' || e.targetType === 'any target')) return true;
+      if (e.type === 'destroy') return true;
+      if (e.type === 'tempBuff') return true;
+    }
+    return false;
+  }
+
+  function enterSpellTargetingMode(cardId, effects) {
+    var match = state.lastMatch;
+    if (!match) return;
+    var mySeat = match.viewerSeat;
+    var validTargets = [];
+    var needsCreature = false; var needsPlayer = false;
+    for (var i = 0; i < effects.length; i++) {
+      var e = effects[i];
+      if (e.type === 'damage') {
+        if (e.targetType === 'target creature') needsCreature = true;
+        else if (e.targetType === 'target player') needsPlayer = true;
+        else if (e.targetType === 'any target') { needsCreature = true; needsPlayer = true; }
+      } else if (e.type === 'destroy') { needsCreature = true; }
+      else if (e.type === 'tempBuff') { needsCreature = true; }
+    }
+    if (needsCreature) {
+      var creatures = getTargetableCreatures(match, mySeat);
+      for (var ci = 0; ci < creatures.length; ci++) validTargets.push(creatures[ci]);
+    }
+    if (needsPlayer) {
+      var seats = (match.players || []).map(function(p) { return p.seat; });
+      for (var si = 0; si < seats.length; si++) {
+        if (seats[si] !== mySeat) validTargets.push('seat:' + seats[si]);
+      }
+    }
+    if (!validTargets.length) {
+      toast('No valid targets for this spell.', { type: 'warn', ms: 2000 });
+      return;
+    }
+    state.targetingMode = { cardId: cardId, validTargets: validTargets, selectedTarget: null, isSpell: true };
+    renderGame(match);
+  }
+
   async function playSelectedToBattlefield() {
     const sel = state.selected; if (!state.activeMatchId || !sel?.id) return;
     if (!(sel.zone === 'hand' && sel.seat === state.lastMatch?.viewerSeat)) { toast('Select a card in your hand to play.', { type: 'warn' }); return; }
@@ -2478,6 +2563,15 @@ function getClientHtml() {
       return;
     }
     var isSpell = (clientCardType(sel.id) === 'instant' || clientCardType(sel.id) === 'sorcery');
+    // Spell with targeted effects: enter spell targeting mode
+    if (isSpell) {
+      var oracle = String(cardMeta(sel.id)?.oracleText || '');
+      var effects = clientParseSpellEffects(oracle);
+      if (clientSpellNeedsTarget(effects)) {
+        enterSpellTargetingMode(sel.id, effects);
+        return;
+      }
+    }
     if (!isSpell) showCardFlyAnimation(sel.id);
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: sel.id } });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
@@ -3115,6 +3209,28 @@ function engineApplyAction(match, user, action) {
             if (!targetFound) return { ok: false, error: "target must be a creature on the battlefield" };
             if (targetSeat !== seat && engineHasKeyword(match, targetSeat, targetId, "Hexproof")) return { ok: false, error: "cannot target a creature with Hexproof" };
         }
+        // Spell targeting validation
+        if (isSpell && !engineIsAura(match, seat, cardId)) {
+            var spellEffects = engineParseSpellEffects(deckMeta[cardId]?.oracleText);
+            var needsTarget = engineEffectNeedsTarget(spellEffects);
+            if (needsTarget && targetId) {
+                // Validate creature target
+                if (typeof targetId === 'string' && targetId.indexOf('seat:') === 0) {
+                    var tpSeat = Number(targetId.replace('seat:', ''));
+                    var validSeats2 = engineSeatOrder(match);
+                    if (validSeats2.indexOf(tpSeat) < 0) return { ok: false, error: "invalid player target" };
+                } else {
+                    var crTargetFound = false; var crTargetSeat = null;
+                    var crAllSeats = engineSeatOrder(match);
+                    for (var cri = 0; cri < crAllSeats.length; cri++) {
+                        var crBf = match.game.zones?.[crAllSeats[cri]]?.battlefield || [];
+                        if (crBf.indexOf(targetId) >= 0) { crTargetFound = true; crTargetSeat = crAllSeats[cri]; break; }
+                    }
+                    if (!crTargetFound) return { ok: false, error: "target not found on battlefield" };
+                    if (crTargetSeat !== seat && engineHasKeyword(match, crTargetSeat, targetId, "Hexproof")) return { ok: false, error: "cannot target a creature with Hexproof" };
+                }
+            }
+        }
         const ok = enginePlayCard(match, seat, cardId, targetId); if (!ok.ok) return ok;
         mana.current = Math.max(0, mana.current - cmc);
         match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId, targetId: targetId });
@@ -3425,6 +3541,11 @@ function engineAdvanceTurn(match, opts) {
         var sBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
         for (var di = 0; di < sBf.length; di++) { if (match.game.cardState[sBf[di]]) { match.game.cardState[sBf[di]].damage = 0; match.game.cardState[sBf[di]].damageSourceIds = []; } }
     }
+    // Clear temp buffs and check lethal
+    if (match.game.tempBuffs && match.game.tempBuffs.length) {
+        match.game.tempBuffs = [];
+        engineCheckLethalDamage(match);
+    }
     // Clear combat state
     match.game.combat = null;
     match.log.push({ t: Date.now(), type: "TURN_START", by: (opts || {}).by || "engine", turn: match.game.turn, seat: next });
@@ -3449,6 +3570,8 @@ function engineGetCreaturePower(match, seat, cardId) {
             if (auraSeat != null) base += engineParseAuraMods(match, auraSeat, auraId).power;
         }
     }
+    var buffs = match.game?.tempBuffs || [];
+    for (var bi = 0; bi < buffs.length; bi++) { if (buffs[bi].cardId === cardId) base += buffs[bi].power; }
     return base;
 }
 function engineGetCreatureToughness(match, seat, cardId) {
@@ -3460,6 +3583,8 @@ function engineGetCreatureToughness(match, seat, cardId) {
             if (auraSeat != null) base += engineParseAuraMods(match, auraSeat, auraId).toughness;
         }
     }
+    var buffs = match.game?.tempBuffs || [];
+    for (var bi = 0; bi < buffs.length; bi++) { if (buffs[bi].cardId === cardId) base += buffs[bi].toughness; }
     return base;
 }
 
@@ -3817,9 +3942,139 @@ function engineCardType(match, seat, cardId) {
 function engineIsSpell(match, seat, cardId) { var t = engineCardType(match, seat, cardId); return t === "instant" || t === "sorcery"; }
 function engineIsCreature(match, seat, cardId) { return engineCardType(match, seat, cardId) === "creature"; }
 
+function engineParseSpellEffects(oracleText) {
+    if (!oracleText) return [];
+    var effects = [];
+    var text = oracleText.toLowerCase();
+    // "deals N damage to ..."
+    var dmgRe = /deals\s+(\d+)\s+damage\s+to\s+(any target|target creature|target player|target opponent|each opponent)/gi;
+    var dm;
+    while ((dm = dmgRe.exec(oracleText)) !== null) {
+        var tType = dm[2].toLowerCase();
+        if (tType === 'target opponent') tType = 'target player';
+        effects.push({ type: 'damage', amount: parseInt(dm[1], 10), targetType: tType });
+    }
+    // "destroy target creature/permanent"
+    var destRe = /destroy\s+target\s+(creature|permanent)/gi;
+    var de;
+    while ((de = destRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'destroy', targetType: de[1].toLowerCase() });
+    }
+    // "draw N card(s)"
+    var drawRe = /draw\s+(\w+)\s+cards?/gi;
+    var dr;
+    var wordToNum = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
+    while ((dr = drawRe.exec(oracleText)) !== null) {
+        var n = parseInt(dr[1], 10);
+        if (isNaN(n)) n = wordToNum[dr[1].toLowerCase()] || 1;
+        effects.push({ type: 'draw', amount: n });
+    }
+    // "gain N life"
+    var lifeRe = /gain\s+(\d+)\s+life/gi;
+    var lr;
+    while ((lr = lifeRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'gainLife', amount: parseInt(lr[1], 10) });
+    }
+    // "target creature gets +N/+N until end of turn"
+    var buffRe = /target\s+creature\s+gets\s+([+-]\d+)\/([+-]\d+)\s+until\s+end\s+of\s+turn/gi;
+    var br;
+    while ((br = buffRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'tempBuff', power: parseInt(br[1], 10), toughness: parseInt(br[2], 10) });
+    }
+    return effects;
+}
+
+function engineEffectNeedsTarget(effects) {
+    for (var i = 0; i < effects.length; i++) {
+        var e = effects[i];
+        if (e.type === 'damage' && (e.targetType === 'target creature' || e.targetType === 'target player' || e.targetType === 'any target')) return true;
+        if (e.type === 'destroy') return true;
+        if (e.type === 'tempBuff') return true;
+    }
+    return false;
+}
+
+function engineApplyEffect(match, casterSeat, effect, targetId) {
+    if (effect.type === 'damage') {
+        if (effect.targetType === 'each opponent') {
+            var seats = engineSeatOrder(match);
+            for (var i = 0; i < seats.length; i++) {
+                if (seats[i] !== casterSeat) {
+                    if (match.game.lifeBySeat[seats[i]] != null) {
+                        match.game.lifeBySeat[seats[i]] = Math.max(0, match.game.lifeBySeat[seats[i]] - effect.amount);
+                        match.log.push({ t: Date.now(), type: "SPELL_DAMAGE", seat: seats[i], damage: effect.amount });
+                    }
+                }
+            }
+        } else if (targetId && typeof targetId === 'string' && targetId.indexOf('seat:') === 0) {
+            // Player target
+            var tSeat = Number(targetId.replace('seat:', ''));
+            if (match.game.lifeBySeat[tSeat] != null) {
+                match.game.lifeBySeat[tSeat] = Math.max(0, match.game.lifeBySeat[tSeat] - effect.amount);
+                match.log.push({ t: Date.now(), type: "SPELL_DAMAGE", seat: tSeat, damage: effect.amount });
+            }
+        } else if (targetId) {
+            // Creature target
+            var tSeat2 = engineFindSeatForCard(match, targetId);
+            if (tSeat2 != null) {
+                engineEnsureCardState(match, targetId);
+                match.game.cardState[targetId].damage = (Number(match.game.cardState[targetId].damage) || 0) + effect.amount;
+                match.game.cardState[targetId].damageSourceIds.push('spell');
+                match.log.push({ t: Date.now(), type: "SPELL_DAMAGE_CREATURE", target: targetId, damage: effect.amount });
+            }
+        }
+    } else if (effect.type === 'destroy') {
+        if (targetId) {
+            var dSeat = engineFindSeatForCard(match, targetId);
+            if (dSeat != null) {
+                if (engineHasKeyword(match, dSeat, targetId, "Indestructible")) {
+                    match.log.push({ t: Date.now(), type: "SPELL_BLOCKED", target: targetId, reason: "Indestructible" });
+                } else {
+                    engineMoveCard(match, dSeat, "battlefield", "graveyard", targetId);
+                    match.log.push({ t: Date.now(), type: "SPELL_DESTROY", target: targetId });
+                }
+            }
+        }
+    } else if (effect.type === 'draw') {
+        var drawRes = engineDrawCards(match, casterSeat, effect.amount);
+        match.log.push({ t: Date.now(), type: "SPELL_DRAW", seat: casterSeat, amount: effect.amount });
+        if (drawRes.deckOut) {
+            if (!match.game.losers) match.game.losers = [];
+            if (match.game.losers.indexOf(casterSeat) < 0) {
+                match.game.losers.push(casterSeat);
+                match.log.push({ t: Date.now(), type: "DECK_OUT", seat: casterSeat });
+                engineCheckGameOver(match);
+            }
+        }
+    } else if (effect.type === 'gainLife') {
+        if (match.game.lifeBySeat[casterSeat] != null) {
+            match.game.lifeBySeat[casterSeat] += effect.amount;
+            match.log.push({ t: Date.now(), type: "SPELL_GAIN_LIFE", seat: casterSeat, amount: effect.amount });
+        }
+    } else if (effect.type === 'tempBuff') {
+        if (targetId) {
+            if (!match.game.tempBuffs) match.game.tempBuffs = [];
+            match.game.tempBuffs.push({ cardId: targetId, power: effect.power, toughness: effect.toughness });
+            match.log.push({ t: Date.now(), type: "SPELL_BUFF", target: targetId, power: effect.power, toughness: effect.toughness });
+        }
+    }
+}
+
 function enginePlayCard(match, seat, cardId, targetId) {
     if (engineIsSpell(match, seat, cardId)) {
-        return engineMoveCard(match, seat, "hand", "graveyard", cardId);
+        var moveRes = engineMoveCard(match, seat, "hand", "graveyard", cardId);
+        if (moveRes.ok) {
+            var meta = (match.decks?.[seat]?.cardMeta || {})[cardId];
+            var effects = engineParseSpellEffects(meta?.oracleText);
+            for (var ei = 0; ei < effects.length; ei++) {
+                engineApplyEffect(match, seat, effects[ei], targetId);
+            }
+            if (effects.length) {
+                engineCheckLethalDamage(match);
+                engineCheckGameOver(match);
+            }
+        }
+        return moveRes;
     }
     var result = engineMoveCard(match, seat, "hand", "battlefield", cardId);
     if (result.ok && engineIsCreature(match, seat, cardId)) {
@@ -3880,11 +4135,75 @@ function engineBotTakeTurn(match, botPlayer) {
         return bestTarget;
     };
 
+    var botPickSpellTarget = function(cardId) {
+        var meta = engineBotCardMeta(match, seat, cardId);
+        var effects = engineParseSpellEffects(meta?.oracleText);
+        if (!engineEffectNeedsTarget(effects)) return null; // no target needed
+        var allSeats = engineSeatOrder(match);
+        for (var ei = 0; ei < effects.length; ei++) {
+            var eff = effects[ei];
+            if (eff.type === 'damage' && (eff.targetType === 'target creature' || eff.targetType === 'any target')) {
+                // Pick weakest opponent creature that would die from this damage
+                var bestTarget = null; var bestTough = 999;
+                for (var si = 0; si < allSeats.length; si++) {
+                    if (allSeats[si] === seat) continue;
+                    var oBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
+                    for (var ci = 0; ci < oBf.length; ci++) {
+                        if (!engineIsCreature(match, allSeats[si], oBf[ci])) continue;
+                        if (engineHasKeyword(match, allSeats[si], oBf[ci], "Hexproof")) continue;
+                        var t = engineGetCreatureToughness(match, allSeats[si], oBf[ci]);
+                        var existDmg = Number(match.game.cardState?.[oBf[ci]]?.damage) || 0;
+                        if (eff.amount + existDmg >= t && t < bestTough) { bestTarget = oBf[ci]; bestTough = t; }
+                    }
+                }
+                if (bestTarget) return bestTarget;
+                if (eff.targetType === 'any target') return 'seat:' + allSeats.find(function(s) { return s !== seat; });
+            }
+            if (eff.type === 'damage' && eff.targetType === 'target player') {
+                return 'seat:' + allSeats.find(function(s) { return s !== seat; });
+            }
+            if (eff.type === 'destroy') {
+                // Pick strongest opponent creature
+                var bestDest = null; var bestPow = -1;
+                for (var si2 = 0; si2 < allSeats.length; si2++) {
+                    if (allSeats[si2] === seat) continue;
+                    var oBf2 = match.game.zones?.[allSeats[si2]]?.battlefield || [];
+                    for (var ci2 = 0; ci2 < oBf2.length; ci2++) {
+                        if (!engineIsCreature(match, allSeats[si2], oBf2[ci2])) continue;
+                        if (engineHasKeyword(match, allSeats[si2], oBf2[ci2], "Hexproof")) continue;
+                        if (engineHasKeyword(match, allSeats[si2], oBf2[ci2], "Indestructible")) continue;
+                        var p = engineGetCreaturePower(match, allSeats[si2], oBf2[ci2]);
+                        if (p > bestPow) { bestPow = p; bestDest = oBf2[ci2]; }
+                    }
+                }
+                return bestDest;
+            }
+            if (eff.type === 'tempBuff') {
+                // Pick own strongest creature
+                var ownBf = match.game.zones?.[seat]?.battlefield || [];
+                var bestBuff = null; var bestBp = -1;
+                for (var bi = 0; bi < ownBf.length; bi++) {
+                    if (!engineIsCreature(match, seat, ownBf[bi])) continue;
+                    var bp = engineGetCreaturePower(match, seat, ownBf[bi]);
+                    if (bp > bestBp) { bestBp = bp; bestBuff = ownBf[bi]; }
+                }
+                return bestBuff;
+            }
+        }
+        return null;
+    };
+
     var botPlayCard = function(cardId) {
         if (engineIsAura(match, seat, cardId)) {
             var target = botAuraTarget(cardId);
-            if (!target) return false; // skip — no valid targets
+            if (!target) return false;
             enginePlayCard(match, seat, cardId, target);
+        } else if (engineIsSpell(match, seat, cardId)) {
+            var spellTarget = botPickSpellTarget(cardId);
+            var meta = engineBotCardMeta(match, seat, cardId);
+            var effects = engineParseSpellEffects(meta?.oracleText);
+            if (engineEffectNeedsTarget(effects) && !spellTarget) return false; // no valid target
+            enginePlayCard(match, seat, cardId, spellTarget);
         } else {
             enginePlayCard(match, seat, cardId);
         }
