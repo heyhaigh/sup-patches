@@ -604,6 +604,12 @@ function getClientHtml() {
     lastLogIndex: 0,
   };
 
+  /* Tab buttons work immediately via event delegation — no boot() needed */
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tabBtn');
+    if (btn && btn.dataset.tab) switchTab(btn.dataset.tab);
+  });
+
   function toast(msg, opts) {
     const options = opts || {};
     const type = options.type || 'info';
@@ -2492,13 +2498,12 @@ function getClientHtml() {
   async function boot() {
     if (state.booted || state.booting) return;
     state.booting = true;
-    bindEvents();
     setStatus('Waiting for Sup context\u2026');
     try {
       const boot = await supExec('api_boot');
       state.user = boot.user;
       $('#userLabel').textContent = '@' + boot.user.username;
-      initDevPanel(); switchTab('play'); await loadDecks();
+      bindEvents(); initDevPanel(); switchTab('play'); await loadDecks();
       if (!state.decks.length) { toast('No decks yet \u2014 use Deck Builder \u2192 Quick start to create one fast.', { type: 'info', ms: 5000 }); switchTab('builder'); }
       setStatus('Ready.'); setTimeout(() => setStatus(''), 1000);
       state.booted = true; state.booting = false;
