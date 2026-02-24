@@ -159,6 +159,7 @@ function getClientHtml() {
     .appRoot.matchActive #tab-play > .row:first-child { display:none; }
     .appRoot.matchActive #tab-play > .grid2 { display:none; }
     .appRoot.matchActive #tab-play > .card:last-child { display:none; }
+    .appRoot.matchActive #lobbyPanel { display:none !important; }
     /* Game board - Arena-style vertical split */
     .gameBoard { display:flex; flex-direction:column; height:calc(100vh - 52px); min-height:480px; background:linear-gradient(180deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #1a1a2e 100%); border-radius:var(--radius); overflow:hidden; position:relative; contain:layout style; }
     .gameBoardInner { display:flex; flex-direction:column; flex:1; min-height:0; }
@@ -1537,6 +1538,7 @@ function getClientHtml() {
     var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: cardId, targetId: targetId } });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     await refreshMatch();
+    setSelected(null);
   }
 
   function cancelTargeting() {
@@ -2042,6 +2044,7 @@ function getClientHtml() {
         });
         const cmc = Number(cardMeta(id)?.cmc) || 0;
         if (cmc > myMana.current) img.classList.add('unplayable');
+        if (clientCardType(id) === 'land' && (match.game?.landsPlayedThisTurn || 0) >= 1) img.classList.add('unplayable');
         handTray.appendChild(img);
       }
     }
@@ -2202,6 +2205,9 @@ function getClientHtml() {
       const botPlays = log.filter(e => e.type === 'BOT_PLAY' && e.t > Date.now() - 5000);
       if (botPlays.length) toast('Bot played ' + botPlays.length + ' card' + (botPlays.length > 1 ? 's' : '') + '.', { type: 'info', ms: 2000 });
       else { const botPass = log.find(e => e.type === 'BOT_PASS' && e.t > Date.now() - 5000); if (botPass) toast('Bot passed.', { type: 'info', ms: 1500 }); }
+      if (state.lastMatch?.game?.status !== 'finished') {
+        toast('Your turn \u2014 Turn ' + (state.lastMatch?.game?.turn || '?'), { type: 'info', ms: 1500 });
+      }
     }
   }
 
@@ -2626,6 +2632,7 @@ function getClientHtml() {
   async function playSelectedToBattlefield() {
     const sel = state.selected; if (!state.activeMatchId || !sel?.id) return;
     if (!(sel.zone === 'hand' && sel.seat === state.lastMatch?.viewerSeat)) { toast('Select a card in your hand to play.', { type: 'warn' }); return; }
+    if (clientCardType(sel.id) === 'land' && (state.lastMatch?.game?.landsPlayedThisTurn || 0) >= 1) { toast('You can only play 1 land per turn.', { type: 'warn' }); return; }
     // Aura: enter targeting mode instead of playing directly
     if (clientIsAura(sel.id)) {
       enterTargetingMode(sel.id);
@@ -2646,6 +2653,7 @@ function getClientHtml() {
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     if (isSpell) showSpellCastAnimation(sel.id);
     await refreshMatch();
+    setSelected(null);
   }
 
   async function moveSelectedToGraveyard() {
@@ -2654,6 +2662,7 @@ function getClientHtml() {
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'MOVE_BATTLEFIELD_TO_GRAVEYARD', cardId: sel.id } });
     if (!res.ok) { toast('Move failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     await refreshMatch();
+    setSelected(null);
   }
 
   function bindEvents() {
@@ -3216,6 +3225,7 @@ function engineApplyAction(match, user, action) {
             match.game.commanderDamage = {};
             for (var cdp = 0; cdp < match.players.length; cdp++) { match.game.commanderDamage[match.players[cdp].seat] = {}; }
         }
+        match.game.landsPlayedThisTurn = 0;
         match.phase = "mulligan"; match.game.turn = 1; match.game.step = "mulligan";
         match.log.push({ t: Date.now(), type: "GAME_START", by: user.username });
         return { ok: true, match };
@@ -3270,6 +3280,8 @@ function engineApplyAction(match, user, action) {
         const cmc = Number(deckMeta[cardId]?.cmc) || 0;
         const mana = match.game.manaBySeat?.[seat] || { current: 0, max: 0 };
         if (cmc > mana.current) return { ok: false, error: "not enough mana (" + cmc + " needed, " + mana.current + " available)" };
+        var isLand = engineCardType(match, seat, cardId) === "land";
+        if (isLand && (match.game.landsPlayedThisTurn || 0) >= 1) return { ok: false, error: "you can only play 1 land per turn" };
         var isSpell = engineIsSpell(match, seat, cardId);
         var targetId = action.targetId || null;
         // Aura targeting validation
@@ -3307,6 +3319,7 @@ function engineApplyAction(match, user, action) {
             }
         }
         const ok = enginePlayCard(match, seat, cardId, targetId); if (!ok.ok) return ok;
+        if (isLand) match.game.landsPlayedThisTurn = (match.game.landsPlayedThisTurn || 0) + 1;
         mana.current = Math.max(0, mana.current - cmc);
         if (!match.game.stats) match.game.stats = {};
         if (!match.game.stats[seat]) match.game.stats[seat] = { damageDealt: 0, creaturesKilled: 0 };
@@ -3605,6 +3618,7 @@ function engineAdvanceTurn(match, opts) {
     mana.max = Math.min(10, mana.max + 1);
     mana.current = mana.max;
     match.game.manaBySeat[next] = mana;
+    match.game.landsPlayedThisTurn = 0;
     engineEnsureZones(match, next); var drawResult = engineDrawCards(match, next, 1);
     if (drawResult.deckOut) {
         if (!match.game.losers) match.game.losers = [];
@@ -4305,11 +4319,15 @@ function engineBotTakeTurn(match, botPlayer) {
         return true;
     };
 
+    var botIsLand = function(id) { return engineCardType(match, seat, id) === "land"; };
+
     if (diff === "easy") {
         // Easy: play 1 random affordable card
         const idx = sup.random.integer(0, affordable.length - 1);
         const cardId = affordable[idx];
-        if (botPlayCard(cardId)) {
+        if (botIsLand(cardId) && (match.game.landsPlayedThisTurn || 0) >= 1) { /* skip */ }
+        else if (botPlayCard(cardId)) {
+            if (botIsLand(cardId)) match.game.landsPlayedThisTurn = (match.game.landsPlayedThisTurn || 0) + 1;
             mana.current = Math.max(0, mana.current - getCmc(cardId));
             played.push(cardId);
         }
@@ -4318,7 +4336,9 @@ function engineBotTakeTurn(match, botPlayer) {
         const sorted = affordable.slice().sort((a, b) => getCmc(a) - getCmc(b));
         for (const cardId of sorted) {
             if (getCmc(cardId) > mana.current) continue;
+            if (botIsLand(cardId) && (match.game.landsPlayedThisTurn || 0) >= 1) continue;
             if (botPlayCard(cardId)) {
+                if (botIsLand(cardId)) match.game.landsPlayedThisTurn = (match.game.landsPlayedThisTurn || 0) + 1;
                 mana.current = Math.max(0, mana.current - getCmc(cardId));
                 played.push(cardId);
             }
@@ -4329,7 +4349,9 @@ function engineBotTakeTurn(match, botPlayer) {
         for (const cardId of sorted) {
             if (getCmc(cardId) > mana.current) continue;
             if (bf.length + played.length >= 6) break;
+            if (botIsLand(cardId) && (match.game.landsPlayedThisTurn || 0) >= 1) continue;
             if (botPlayCard(cardId)) {
+                if (botIsLand(cardId)) match.game.landsPlayedThisTurn = (match.game.landsPlayedThisTurn || 0) + 1;
                 mana.current = Math.max(0, mana.current - getCmc(cardId));
                 played.push(cardId);
             }
