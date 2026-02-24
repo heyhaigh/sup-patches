@@ -101,3 +101,35 @@ Below is a concrete, "do-this-next" list, organized by priority. It's written to
 - **Hidden zones remain private** — `getMatchViewForUser()` replaces non-viewer hand/library with `{ count: N }`, no card data leaked
 - **Compact multiplayer opponent panels** — `.oppSide.multi` renders opponents side-by-side with smaller cards (52×72) when 3+ opponents. Stacks vertically on mobile.
 - **Active-player highlight** — `.seatPanel.active` gold border + subtle background on the active player's board panel, transitions smoothly on turn change
+
+---
+
+## P4 — Gameplay: Mana + Combat + Win/Loss 🔜
+
+> Full plan: [`GAMEPLAY_PLAN.md`](./GAMEPLAY_PLAN.md)
+
+### Phase 1: The Game Exists
+
+Turn the card viewer into an actual game. Three pillars:
+
+- **Mana system** — Hearthstone-style auto-increment (no lands, CMC-based, cap at 10). Standard deck size → 30 cards, Commander → 60.
+- **Combat system** — Declare attackers → declare blockers → damage resolution. Creatures tap on attack, have summoning sickness, die when damage >= toughness.
+- **Life totals + win/loss** — Standard 20 / Commander 40. Unblocked attackers deal damage. Life reaches 0 = loss. Concede option. Deck-out loss.
+- **Card type differentiation** — Creatures have P/T + combat. Instants/sorceries resolve and go to GY. Enchantments/artifacts persist.
+- **Turn phases** — Begin → Main 1 → Combat → Main 2 → End. Phase indicator in turn bar.
+- **Bot combat AI** — Easy/Medium/Hard attack and block heuristics.
+
+### Phase 2: The Game Is Strategic
+
+- 13 keyword abilities (Flying, First Strike, Trample, Deathtouch, Lifelink, Haste, Vigilance, Reach, Double Strike, Menace, Defender, Indestructible, Hexproof)
+- Aura attachment (enchantments that attach to creatures with +N/+N)
+- Basic targeting system for spells
+- Combat AI improvements (keyword awareness)
+- Visual polish (damage numbers, death animations, spell overlays)
+
+### Phase 3: The Game Is Polished
+
+- Multiple blockers, commander damage tracking
+- Simple parseable oracle text effects (damage, destroy, draw, life gain)
+- Mobile UX polish, undo, context menus
+- Game over experience with stats
