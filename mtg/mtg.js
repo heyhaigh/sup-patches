@@ -219,6 +219,14 @@ function getClientHtml() {
     .kwPillUnsupported { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.45); border-color:rgba(255,255,255,0.1); }
     .cardModalKeywords { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
     .cardModalWarn { margin-top:10px; padding:8px 12px; border-radius:8px; font-size:12px; color:#f59e0b; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); }
+    .cardModalAuras { margin-top:10px; font-size:12px; color:var(--muted); }
+    .cardModalAuras strong { color:var(--text); font-weight:700; }
+    .cardWrap.canTarget { box-shadow:0 0 8px 2px rgba(168,85,247,0.5); border-radius:12px; cursor:pointer; }
+    .cardWrap.targetSelected { box-shadow:0 0 10px 3px rgba(168,85,247,0.7); border-radius:12px; transform:translateY(-6px); }
+    .cardWrap.targetIneligible .cardImg { opacity:0.35; filter:saturate(0.2); }
+    .targetBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; }
+    .auraBadge { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(168,85,247,0.85); color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.2); }
+    .ptBuffed { color:#22c55e; }
     .phaseBar { display:flex; gap:4px; align-items:center; }
     .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.06); }
     .phasePill.active { background:rgba(251,191,36,0.18); color:#fbbf24; border-color:rgba(251,191,36,0.35); }
@@ -291,6 +299,7 @@ function getClientHtml() {
       <div id="cardModalOracle" class="cardModalOracle"></div>
       <div id="cardModalKeywords" class="cardModalKeywords"></div>
       <div id="cardModalWarn" class="cardModalWarn" style="display:none;"></div>
+      <div id="cardModalAuras" class="cardModalAuras" style="display:none;"></div>
       <div id="cardModalZone" class="cardModalZone small"></div>
     </div>
   </div>
@@ -588,6 +597,7 @@ function getClientHtml() {
     activeMatchId: null, lastMatch: null, lastSearchResults: [], booting: false, booted: false,
     cardIndex: {}, selected: { id: null, zone: null, seat: null }, qsCommanderChosen: null,
     combatMode: null, pendingAttackers: {}, pendingBlockers: {}, selectedBlocker: null,
+    targetingMode: null,
   };
 
   function toast(msg, opts) {
@@ -1011,7 +1021,7 @@ function getClientHtml() {
     const id = card.id;
     const cur = Number(state.activeDeck.cards[id] || 0);
     state.activeDeck.cards[id] = cur + 1;
-    state.activeDeck.cardMeta[id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
+    state.activeDeck.cardMeta[id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null, keywords: Array.isArray(card.keywords) ? card.keywords : [], oracleText: card.oracleText || '' };
     updateDeckBuilderUI();
   }
 
@@ -1036,7 +1046,7 @@ function getClientHtml() {
     }
     state.activeDeck.commander = card.id; state.activeDeck.commanderName = card.name;
     state.activeDeck.cards[card.id] = 1;
-    state.activeDeck.cardMeta[card.id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
+    state.activeDeck.cardMeta[card.id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null, keywords: Array.isArray(card.keywords) ? card.keywords : [], oracleText: card.oracleText || '' };
     updateDeckBuilderUI();
   }
 
@@ -1354,6 +1364,36 @@ function getClientHtml() {
         warnEl.style.display = '';
       }
     }
+    // Aura info
+    var auraInfoEl = $('#cardModalAuras');
+    auraInfoEl.innerHTML = ''; auraInfoEl.style.display = 'none';
+    var match = state.lastMatch;
+    if (match && zone === 'battlefield') {
+      var auraAtch = match?.game?.auraAttachments || {};
+      // If inspecting a creature, show auras attached to it
+      if (clientCardType(cardId) === 'creature') {
+        var attachedAuras = [];
+        for (var auraId in auraAtch) { if (auraAtch[auraId] === cardId) attachedAuras.push(auraId); }
+        if (attachedAuras.length) {
+          var auraHtml = '<strong>Enchanted by:</strong> ';
+          for (var ai = 0; ai < attachedAuras.length; ai++) {
+            var aMeta = cardMeta(attachedAuras[ai]);
+            var aMods = clientParseAuraMods(attachedAuras[ai]);
+            var modStr = '';
+            if (aMods.power !== 0 || aMods.toughness !== 0) modStr = ' (' + (aMods.power >= 0 ? '+' : '') + aMods.power + '/' + (aMods.toughness >= 0 ? '+' : '') + aMods.toughness + ')';
+            if (ai > 0) auraHtml += ', ';
+            auraHtml += escapeHtml(aMeta?.name || attachedAuras[ai]) + modStr;
+          }
+          auraInfoEl.innerHTML = auraHtml; auraInfoEl.style.display = '';
+        }
+      }
+      // If inspecting an aura, show what it's attached to
+      if (clientIsAura(cardId) && auraAtch[cardId]) {
+        var tgtMeta = cardMeta(auraAtch[cardId]);
+        auraInfoEl.innerHTML = '<strong>Attached to:</strong> ' + escapeHtml(tgtMeta?.name || auraAtch[cardId]);
+        auraInfoEl.style.display = '';
+      }
+    }
     $('#cardModalZone').textContent = zone ? ('Zone: ' + zone) : '';
     $('#cardModal').style.display = '';
   }
@@ -1388,6 +1428,90 @@ function getClientHtml() {
     if (clientHasKeyword(attackerId, 'Flying') && !clientHasKeyword(blockerId, 'Flying') && !clientHasKeyword(blockerId, 'Reach')) return false;
     if (clientHasKeyword(attackerId, 'Menace')) return false;
     return true;
+  }
+
+  function clientIsAura(id) {
+    var tl = String(cardMeta(id)?.typeLine || '').toLowerCase();
+    return tl.includes('enchantment') && tl.includes('aura');
+  }
+
+  function clientParseAuraMods(id) {
+    var c = cardMeta(id);
+    var oracle = String(c?.oracleText || '');
+    var pw = 0; var tw = 0;
+    var re = /([+-]\d+)\/([+-]\d+)/g;
+    var m;
+    while ((m = re.exec(oracle)) !== null) { pw += parseInt(m[1], 10); tw += parseInt(m[2], 10); }
+    return { power: pw, toughness: tw };
+  }
+
+  function clientGetAurasOnCreature(creatureId, match) {
+    var auras = match?.game?.auraAttachments || {};
+    var result = [];
+    for (var auraId in auras) { if (auras[auraId] === creatureId) result.push(auraId); }
+    return result;
+  }
+
+  function clientGetAuraBuffs(creatureId, match) {
+    var auraIds = clientGetAurasOnCreature(creatureId, match);
+    var pw = 0; var tw = 0;
+    for (var i = 0; i < auraIds.length; i++) {
+      var mods = clientParseAuraMods(auraIds[i]);
+      pw += mods.power; tw += mods.toughness;
+    }
+    return { power: pw, toughness: tw, count: auraIds.length };
+  }
+
+  function getTargetableCreatures(match, casterSeat) {
+    var targets = [];
+    var seats = (match.players || []).map(function(p) { return p.seat; });
+    for (var si = 0; si < seats.length; si++) {
+      var s = seats[si];
+      var bf = match?.game?.zones?.[s]?.battlefield || [];
+      for (var ci = 0; ci < bf.length; ci++) {
+        var cid = bf[ci];
+        if (clientCardType(cid) !== 'creature') continue;
+        // Hexproof: opponent's Hexproof creatures can't be targeted
+        if (s !== casterSeat && clientHasKeyword(cid, 'Hexproof')) continue;
+        targets.push(cid);
+      }
+    }
+    return targets;
+  }
+
+  function enterTargetingMode(cardId) {
+    var match = state.lastMatch;
+    if (!match) return;
+    var mySeat = match.viewerSeat;
+    var targets = getTargetableCreatures(match, mySeat);
+    if (!targets.length) {
+      toast('No valid creature targets on the battlefield.', { type: 'warn', ms: 2000 });
+      return;
+    }
+    state.targetingMode = { cardId: cardId, validTargets: targets, selectedTarget: null };
+    renderGame(match);
+  }
+
+  function handleTargetClick(cardId) {
+    if (!state.targetingMode) return;
+    if (state.targetingMode.validTargets.indexOf(cardId) < 0) return;
+    state.targetingMode.selectedTarget = cardId;
+    renderGame(state.lastMatch);
+  }
+
+  async function confirmTarget() {
+    if (!state.targetingMode || !state.targetingMode.selectedTarget) return;
+    var cardId = state.targetingMode.cardId;
+    var targetId = state.targetingMode.selectedTarget;
+    state.targetingMode = null;
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: cardId, targetId: targetId } });
+    if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    await refreshMatch();
+  }
+
+  function cancelTargeting() {
+    state.targetingMode = null;
+    renderGame(state.lastMatch);
   }
 
   function getCombatEligibleAttackers(match) {
@@ -1490,17 +1614,34 @@ function getClientHtml() {
         addIcons(kwTR, 'kwIcons-tr');
         addIcons(kwBL, 'kwIcons-bl');
       }
+      // Aura badge + green P/T
+      var auraBuffs = options.match ? clientGetAuraBuffs(id, options.match) : { power: 0, toughness: 0, count: 0 };
+      if (auraBuffs.count > 0) {
+        var abadge = document.createElement('div');
+        abadge.className = 'auraBadge';
+        abadge.textContent = '\u2728' + auraBuffs.count;
+        wrap.appendChild(abadge);
+      }
       wrap.appendChild(img);
       var badge = document.createElement('div');
       badge.className = 'ptBadge';
-      var pw = c?.power != null ? String(c.power) : '?';
-      var tw = c?.toughness != null ? String(c.toughness) : '?';
+      var basePw = Number(c?.power) || 0;
+      var baseTw = Number(c?.toughness) || 0;
+      var buffedPw = basePw + auraBuffs.power;
+      var buffedTw = baseTw + auraBuffs.toughness;
+      var isBuffed = auraBuffs.power !== 0 || auraBuffs.toughness !== 0;
       var dmg = cs ? (Number(cs.damage) || 0) : 0;
       if (dmg > 0) {
-        var remaining = (Number(tw) || 0) - dmg;
-        badge.innerHTML = escapeHtml(pw) + '/<span class="ptDamaged">' + remaining + '</span>';
+        var remaining = buffedTw - dmg;
+        if (isBuffed) {
+          badge.innerHTML = '<span class="ptBuffed">' + buffedPw + '</span>/<span class="ptDamaged">' + remaining + '</span>';
+        } else {
+          badge.innerHTML = escapeHtml(String(buffedPw)) + '/<span class="ptDamaged">' + remaining + '</span>';
+        }
+      } else if (isBuffed) {
+        badge.innerHTML = '<span class="ptBuffed">' + buffedPw + '</span>/<span class="ptBuffed">' + buffedTw + '</span>';
       } else {
-        badge.textContent = pw + '/' + tw;
+        badge.textContent = buffedPw + '/' + buffedTw;
       }
       wrap.appendChild(badge);
       // Forward click/dblclick to wrapper level too
@@ -1565,18 +1706,38 @@ function getClientHtml() {
     bfArea.className = 'bfArea';
     // Determine which cards are attacking (from combat state or pending)
     var combatAttackers = match?.game?.combat?.attackers || {};
-    if (bf.length) {
-      for (const id of bf) {
+    // Filter out attached auras — they render as badges on their target creature
+    var auraAttachments = match?.game?.auraAttachments || {};
+    var visibleBf = bf.filter(function(id) { return !auraAttachments[id]; });
+    if (visibleBf.length) {
+      for (var bfi = 0; bfi < visibleBf.length; bfi++) {
+        var id = visibleBf[bfi];
         var cs = match?.game?.cardState?.[id] || null;
         var isAtk = !!combatAttackers[id] || !!state.pendingAttackers[id];
-        var cardEl = renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer, cardState: cs, isAttacking: isAtk });
+        var cardEl = renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer, cardState: cs, isAttacking: isAtk, match: match });
         bfArea.appendChild(cardEl);
       }
     } else {
       bfArea.innerHTML = '<div class="emptyZone">No permanents</div>';
     }
+    // Apply targeting mode CSS classes
+    if (state.targetingMode && visibleBf.length) {
+      var tgtCardEls = bfArea.querySelectorAll('.cardWrap');
+      for (var tci = 0; tci < tgtCardEls.length; tci++) {
+        var tWrap = tgtCardEls[tci];
+        var tCid = tWrap.dataset.cardId;
+        if (!tCid) continue;
+        if (state.targetingMode.validTargets.indexOf(tCid) >= 0) {
+          tWrap.classList.add('canTarget');
+          if (state.targetingMode.selectedTarget === tCid) tWrap.classList.add('targetSelected');
+          (function(capturedId) { tWrap.onclick = function() { handleTargetClick(capturedId); }; })(tCid);
+        } else if (clientCardType(tCid) === 'creature') {
+          tWrap.classList.add('targetIneligible');
+        }
+      }
+    }
     // Apply combat CSS classes after creating elements
-    if (state.combatMode && bf.length) {
+    if (state.combatMode && visibleBf.length) {
       var eligibleAtk = isViewer ? getCombatEligibleAttackers(match) : [];
       var eligibleBlk = isViewer ? getCombatEligibleBlockers(match) : [];
       var cardEls = bfArea.querySelectorAll('.cardWrap');
@@ -1730,6 +1891,8 @@ function getClientHtml() {
       state.pendingBlockers = {};
       state.selectedBlocker = null;
     }
+    // Clear targeting mode if not in a main phase
+    if (step !== 'main1' && step !== 'main2') { state.targetingMode = null; }
 
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const oppSeats = seats.filter(s => s !== mySeat);
@@ -1742,6 +1905,26 @@ function getClientHtml() {
     }
 
     renderTurnBar(match);
+
+    // Targeting banner
+    var existingTB = document.querySelector('#gameBoard .targetBanner');
+    if (existingTB) existingTB.remove();
+    if (state.targetingMode) {
+      var tName = cardMeta(state.targetingMode.cardId)?.name || 'Aura';
+      var tbDiv = document.createElement('div');
+      tbDiv.className = 'targetBanner';
+      tbDiv.innerHTML = '\uD83C\uDFAF Choose a target for <strong>' + escapeHtml(tName) + '</strong>'
+        + '<button id="btnTargetConfirm" class="btn btnPrimary" style="margin-left:8px;padding:4px 12px;font-size:12px;"' + (state.targetingMode.selectedTarget ? '' : ' disabled') + '>Confirm</button>'
+        + '<button id="btnTargetCancel" class="btn" style="padding:4px 12px;font-size:12px;">Cancel</button>';
+      var turnBarEl = document.getElementById('turnBar');
+      if (turnBarEl && turnBarEl.parentNode) turnBarEl.parentNode.insertBefore(tbDiv, turnBarEl.nextSibling);
+      setTimeout(function() {
+        var cb = document.getElementById('btnTargetConfirm');
+        var cc = document.getElementById('btnTargetCancel');
+        if (cb) cb.onclick = function() { confirmTarget(); };
+        if (cc) cc.onclick = function() { cancelTargeting(); };
+      }, 0);
+    }
 
     const myEl = $('#mySide'); myEl.innerHTML = '';
     myEl.appendChild(renderBoardSeat(match, mySeat, true));
@@ -2116,6 +2299,11 @@ function getClientHtml() {
   async function playSelectedToBattlefield() {
     const sel = state.selected; if (!state.activeMatchId || !sel?.id) return;
     if (!(sel.zone === 'hand' && sel.seat === state.lastMatch?.viewerSeat)) { toast('Select a card in your hand to play.', { type: 'warn' }); return; }
+    // Aura: enter targeting mode instead of playing directly
+    if (clientIsAura(sel.id)) {
+      enterTargetingMode(sel.id);
+      return;
+    }
     var isSpell = (clientCardType(sel.id) === 'instant' || clientCardType(sel.id) === 'sorcery');
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: sel.id } });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
@@ -2444,7 +2632,7 @@ function buildQuickstartStandardDeck(color) {
         const card = picks[i];
         // First 6 picks get 4 copies, last 2 get 3 copies = 24 + 6 = 30
         cards[card.id] = i < 6 ? 4 : 3;
-        cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
+        cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [], oracleText: card.oracle_text || '' };
     }
     const total = Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0);
     // Fill to 30 if short using extra low-CMC cards at 4 copies
@@ -2453,7 +2641,7 @@ function buildQuickstartStandardDeck(color) {
         for (const card of low) {
             if (used.has(card.id)) continue;
             cards[card.id] = Math.min(4, 30 - Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0));
-            cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
+            cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [], oracleText: card.oracle_text || '' };
             if (Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0) >= 30) break;
         }
     }
@@ -2506,7 +2694,7 @@ function buildQuickstartCommanderDeck(commanderCard) {
 
     // Target 60 cards (no lands): commander (1) + 59 spells. ~8 ramp, ~8 draw, ~4 removal, ~39 other
     const cards = {}; const cardMeta = {};
-    cards[cmd.id] = 1; cardMeta[cmd.id] = { name: cmd.name, typeLine: cmd.type_line || '', cmc: Number(cmd.cmc) || 0, power: cmd.power != null ? String(cmd.power) : null, toughness: cmd.toughness != null ? String(cmd.toughness) : null, keywords: Array.isArray(cmd.keywords) ? cmd.keywords : [] };
+    cards[cmd.id] = 1; cardMeta[cmd.id] = { name: cmd.name, typeLine: cmd.type_line || '', cmc: Number(cmd.cmc) || 0, power: cmd.power != null ? String(cmd.power) : null, toughness: cmd.toughness != null ? String(cmd.toughness) : null, keywords: Array.isArray(cmd.keywords) ? cmd.keywords : [], oracleText: cmd.oracle_text || '' };
     const used = new Set([cmd.id]);
     const targets = { ramp: 8, draw: 8, removal: 4, other: 39 };
     const chosen = [];
@@ -2528,7 +2716,7 @@ function buildQuickstartCommanderDeck(commanderCard) {
         }
     }
     if (chosen.length < 30) throw new Error('Not enough Commander cards found for this commander color identity.');
-    for (const c of chosen) { cards[c.id] = 1; cardMeta[c.id] = { name: c.name, typeLine: c.type_line || '', cmc: Number(c.cmc) || 0, power: c.power != null ? String(c.power) : null, toughness: c.toughness != null ? String(c.toughness) : null, keywords: Array.isArray(c.keywords) ? c.keywords : [] }; }
+    for (const c of chosen) { cards[c.id] = 1; cardMeta[c.id] = { name: c.name, typeLine: c.type_line || '', cmc: Number(c.cmc) || 0, power: c.power != null ? String(c.power) : null, toughness: c.toughness != null ? String(c.toughness) : null, keywords: Array.isArray(c.keywords) ? c.keywords : [], oracleText: c.oracle_text || '' }; }
     return { name: 'Quickstart \u2014 ' + cmd.name, format: 'commander', cards, cardMeta, commander: cmd.id, commanderName: cmd.name };
 }
 
@@ -2736,9 +2924,22 @@ function engineApplyAction(match, user, action) {
         const mana = match.game.manaBySeat?.[seat] || { current: 0, max: 0 };
         if (cmc > mana.current) return { ok: false, error: "not enough mana (" + cmc + " needed, " + mana.current + " available)" };
         var isSpell = engineIsSpell(match, seat, cardId);
-        const ok = enginePlayCard(match, seat, cardId); if (!ok.ok) return ok;
+        var targetId = action.targetId || null;
+        // Aura targeting validation
+        if (engineIsAura(match, seat, cardId)) {
+            if (!targetId) return { ok: false, error: "aura requires a target creature" };
+            var targetFound = false; var targetSeat = null;
+            var allSeats = engineSeatOrder(match);
+            for (var asi = 0; asi < allSeats.length; asi++) {
+                var abf = match.game.zones?.[allSeats[asi]]?.battlefield || [];
+                if (abf.indexOf(targetId) >= 0 && engineIsCreature(match, allSeats[asi], targetId)) { targetFound = true; targetSeat = allSeats[asi]; break; }
+            }
+            if (!targetFound) return { ok: false, error: "target must be a creature on the battlefield" };
+            if (targetSeat !== seat && engineHasKeyword(match, targetSeat, targetId, "Hexproof")) return { ok: false, error: "cannot target a creature with Hexproof" };
+        }
+        const ok = enginePlayCard(match, seat, cardId, targetId); if (!ok.ok) return ok;
         mana.current = Math.max(0, mana.current - cmc);
-        match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId });
+        match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId, targetId: targetId });
         return { ok: true, match };
     }
 
@@ -2970,6 +3171,24 @@ function engineMoveCard(match, seat, fromZone, toZone, cardId) {
     const idx = from.indexOf(cardId); if (idx < 0) return { ok: false, error: `card not in ${fromZone}` };
     from.splice(idx, 1); to.push(cardId);
     if (fromZone === "battlefield" && match.game.cardState?.[cardId]) { delete match.game.cardState[cardId]; }
+    // Aura cleanup when card leaves battlefield
+    if (fromZone === "battlefield" && match.game.auraAttachments) {
+        // If this card is an aura, remove its attachment entry
+        if (match.game.auraAttachments[cardId]) { delete match.game.auraAttachments[cardId]; }
+        // If this card is a creature, detach all auras and move them to their owner's GY
+        var aurasToDetach = [];
+        for (var auraId in match.game.auraAttachments) {
+            if (match.game.auraAttachments[auraId] === cardId) aurasToDetach.push(auraId);
+        }
+        for (var adi = 0; adi < aurasToDetach.length; adi++) {
+            var detachedAuraId = aurasToDetach[adi];
+            delete match.game.auraAttachments[detachedAuraId];
+            var auraSeat = engineFindSeatForCard(match, detachedAuraId);
+            if (auraSeat != null) {
+                engineMoveCard(match, auraSeat, "battlefield", "graveyard", detachedAuraId);
+            }
+        }
+    }
     return { ok: true };
 }
 
@@ -3029,10 +3248,26 @@ function engineRunBotsIfActive(match) {
 }
 
 function engineGetCreaturePower(match, seat, cardId) {
-    return Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.power) || 0;
+    var base = Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.power) || 0;
+    var auras = match.game?.auraAttachments || {};
+    for (var auraId in auras) {
+        if (auras[auraId] === cardId) {
+            var auraSeat = engineFindSeatForCard(match, auraId);
+            if (auraSeat != null) base += engineParseAuraMods(match, auraSeat, auraId).power;
+        }
+    }
+    return base;
 }
 function engineGetCreatureToughness(match, seat, cardId) {
-    return Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.toughness) || 0;
+    var base = Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.toughness) || 0;
+    var auras = match.game?.auraAttachments || {};
+    for (var auraId in auras) {
+        if (auras[auraId] === cardId) {
+            var auraSeat = engineFindSeatForCard(match, auraId);
+            if (auraSeat != null) base += engineParseAuraMods(match, auraSeat, auraId).toughness;
+        }
+    }
+    return base;
 }
 
 var SUPPORTED_KEYWORDS = ["Flying","Reach","First Strike","Double Strike","Trample","Deathtouch","Lifelink","Haste","Vigilance","Defender","Menace","Indestructible","Hexproof"];
@@ -3065,6 +3300,21 @@ function engineFindSeatForCard(match, cardId) {
         if (bf.indexOf(cardId) >= 0) return seats[i];
     }
     return null;
+}
+
+function engineIsAura(match, seat, cardId) {
+    var tl = String((match.decks?.[seat]?.cardMeta || {})[cardId]?.typeLine || "").toLowerCase();
+    return tl.includes("enchantment") && tl.includes("aura");
+}
+
+function engineParseAuraMods(match, seat, cardId) {
+    var meta = (match.decks?.[seat]?.cardMeta || {})[cardId];
+    var oracle = String(meta?.oracleText || "");
+    var pw = 0; var tw = 0;
+    var re = /([+-]\d+)\/([+-]\d+)/g;
+    var m;
+    while ((m = re.exec(oracle)) !== null) { pw += parseInt(m[1], 10); tw += parseInt(m[2], 10); }
+    return { power: pw, toughness: tw };
 }
 
 function engineResolveCombatDamage(match) {
@@ -3325,7 +3575,7 @@ function engineCardType(match, seat, cardId) {
 function engineIsSpell(match, seat, cardId) { var t = engineCardType(match, seat, cardId); return t === "instant" || t === "sorcery"; }
 function engineIsCreature(match, seat, cardId) { return engineCardType(match, seat, cardId) === "creature"; }
 
-function enginePlayCard(match, seat, cardId) {
+function enginePlayCard(match, seat, cardId, targetId) {
     if (engineIsSpell(match, seat, cardId)) {
         return engineMoveCard(match, seat, "hand", "graveyard", cardId);
     }
@@ -3334,6 +3584,11 @@ function enginePlayCard(match, seat, cardId) {
         if (!match.game.cardState) match.game.cardState = {};
         var hasHaste = engineHasKeyword(match, seat, cardId, "Haste");
         match.game.cardState[cardId] = { tapped: false, summoningSick: !hasHaste, damage: 0, damageSourceIds: [] };
+    }
+    if (result.ok && engineIsAura(match, seat, cardId)) {
+        if (!targetId) return { ok: false, error: "aura requires a target creature" };
+        if (!match.game.auraAttachments) match.game.auraAttachments = {};
+        match.game.auraAttachments[cardId] = targetId;
     }
     return result;
 }
@@ -3358,21 +3613,59 @@ function engineBotTakeTurn(match, botPlayer) {
         return;
     }
 
+    // Helper: find best aura target for bot
+    var botAuraTarget = function(cardId) {
+        var allSeats = engineSeatOrder(match);
+        var bestTarget = null; var bestPower = -1;
+        // Prefer own creatures (biggest power)
+        var ownBf = match.game.zones?.[seat]?.battlefield || [];
+        for (var oi = 0; oi < ownBf.length; oi++) {
+            var oid = ownBf[oi];
+            if (!engineIsCreature(match, seat, oid)) continue;
+            var pw = engineGetCreaturePower(match, seat, oid);
+            if (pw > bestPower) { bestPower = pw; bestTarget = oid; }
+        }
+        // Easy: also consider opponent creatures (random)
+        if (!bestTarget && diff === "easy") {
+            for (var si = 0; si < allSeats.length; si++) {
+                if (allSeats[si] === seat) continue;
+                var oBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
+                for (var ci = 0; ci < oBf.length; ci++) {
+                    if (engineIsCreature(match, allSeats[si], oBf[ci]) && !engineHasKeyword(match, allSeats[si], oBf[ci], "Hexproof")) { return oBf[ci]; }
+                }
+            }
+        }
+        return bestTarget;
+    };
+
+    var botPlayCard = function(cardId) {
+        if (engineIsAura(match, seat, cardId)) {
+            var target = botAuraTarget(cardId);
+            if (!target) return false; // skip — no valid targets
+            enginePlayCard(match, seat, cardId, target);
+        } else {
+            enginePlayCard(match, seat, cardId);
+        }
+        return true;
+    };
+
     if (diff === "easy") {
         // Easy: play 1 random affordable card
         const idx = sup.random.integer(0, affordable.length - 1);
         const cardId = affordable[idx];
-        enginePlayCard(match, seat, cardId);
-        mana.current = Math.max(0, mana.current - getCmc(cardId));
-        played.push(cardId);
+        if (botPlayCard(cardId)) {
+            mana.current = Math.max(0, mana.current - getCmc(cardId));
+            played.push(cardId);
+        }
     } else if (diff === "medium") {
         // Medium: sort affordable by CMC ascending, play greedily (cheapest first)
         const sorted = affordable.slice().sort((a, b) => getCmc(a) - getCmc(b));
         for (const cardId of sorted) {
             if (getCmc(cardId) > mana.current) continue;
-            enginePlayCard(match, seat, cardId);
-            mana.current = Math.max(0, mana.current - getCmc(cardId));
-            played.push(cardId);
+            if (botPlayCard(cardId)) {
+                mana.current = Math.max(0, mana.current - getCmc(cardId));
+                played.push(cardId);
+            }
         }
     } else {
         // Hard: sort affordable by CMC descending (value maximization), cap board at 6
@@ -3380,9 +3673,10 @@ function engineBotTakeTurn(match, botPlayer) {
         for (const cardId of sorted) {
             if (getCmc(cardId) > mana.current) continue;
             if (bf.length + played.length >= 6) break;
-            enginePlayCard(match, seat, cardId);
-            mana.current = Math.max(0, mana.current - getCmc(cardId));
-            played.push(cardId);
+            if (botPlayCard(cardId)) {
+                mana.current = Math.max(0, mana.current - getCmc(cardId));
+                played.push(cardId);
+            }
         }
     }
 
@@ -3700,5 +3994,5 @@ function simplifyCard(card) {
     if (!card || typeof card !== "object") return null;
     const imageSmall = card.image_uris?.small || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal || null;
     const imageNormal = card.image_uris?.normal || card.image_uris?.large || card.card_faces?.[0]?.image_uris?.normal || card.card_faces?.[0]?.image_uris?.large || imageSmall || null;
-    return { id: card.id, name: card.name, typeLine: card.type_line, manaCost: card.mana_cost, oracleText: card.oracle_text, imageSmall, imageNormal, legalities: card.legalities, cmc: card.cmc, colors: card.colors, colorIdentity: card.color_identity, set: card.set, collectorNumber: card.collector_number, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
+    return { id: card.id, name: card.name, typeLine: card.type_line, manaCost: card.mana_cost, oracleText: card.oracle_text, imageSmall, imageNormal, legalities: card.legalities, cmc: card.cmc, colors: card.colors, colorIdentity: card.color_identity, set: card.set, collectorNumber: card.collector_number, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [], oracleText: card.oracle_text || '' };
 }

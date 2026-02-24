@@ -193,22 +193,22 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 
 **Unsupported ability indicator:** Yellow warning triangle with "i" on cards with oracle text the engine can't process. Inspect modal shows: "Some abilities on this card are not implemented. This card functions as a [power]/[toughness] creature with [supported keywords]."
 
-### 2B. Aura/Enchantment Attachment
+### ~~2B. Aura/Enchantment Attachment~~ ✅ COMPLETE
 
-- When playing an Aura (type_line contains "Enchantment — Aura"):
-  1. Enter targeting mode — valid targets glow
-  2. Click/tap target creature
-  3. Aura visually attaches as smaller card overlapping the creature, or as buff indicator
-  4. Parse stat modifications via regex (`+N/+N` patterns in oracle text)
-  5. When enchanted creature dies, aura goes to graveyard too
+- ~~When playing an Aura (type_line contains "Enchantment — Aura"):~~
+  1. ~~Enter targeting mode — valid targets glow~~ ✅
+  2. ~~Click/tap target creature~~ ✅
+  3. ~~Aura visually attaches as smaller card overlapping the creature, or as buff indicator~~ ✅ (aura badge + green P/T)
+  4. ~~Parse stat modifications via regex (`+N/+N` patterns in oracle text)~~ ✅
+  5. ~~When enchanted creature dies, aura goes to graveyard too~~ ✅
 
-### 2C. Basic Targeting System
+### ~~2C. Basic Targeting System~~ ✅ COMPLETE
 
-- When a spell requires a target, board enters "targeting mode"
-- Valid targets glow, invalid targets dimmed
-- Click/tap valid target to select
-- "Cancel" option always visible to back out
-- Only support basic target patterns initially: "target creature", "target player"
+- ~~When a spell requires a target, board enters "targeting mode"~~ ✅
+- ~~Valid targets glow, invalid targets dimmed~~ ✅ (purple glow for valid, dimmed for ineligible)
+- ~~Click/tap valid target to select~~ ✅
+- ~~"Cancel" option always visible to back out~~ ✅
+- ~~Only support basic target patterns initially: "target creature"~~ ✅ (Hexproof enforcement included)
 
 ### ~~2D. Bot AI Improvements~~ ✅ (Partial — keyword combat awareness complete)
 
