@@ -210,6 +210,15 @@ function getClientHtml() {
     .cardWrap.blocking { box-shadow:0 0 10px 3px rgba(59,130,246,0.5); border-radius:12px; }
     .cardWrap.blocking .cardImg { border-color:rgba(59,130,246,0.7); }
     .cardWrap.combatIneligible .cardImg { opacity:0.35; filter:saturate(0.2); }
+    .kwIcons { position:absolute; display:flex; gap:2px; z-index:3; pointer-events:none; }
+    .kwIcons-tl { top:3px; left:3px; flex-direction:column; }
+    .kwIcons-tr { top:3px; right:3px; flex-direction:column; align-items:flex-end; }
+    .kwIcons-bl { bottom:20px; left:3px; flex-direction:column; }
+    .kwIcon { width:16px; height:16px; background:rgba(0,0,0,0.72); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; line-height:1; border:1px solid rgba(255,255,255,0.15); color:#fff; }
+    .kwPill { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; background:rgba(59,130,246,0.12); color:#3b82f6; border:1px solid rgba(59,130,246,0.25); }
+    .kwPillUnsupported { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.45); border-color:rgba(255,255,255,0.1); }
+    .cardModalKeywords { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+    .cardModalWarn { margin-top:10px; padding:8px 12px; border-radius:8px; font-size:12px; color:#f59e0b; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); }
     .phaseBar { display:flex; gap:4px; align-items:center; }
     .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.06); }
     .phasePill.active { background:rgba(251,191,36,0.18); color:#fbbf24; border-color:rgba(251,191,36,0.35); }
@@ -280,6 +289,8 @@ function getClientHtml() {
       <div id="cardModalMana" class="cardModalMana"></div>
       <div id="cardModalType" class="cardModalType"></div>
       <div id="cardModalOracle" class="cardModalOracle"></div>
+      <div id="cardModalKeywords" class="cardModalKeywords"></div>
+      <div id="cardModalWarn" class="cardModalWarn" style="display:none;"></div>
       <div id="cardModalZone" class="cardModalZone small"></div>
     </div>
   </div>
@@ -1000,7 +1011,7 @@ function getClientHtml() {
     const id = card.id;
     const cur = Number(state.activeDeck.cards[id] || 0);
     state.activeDeck.cards[id] = cur + 1;
-    state.activeDeck.cardMeta[id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null };
+    state.activeDeck.cardMeta[id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
     updateDeckBuilderUI();
   }
 
@@ -1025,7 +1036,7 @@ function getClientHtml() {
     }
     state.activeDeck.commander = card.id; state.activeDeck.commanderName = card.name;
     state.activeDeck.cards[card.id] = 1;
-    state.activeDeck.cardMeta[card.id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null };
+    state.activeDeck.cardMeta[card.id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
     updateDeckBuilderUI();
   }
 
@@ -1320,6 +1331,29 @@ function getClientHtml() {
     $('#cardModalMana').style.display = c.manaCost ? '' : 'none';
     $('#cardModalType').textContent = c.typeLine || '';
     $('#cardModalOracle').textContent = c.oracleText || 'No oracle text.';
+    // Keyword pills
+    var kwContainer = $('#cardModalKeywords');
+    kwContainer.innerHTML = '';
+    var kws = clientGetKeywords(cardId);
+    for (var ki = 0; ki < kws.length; ki++) {
+      var pill = document.createElement('span');
+      var isSupported = CLIENT_SUPPORTED_KEYWORDS.indexOf(kws[ki]) >= 0;
+      pill.className = isSupported ? 'kwPill' : 'kwPill kwPillUnsupported';
+      pill.textContent = kws[ki];
+      kwContainer.appendChild(pill);
+    }
+    // Unsupported ability warning
+    var warnEl = $('#cardModalWarn');
+    warnEl.style.display = 'none';
+    var oracle = String(c.oracleText || '');
+    var tl = String(c.typeLine || '').toLowerCase();
+    if (tl.includes('creature') && oracle.length > 0) {
+      var abilityPatterns = /\b(when|whenever|at the beginning|sacrifice|create|counter|destroy|exile|return|put|search|discard|draw|gain|lose|pay|tap|untap|transform|equip|attach|enchant|fight|mill|scry|surveil|venture|explore|populate|proliferate|amass|adapt|monstrosity|ward|protection from|shroud|flash|wither|infect|persist|undying|affinity|cascade|convoke|delve|emerge|mutate|dash|evoke|ninjutsu|prowl|bestow|morph|kicker|madness|aftermath|fuse|overload|splice|entwine|escalate|strive|devour|exploit|fabricate|extort|tribute|riot|spectacle|escape|foretell|disturb|daybound|nightbound|champion|changeling|living weapon)\b/i;
+      if (abilityPatterns.test(oracle)) {
+        warnEl.textContent = '\u26A0 This creature has abilities the engine does not yet simulate. It plays as a vanilla creature with its keyword abilities.';
+        warnEl.style.display = '';
+      }
+    }
     $('#cardModalZone').textContent = zone ? ('Zone: ' + zone) : '';
     $('#cardModal').style.display = '';
   }
@@ -1339,6 +1373,23 @@ function getClientHtml() {
     return 'unknown';
   }
 
+  var CLIENT_SUPPORTED_KEYWORDS = ['Flying','Reach','First Strike','Double Strike','Trample','Deathtouch','Lifelink','Haste','Vigilance','Defender','Menace','Indestructible','Hexproof'];
+
+  function clientGetKeywords(id) {
+    var c = cardMeta(id);
+    return (c && Array.isArray(c.keywords)) ? c.keywords : [];
+  }
+  function clientHasKeyword(id, keyword) {
+    var kws = clientGetKeywords(id);
+    for (var i = 0; i < kws.length; i++) { if (kws[i] === keyword) return true; }
+    return false;
+  }
+  function clientCanBlock(blockerId, attackerId) {
+    if (clientHasKeyword(attackerId, 'Flying') && !clientHasKeyword(blockerId, 'Flying') && !clientHasKeyword(blockerId, 'Reach')) return false;
+    if (clientHasKeyword(attackerId, 'Menace')) return false;
+    return true;
+  }
+
   function getCombatEligibleAttackers(match) {
     var mySeat = match?.viewerSeat;
     if (!mySeat) return [];
@@ -1347,6 +1398,7 @@ function getClientHtml() {
     for (var i = 0; i < bf.length; i++) {
       var cid = bf[i];
       if (clientCardType(cid) !== 'creature') continue;
+      if (clientHasKeyword(cid, 'Defender')) continue;
       var cs = match?.game?.cardState?.[cid];
       if (cs && cs.tapped) continue;
       if (cs && cs.summoningSick) continue;
@@ -1392,6 +1444,7 @@ function getClientHtml() {
         wrap.classList.add('summonSick');
         var ssIcon = document.createElement('div');
         ssIcon.className = 'summonSickIcon';
+        ssIcon.style.cssText = 'top:50%;left:50%;transform:translate(-50%,-50%);right:auto;';
         ssIcon.textContent = '\u23F3';
         wrap.appendChild(ssIcon);
       }
@@ -1400,6 +1453,42 @@ function getClientHtml() {
         atkIcon.className = 'attackIcon';
         atkIcon.textContent = '\u2694';
         wrap.appendChild(atkIcon);
+      }
+      // Keyword icons
+      var kwMap = { 'Haste':'\uD83D\uDD25','Vigilance':'\uD83D\uDC41','Defender':'\uD83D\uDEE1','Indestructible':'\uD83D\uDC8E','Hexproof':'\u2B21','Flying':'\uD83E\uDD85','Reach':'\uD83C\uDFF9','First Strike':'\u26A1','Double Strike':'\u26A1','Menace':'\uD83D\uDE08','Trample':'\uD83E\uDDB6','Deathtouch':'\u2620','Lifelink':'\uD83D\uDC9C' };
+      var kwTL = []; var kwTR = []; var kwBL = [];
+      var kwTLNames = ['Haste','Vigilance','Defender','Indestructible','Hexproof'];
+      var kwTRNames = ['Flying','Reach','First Strike','Double Strike','Menace'];
+      var kwBLNames = ['Trample','Deathtouch','Lifelink'];
+      var myKws = clientGetKeywords(id);
+      for (var ki = 0; ki < myKws.length; ki++) {
+        var kw = myKws[ki];
+        if (!kwMap[kw]) continue;
+        if (kwTLNames.indexOf(kw) >= 0) kwTL.push(kw);
+        else if (kwTRNames.indexOf(kw) >= 0) kwTR.push(kw);
+        else if (kwBLNames.indexOf(kw) >= 0) kwBL.push(kw);
+      }
+      var totalIcons = kwTL.length + kwTR.length + kwBL.length;
+      if (totalIcons > 0) {
+        var shown = 0; var maxIcons = 4;
+        var addIcons = function(arr, cls) {
+          if (!arr.length || shown >= maxIcons) return;
+          var container = document.createElement('div');
+          container.className = 'kwIcons ' + cls;
+          for (var j = 0; j < arr.length && shown < maxIcons; j++) {
+            var ic = document.createElement('div');
+            ic.className = 'kwIcon';
+            ic.textContent = kwMap[arr[j]];
+            ic.title = arr[j];
+            if (arr[j] === 'Double Strike') ic.style.fontSize = '7px';
+            container.appendChild(ic);
+            shown++;
+          }
+          wrap.appendChild(container);
+        };
+        addIcons(kwTL, 'kwIcons-tl');
+        addIcons(kwTR, 'kwIcons-tr');
+        addIcons(kwBL, 'kwIcons-bl');
       }
       wrap.appendChild(img);
       var badge = document.createElement('div');
@@ -1937,6 +2026,16 @@ function getClientHtml() {
         toast('That creature is not attacking you.', { type: 'warn', ms: 1500 });
         return;
       }
+      // Check keyword blocking restrictions
+      if (!clientCanBlock(state.selectedBlocker, cardId)) {
+        if (clientHasKeyword(cardId, 'Menace')) {
+          toast('Cannot block \u2014 Menace creatures require 2+ blockers.', { type: 'warn', ms: 2000 });
+        } else if (clientHasKeyword(cardId, 'Flying')) {
+          toast('Cannot block \u2014 only Flying or Reach creatures can block a flyer.', { type: 'warn', ms: 2000 });
+        }
+        state.selectedBlocker = null;
+        return;
+      }
       state.pendingBlockers[cardId] = state.selectedBlocker;
       state.selectedBlocker = null;
       renderGame(state.lastMatch);
@@ -2345,7 +2444,7 @@ function buildQuickstartStandardDeck(color) {
         const card = picks[i];
         // First 6 picks get 4 copies, last 2 get 3 copies = 24 + 6 = 30
         cards[card.id] = i < 6 ? 4 : 3;
-        cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null };
+        cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
     }
     const total = Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0);
     // Fill to 30 if short using extra low-CMC cards at 4 copies
@@ -2354,7 +2453,7 @@ function buildQuickstartStandardDeck(color) {
         for (const card of low) {
             if (used.has(card.id)) continue;
             cards[card.id] = Math.min(4, 30 - Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0));
-            cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null };
+            cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
             if (Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0) >= 30) break;
         }
     }
@@ -2407,7 +2506,7 @@ function buildQuickstartCommanderDeck(commanderCard) {
 
     // Target 60 cards (no lands): commander (1) + 59 spells. ~8 ramp, ~8 draw, ~4 removal, ~39 other
     const cards = {}; const cardMeta = {};
-    cards[cmd.id] = 1; cardMeta[cmd.id] = { name: cmd.name, typeLine: cmd.type_line || '', cmc: Number(cmd.cmc) || 0, power: cmd.power != null ? String(cmd.power) : null, toughness: cmd.toughness != null ? String(cmd.toughness) : null };
+    cards[cmd.id] = 1; cardMeta[cmd.id] = { name: cmd.name, typeLine: cmd.type_line || '', cmc: Number(cmd.cmc) || 0, power: cmd.power != null ? String(cmd.power) : null, toughness: cmd.toughness != null ? String(cmd.toughness) : null, keywords: Array.isArray(cmd.keywords) ? cmd.keywords : [] };
     const used = new Set([cmd.id]);
     const targets = { ramp: 8, draw: 8, removal: 4, other: 39 };
     const chosen = [];
@@ -2429,7 +2528,7 @@ function buildQuickstartCommanderDeck(commanderCard) {
         }
     }
     if (chosen.length < 30) throw new Error('Not enough Commander cards found for this commander color identity.');
-    for (const c of chosen) { cards[c.id] = 1; cardMeta[c.id] = { name: c.name, typeLine: c.type_line || '', cmc: Number(c.cmc) || 0, power: c.power != null ? String(c.power) : null, toughness: c.toughness != null ? String(c.toughness) : null }; }
+    for (const c of chosen) { cards[c.id] = 1; cardMeta[c.id] = { name: c.name, typeLine: c.type_line || '', cmc: Number(c.cmc) || 0, power: c.power != null ? String(c.power) : null, toughness: c.toughness != null ? String(c.toughness) : null, keywords: Array.isArray(c.keywords) ? c.keywords : [] }; }
     return { name: 'Quickstart \u2014 ' + cmd.name, format: 'commander', cards, cardMeta, commander: cmd.id, commanderName: cmd.name };
 }
 
@@ -2708,18 +2807,21 @@ function engineApplyAction(match, user, action) {
             var cs = match.game.cardState[cid];
             if (cs && cs.tapped) return { ok: false, error: "card " + cid + " is tapped" };
             if (cs && cs.summoningSick) return { ok: false, error: "card " + cid + " has summoning sickness" };
+            if (engineHasKeyword(match, seat, cid, "Defender")) return { ok: false, error: "card " + cid + " has Defender and cannot attack" };
             var targetSeat = attackers[cid];
             if (targetSeat === seat) return { ok: false, error: "cannot attack yourself" };
             var validSeats = engineSeatOrder(match);
             if (validSeats.indexOf(Number(targetSeat)) < 0) return { ok: false, error: "invalid target seat " + targetSeat };
         }
-        // Store attackers and tap them
+        // Store attackers and tap them (Vigilance skips tapping)
         match.game.combat.attackers = {};
         for (var ai2 = 0; ai2 < attackerIds.length; ai2++) {
             var cid2 = attackerIds[ai2];
             match.game.combat.attackers[cid2] = attackers[cid2];
-            if (!match.game.cardState[cid2]) match.game.cardState[cid2] = { tapped: false, summoningSick: false, damage: 0 };
-            match.game.cardState[cid2].tapped = true;
+            if (!match.game.cardState[cid2]) match.game.cardState[cid2] = { tapped: false, summoningSick: false, damage: 0, damageSourceIds: [] };
+            if (!engineHasKeyword(match, seat, cid2, "Vigilance")) {
+                match.game.cardState[cid2].tapped = true;
+            }
         }
         match.log.push({ t: Date.now(), type: "ATTACKERS_DECLARED", by: user.username, seat: seat, count: attackerIds.length });
         // Determine defenders
@@ -2783,6 +2885,17 @@ function engineApplyAction(match, user, action) {
             var bcs = match.game.cardState[blockerId];
             if (bcs && bcs.tapped) return { ok: false, error: "blocker " + blockerId + " is tapped" };
             if (usedBlockers[blockerId]) return { ok: false, error: "blocker " + blockerId + " already assigned" };
+            // Flying: only Flying/Reach can block
+            var atkSeatForBlock = engineFindSeatForCard(match, attackerId);
+            if (atkSeatForBlock && engineHasKeyword(match, atkSeatForBlock, attackerId, "Flying")) {
+                if (!engineHasKeyword(match, seat, blockerId, "Flying") && !engineHasKeyword(match, seat, blockerId, "Reach")) {
+                    return { ok: false, error: "blocker " + blockerId + " cannot block a Flying creature without Flying or Reach" };
+                }
+            }
+            // Menace: cannot be blocked by a single creature
+            if (atkSeatForBlock && engineHasKeyword(match, atkSeatForBlock, attackerId, "Menace")) {
+                return { ok: false, error: "attacker " + attackerId + " has Menace and cannot be blocked by a single creature" };
+            }
             usedBlockers[blockerId] = true;
         }
         // Store blockers
@@ -2898,7 +3011,7 @@ function engineAdvanceTurn(match, opts) {
     var allSeats = engineSeatOrder(match);
     for (var si = 0; si < allSeats.length; si++) {
         var sBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
-        for (var di = 0; di < sBf.length; di++) { if (match.game.cardState[sBf[di]]) match.game.cardState[sBf[di]].damage = 0; }
+        for (var di = 0; di < sBf.length; di++) { if (match.game.cardState[sBf[di]]) { match.game.cardState[sBf[di]].damage = 0; match.game.cardState[sBf[di]].damageSourceIds = []; } }
     }
     // Clear combat state
     match.game.combat = null;
@@ -2922,6 +3035,29 @@ function engineGetCreatureToughness(match, seat, cardId) {
     return Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.toughness) || 0;
 }
 
+var SUPPORTED_KEYWORDS = ["Flying","Reach","First Strike","Double Strike","Trample","Deathtouch","Lifelink","Haste","Vigilance","Defender","Menace","Indestructible","Hexproof"];
+
+function engineGetKeywords(match, seat, cardId) {
+    var meta = (match.decks?.[seat]?.cardMeta || {})[cardId];
+    return (meta && Array.isArray(meta.keywords)) ? meta.keywords : [];
+}
+function engineHasKeyword(match, seat, cardId, keyword) {
+    var kws = engineGetKeywords(match, seat, cardId);
+    for (var i = 0; i < kws.length; i++) { if (kws[i] === keyword) return true; }
+    return false;
+}
+// Check keyword on a card that may be in graveyard (for deathtouch source tracking)
+function engineHasKeywordAnySeat(match, cardId, keyword) {
+    var seats = engineSeatOrder(match);
+    for (var i = 0; i < seats.length; i++) {
+        var meta = (match.decks?.[seats[i]]?.cardMeta || {})[cardId];
+        if (meta && Array.isArray(meta.keywords)) {
+            for (var j = 0; j < meta.keywords.length; j++) { if (meta.keywords[j] === keyword) return true; }
+        }
+    }
+    return false;
+}
+
 function engineFindSeatForCard(match, cardId) {
     var seats = engineSeatOrder(match);
     for (var i = 0; i < seats.length; i++) {
@@ -2938,40 +3074,163 @@ function engineResolveCombatDamage(match) {
     if (!match.game.cardState) match.game.cardState = {};
     if (!match.game.lifeBySeat) match.game.lifeBySeat = {};
     var attackerIds = Object.keys(attackers);
+
+    // Determine if any combatant has first strike or double strike
+    var hasFirstStrike = false;
+    for (var fi = 0; fi < attackerIds.length; fi++) {
+        var fAtkId = attackerIds[fi];
+        var fAtkSeat = engineFindSeatForCard(match, fAtkId);
+        if (fAtkSeat && (engineHasKeyword(match, fAtkSeat, fAtkId, "First Strike") || engineHasKeyword(match, fAtkSeat, fAtkId, "Double Strike"))) { hasFirstStrike = true; break; }
+        var fBlkId = blockers[fAtkId];
+        if (fBlkId) {
+            var fBlkSeat = engineFindSeatForCard(match, fBlkId);
+            if (fBlkSeat && (engineHasKeyword(match, fBlkSeat, fBlkId, "First Strike") || engineHasKeyword(match, fBlkSeat, fBlkId, "Double Strike"))) { hasFirstStrike = true; break; }
+        }
+    }
+
+    if (hasFirstStrike) {
+        // FIRST STRIKE STEP
+        engineCombatDamageStep(match, attackers, blockers, "first_strike");
+        engineCheckLethalDamage(match);
+        engineCheckGameOver(match);
+        if (match.game?.status === "finished") { match.game.combat.resolved = true; match.log.push({ t: Date.now(), type: "COMBAT_RESOLVED" }); return; }
+    }
+
+    // NORMAL DAMAGE STEP
+    engineCombatDamageStep(match, attackers, blockers, "normal");
+    engineCheckLethalDamage(match);
+    engineCheckGameOver(match);
+    match.game.combat.resolved = true;
+    match.log.push({ t: Date.now(), type: "COMBAT_RESOLVED" });
+}
+
+function engineCombatDamageStep(match, attackers, blockers, step) {
+    if (!match.game.cardState) match.game.cardState = {};
+    if (!match.game.lifeBySeat) match.game.lifeBySeat = {};
+    var attackerIds = Object.keys(attackers);
+
     for (var i = 0; i < attackerIds.length; i++) {
         var atkId = attackerIds[i];
         var defSeat = Number(attackers[atkId]);
         var atkSeat = engineFindSeatForCard(match, atkId);
         if (!atkSeat) continue;
         var atkPower = engineGetCreaturePower(match, atkSeat, atkId);
+
+        var atkHasFS = engineHasKeyword(match, atkSeat, atkId, "First Strike");
+        var atkHasDS = engineHasKeyword(match, atkSeat, atkId, "Double Strike");
+        // Does this attacker deal damage in this step?
+        var atkDeals = false;
+        if (step === "first_strike") { atkDeals = atkHasFS || atkHasDS; }
+        else { atkDeals = !atkHasFS || atkHasDS; } // normal: non-FS deal, DS deal again
+
         var blockerId = blockers[atkId];
         if (blockerId) {
-            // Blocked — simultaneous damage
             var blkSeat = engineFindSeatForCard(match, blockerId);
-            if (!blkSeat) continue;
+            // Blocker may have died in first strike step — check if still on battlefield
+            var blkAlive = false;
+            if (blkSeat) {
+                var blkBf = match.game.zones?.[blkSeat]?.battlefield || [];
+                blkAlive = blkBf.indexOf(blockerId) >= 0;
+            }
+
+            if (!blkAlive) {
+                // Blocker died in earlier step — attacker hits player
+                if (atkDeals && atkPower > 0) {
+                    if (match.game.lifeBySeat[defSeat] != null) {
+                        match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - atkPower);
+                    }
+                    if (!match.game.stats) match.game.stats = {};
+                    if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
+                    match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + atkPower;
+                    match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: atkPower, by: atkId });
+                    // Lifelink on unblocked trample-through
+                    if (engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
+                        match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + atkPower;
+                        match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: atkPower, by: atkId });
+                    }
+                }
+                continue;
+            }
+
+            // Blocker is alive — blocked combat
             var blkPower = engineGetCreaturePower(match, blkSeat, blockerId);
-            var blkToughness = engineGetCreatureToughness(match, blkSeat, blockerId);
-            var atkToughness = engineGetCreatureToughness(match, atkSeat, atkId);
-            if (!match.game.cardState[atkId]) match.game.cardState[atkId] = { tapped: false, summoningSick: false, damage: 0 };
-            if (!match.game.cardState[blockerId]) match.game.cardState[blockerId] = { tapped: false, summoningSick: false, damage: 0 };
-            match.game.cardState[atkId].damage = (Number(match.game.cardState[atkId].damage) || 0) + blkPower;
-            match.game.cardState[blockerId].damage = (Number(match.game.cardState[blockerId].damage) || 0) + atkPower;
-            match.log.push({ t: Date.now(), type: "COMBAT_DAMAGE", atk: atkId, blk: blockerId, atkDmg: blkPower, blkDmg: atkPower });
+            var blkHasFS = engineHasKeyword(match, blkSeat, blockerId, "First Strike");
+            var blkHasDS = engineHasKeyword(match, blkSeat, blockerId, "Double Strike");
+            var blkDeals = false;
+            if (step === "first_strike") { blkDeals = blkHasFS || blkHasDS; }
+            else { blkDeals = !blkHasFS || blkHasDS; }
+
+            if (!match.game.cardState[atkId]) match.game.cardState[atkId] = { tapped: false, summoningSick: false, damage: 0, damageSourceIds: [] };
+            if (!match.game.cardState[blockerId]) match.game.cardState[blockerId] = { tapped: false, summoningSick: false, damage: 0, damageSourceIds: [] };
+            if (!match.game.cardState[atkId].damageSourceIds) match.game.cardState[atkId].damageSourceIds = [];
+            if (!match.game.cardState[blockerId].damageSourceIds) match.game.cardState[blockerId].damageSourceIds = [];
+
+            // Attacker deals damage to blocker
+            if (atkDeals && atkPower > 0) {
+                var dmgToBlocker = atkPower;
+                var dmgToPlayer = 0;
+                // Trample: excess damage goes to player
+                if (engineHasKeyword(match, atkSeat, atkId, "Trample")) {
+                    var blkToughness = engineGetCreatureToughness(match, blkSeat, blockerId);
+                    var existingBlkDmg = Number(match.game.cardState[blockerId].damage) || 0;
+                    var lethalNeeded = blkToughness - existingBlkDmg;
+                    // Deathtouch + Trample: only 1 damage needed to be lethal
+                    if (engineHasKeyword(match, atkSeat, atkId, "Deathtouch") && lethalNeeded > 1) lethalNeeded = 1;
+                    if (lethalNeeded < 0) lethalNeeded = 0;
+                    if (atkPower > lethalNeeded) {
+                        dmgToBlocker = lethalNeeded;
+                        dmgToPlayer = atkPower - lethalNeeded;
+                    }
+                }
+                match.game.cardState[blockerId].damage = (Number(match.game.cardState[blockerId].damage) || 0) + dmgToBlocker;
+                if (dmgToBlocker > 0) match.game.cardState[blockerId].damageSourceIds.push(atkId);
+                if (dmgToPlayer > 0) {
+                    if (match.game.lifeBySeat[defSeat] != null) {
+                        match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - dmgToPlayer);
+                    }
+                    if (!match.game.stats) match.game.stats = {};
+                    if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
+                    match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + dmgToPlayer;
+                    match.log.push({ t: Date.now(), type: "TRAMPLE_DAMAGE", seat: defSeat, damage: dmgToPlayer, by: atkId });
+                }
+                // Lifelink: gain life = total damage dealt
+                if (engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
+                    var totalAtkDmg = dmgToBlocker + dmgToPlayer;
+                    match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + totalAtkDmg;
+                    match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: totalAtkDmg, by: atkId });
+                }
+            }
+            // Blocker deals damage to attacker
+            if (blkDeals && blkPower > 0) {
+                match.game.cardState[atkId].damage = (Number(match.game.cardState[atkId].damage) || 0) + blkPower;
+                match.game.cardState[atkId].damageSourceIds.push(blockerId);
+                // Lifelink for blocker
+                if (engineHasKeyword(match, blkSeat, blockerId, "Lifelink")) {
+                    match.game.lifeBySeat[blkSeat] = (match.game.lifeBySeat[blkSeat] || 0) + blkPower;
+                    match.log.push({ t: Date.now(), type: "LIFELINK", seat: blkSeat, amount: blkPower, by: blockerId });
+                }
+            }
+            if (atkDeals || blkDeals) {
+                match.log.push({ t: Date.now(), type: "COMBAT_DAMAGE", atk: atkId, blk: blockerId, atkDmg: blkDeals ? blkPower : 0, blkDmg: atkDeals ? atkPower : 0, step: step });
+            }
         } else {
             // Unblocked — damage to player
-            if (match.game.lifeBySeat[defSeat] != null) {
-                match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - atkPower);
+            if (atkDeals && atkPower > 0) {
+                if (match.game.lifeBySeat[defSeat] != null) {
+                    match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - atkPower);
+                }
+                if (!match.game.stats) match.game.stats = {};
+                if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
+                match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + atkPower;
+                match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: atkPower, by: atkId });
+                // Lifelink
+                if (engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
+                    match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + atkPower;
+                    match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: atkPower, by: atkId });
+                }
             }
-            if (!match.game.stats) match.game.stats = {};
-            if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
-            match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + atkPower;
-            match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: atkPower, by: atkId });
         }
     }
-    engineCheckLethalDamage(match);
-    engineCheckGameOver(match);
-    match.game.combat.resolved = true;
-    match.log.push({ t: Date.now(), type: "COMBAT_RESOLVED" });
 }
 
 function engineCheckLethalDamage(match) {
@@ -2989,7 +3248,16 @@ function engineCheckLethalDamage(match) {
             if (!cs) continue;
             var dmg = Number(cs.damage) || 0;
             var tough = engineGetCreatureToughness(match, seat, cid);
-            if (dmg >= tough && tough > 0) {
+            var isLethal = dmg >= tough && tough > 0;
+            // Deathtouch: any damage from a Deathtouch source is lethal
+            if (!isLethal && dmg > 0 && Array.isArray(cs.damageSourceIds)) {
+                for (var di = 0; di < cs.damageSourceIds.length; di++) {
+                    if (engineHasKeywordAnySeat(match, cs.damageSourceIds[di], "Deathtouch")) { isLethal = true; break; }
+                }
+            }
+            if (isLethal) {
+                // Indestructible: survives lethal damage
+                if (engineHasKeyword(match, seat, cid, "Indestructible")) continue;
                 engineMoveCard(match, seat, "battlefield", "graveyard", cid);
                 // Track kills for opposing seats
                 if (!match.game.stats) match.game.stats = {};
@@ -3064,7 +3332,8 @@ function enginePlayCard(match, seat, cardId) {
     var result = engineMoveCard(match, seat, "hand", "battlefield", cardId);
     if (result.ok && engineIsCreature(match, seat, cardId)) {
         if (!match.game.cardState) match.game.cardState = {};
-        match.game.cardState[cardId] = { tapped: false, summoningSick: true, damage: 0 };
+        var hasHaste = engineHasKeyword(match, seat, cardId, "Haste");
+        match.game.cardState[cardId] = { tapped: false, summoningSick: !hasHaste, damage: 0, damageSourceIds: [] };
     }
     return result;
 }
@@ -3164,6 +3433,7 @@ function engineBotDeclareAttackers(match, botPlayer) {
     for (var i = 0; i < bf.length; i++) {
         var cid = bf[i];
         if (!engineIsCreature(match, seat, cid)) continue;
+        if (engineHasKeyword(match, seat, cid, "Defender")) continue;
         var cs = match.game.cardState[cid];
         if (cs && cs.tapped) continue;
         if (cs && cs.summoningSick) continue;
@@ -3196,21 +3466,37 @@ function engineBotDeclareAttackers(match, botPlayer) {
             if (myPower > oppPower) chosen = eligible.slice();
         }
     } else {
-        // Hard: only attack with creatures that have 3+ power, or if they survive/trade favorably
+        // Hard: keyword-aware scoring for each eligible attacker
         var oppBf2 = match.game.zones?.[targetSeat]?.battlefield || [];
         var oppMaxToughness = 0;
+        var oppHasUntappedDT = false;
         for (var oi3 = 0; oi3 < oppBf2.length; oi3++) {
             if (engineIsCreature(match, targetSeat, oppBf2[oi3])) {
                 var ot = engineGetCreatureToughness(match, targetSeat, oppBf2[oi3]);
                 if (ot > oppMaxToughness) oppMaxToughness = ot;
+                var ocs = match.game.cardState[oppBf2[oi3]];
+                if ((!ocs || !ocs.tapped) && engineHasKeyword(match, targetSeat, oppBf2[oi3], "Deathtouch")) oppHasUntappedDT = true;
             }
         }
         for (var ei2 = 0; ei2 < eligible.length; ei2++) {
-            var pw = engineGetCreaturePower(match, seat, eligible[ei2]);
-            var tw = engineGetCreatureToughness(match, seat, eligible[ei2]);
-            if (pw >= 3 || pw >= oppMaxToughness || tw > oppMaxToughness) {
-                chosen.push(eligible[ei2]);
-            }
+            var eid = eligible[ei2];
+            var pw = engineGetCreaturePower(match, seat, eid);
+            var tw = engineGetCreatureToughness(match, seat, eid);
+            var atkScore = 0;
+            if (pw >= 3) atkScore += 3;
+            if (pw >= oppMaxToughness) atkScore += 2;
+            if (tw > oppMaxToughness) atkScore += 2;
+            // Keyword bonuses
+            if (engineHasKeyword(match, seat, eid, "Flying")) atkScore += 4;
+            if (engineHasKeyword(match, seat, eid, "Menace")) atkScore += 4;
+            if (engineHasKeyword(match, seat, eid, "Trample")) atkScore += 2;
+            if (engineHasKeyword(match, seat, eid, "Lifelink")) atkScore += 2;
+            if (engineHasKeyword(match, seat, eid, "First Strike") || engineHasKeyword(match, seat, eid, "Double Strike")) atkScore += 2;
+            if (engineHasKeyword(match, seat, eid, "Indestructible")) atkScore += 5;
+            if (engineHasKeyword(match, seat, eid, "Vigilance")) atkScore += 1;
+            // Penalty if opponent has untapped deathtouch blocker
+            if (oppHasUntappedDT && !engineHasKeyword(match, seat, eid, "Indestructible")) atkScore -= 3;
+            if (atkScore >= 3) chosen.push(eid);
         }
     }
     if (!chosen.length) return false;
@@ -3218,11 +3504,21 @@ function engineBotDeclareAttackers(match, botPlayer) {
     match.game.combat = { attackers: {}, blockers: {}, resolved: false };
     for (var ci = 0; ci < chosen.length; ci++) {
         match.game.combat.attackers[chosen[ci]] = targetSeat;
-        if (!match.game.cardState[chosen[ci]]) match.game.cardState[chosen[ci]] = { tapped: false, summoningSick: false, damage: 0 };
-        match.game.cardState[chosen[ci]].tapped = true;
+        if (!match.game.cardState[chosen[ci]]) match.game.cardState[chosen[ci]] = { tapped: false, summoningSick: false, damage: 0, damageSourceIds: [] };
+        if (!engineHasKeyword(match, seat, chosen[ci], "Vigilance")) {
+            match.game.cardState[chosen[ci]].tapped = true;
+        }
     }
     match.game.step = "combat_attackers";
     match.log.push({ t: Date.now(), type: "ATTACKERS_DECLARED", by: "bot", seat: seat, count: chosen.length });
+    return true;
+}
+
+function engineBotCanBlock(match, blockerSeat, blockerId, attackerId) {
+    var atkSeat = engineFindSeatForCard(match, attackerId);
+    if (!atkSeat) return false;
+    if (engineHasKeyword(match, atkSeat, attackerId, "Flying") && !engineHasKeyword(match, blockerSeat, blockerId, "Flying") && !engineHasKeyword(match, blockerSeat, blockerId, "Reach")) return false;
+    if (engineHasKeyword(match, atkSeat, attackerId, "Menace")) return false;
     return true;
 }
 
@@ -3250,15 +3546,18 @@ function engineBotDeclareBlockers(match, botPlayer) {
     }
     if (!eligibleBlockers.length || !incomingAttackers.length) return;
     if (diff === "easy") {
-        // Easy: block randomly — shuffle blockers, assign 1:1
+        // Easy: block randomly — shuffle blockers, assign 1:1 (skip illegal)
         var shuffled = eligibleBlockers.slice();
         for (var si = shuffled.length - 1; si > 0; si--) { var ri = sup.random.integer(0, si); var tmp = shuffled[si]; shuffled[si] = shuffled[ri]; shuffled[ri] = tmp; }
-        var maxBlocks = Math.min(shuffled.length, incomingAttackers.length);
-        for (var bi = 0; bi < maxBlocks; bi++) {
-            match.game.combat.blockers[incomingAttackers[bi]] = shuffled[bi];
+        var bIdx = 0;
+        for (var bi = 0; bi < incomingAttackers.length && bIdx < shuffled.length; bi++) {
+            // Skip attackers with Menace (unblockable in our system)
+            if (!engineBotCanBlock(match, seat, shuffled[bIdx], incomingAttackers[bi])) continue;
+            match.game.combat.blockers[incomingAttackers[bi]] = shuffled[bIdx];
+            bIdx++;
         }
     } else if (diff === "medium") {
-        // Medium: only block if our creature kills the attacker
+        // Medium: only block if our creature kills the attacker (skip illegal)
         var usedB = {};
         for (var ai = 0; ai < incomingAttackers.length; ai++) {
             var atkId = incomingAttackers[ai];
@@ -3268,8 +3567,9 @@ function engineBotDeclareBlockers(match, botPlayer) {
             for (var bi2 = 0; bi2 < eligibleBlockers.length; bi2++) {
                 var blkId = eligibleBlockers[bi2];
                 if (usedB[blkId]) continue;
+                if (!engineBotCanBlock(match, seat, blkId, atkId)) continue;
                 var blkPow = engineGetCreaturePower(match, seat, blkId);
-                if (blkPow >= atkTough) {
+                if (blkPow >= atkTough || engineHasKeyword(match, seat, blkId, "Deathtouch")) {
                     match.game.combat.blockers[atkId] = blkId;
                     usedB[blkId] = true;
                     break;
@@ -3277,7 +3577,7 @@ function engineBotDeclareBlockers(match, botPlayer) {
             }
         }
     } else {
-        // Hard: scoring system
+        // Hard: scoring system with keyword awareness
         var usedH = {};
         for (var ai2 = 0; ai2 < incomingAttackers.length; ai2++) {
             var atkId2 = incomingAttackers[ai2];
@@ -3290,17 +3590,30 @@ function engineBotDeclareBlockers(match, botPlayer) {
             for (var bi3 = 0; bi3 < eligibleBlockers.length; bi3++) {
                 var blkId2 = eligibleBlockers[bi3];
                 if (usedH[blkId2]) continue;
+                if (!engineBotCanBlock(match, seat, blkId2, atkId2)) continue;
                 var blkPow2 = engineGetCreaturePower(match, seat, blkId2);
                 var blkTough2 = engineGetCreatureToughness(match, seat, blkId2);
                 var score = 0;
                 // Kill attacker?
                 if (blkPow2 >= atkTough2) score += 10;
+                if (engineHasKeyword(match, seat, blkId2, "Deathtouch")) score += 10;
                 // Survive?
                 if (atkPow2 < blkTough2) score += 5;
+                if (engineHasKeyword(match, seat, blkId2, "Indestructible")) score += 8;
+                // First Strike: if our FS kills before they hit us
+                if (engineHasKeyword(match, seat, blkId2, "First Strike") || engineHasKeyword(match, seat, blkId2, "Double Strike")) {
+                    if (blkPow2 >= atkTough2 || engineHasKeyword(match, seat, blkId2, "Deathtouch")) score += 5;
+                }
+                // Lifelink bonus
+                if (engineHasKeyword(match, seat, blkId2, "Lifelink")) score += 2;
                 // Die without killing?
-                if (atkPow2 >= blkTough2 && blkPow2 < atkTough2) score -= 3;
+                if (atkPow2 >= blkTough2 && blkPow2 < atkTough2 && !engineHasKeyword(match, seat, blkId2, "Deathtouch") && !engineHasKeyword(match, seat, blkId2, "Indestructible")) score -= 3;
                 // Block big attacker bonus
                 if (atkPow2 >= 4) score += 3;
+                // Penalties for attacker keywords
+                if (engineHasKeyword(match, atkSeat2, atkId2, "Trample")) score -= 2;
+                if (engineHasKeyword(match, atkSeat2, atkId2, "Deathtouch") && !engineHasKeyword(match, seat, blkId2, "Indestructible")) score -= 5;
+                if ((engineHasKeyword(match, atkSeat2, atkId2, "First Strike") || engineHasKeyword(match, atkSeat2, atkId2, "Double Strike")) && atkPow2 >= blkTough2 && !engineHasKeyword(match, seat, blkId2, "Indestructible")) score -= 4;
                 if (score > bestScore) { bestScore = score; bestBlk = blkId2; }
             }
             if (bestBlk && bestScore > 0) {

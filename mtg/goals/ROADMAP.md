@@ -121,10 +121,10 @@ Turn the card viewer into an actual game. Three pillars:
 
 ### Phase 2: The Game Is Strategic
 
-- 13 keyword abilities (Flying, First Strike, Trample, Deathtouch, Lifelink, Haste, Vigilance, Reach, Double Strike, Menace, Defender, Indestructible, Hexproof)
+- 13 keyword abilities ✅ (Flying, First Strike, Trample, Deathtouch, Lifelink, Haste, Vigilance, Reach, Double Strike, Menace, Defender, Indestructible, Hexproof)
 - Aura attachment (enchantments that attach to creatures with +N/+N)
 - Basic targeting system for spells
-- Combat AI improvements (keyword awareness)
+- ~~Combat AI improvements (keyword awareness)~~ ✅ (integrated with keyword abilities)
 - Visual polish (damage numbers, death animations, spell overlays)
 
 ### Phase 3: The Game Is Polished

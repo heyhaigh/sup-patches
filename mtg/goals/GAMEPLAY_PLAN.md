@@ -169,7 +169,7 @@ END TURN → damage clears, pass to next player
 
 **Goal:** Cards feel different from each other. A Lightning Bolt is not the same as Llanowar Elves.
 
-### 2A. Keyword Abilities (13 Keywords)
+### ~~2A. Keyword Abilities (13 Keywords)~~ ✅ COMPLETE
 
 All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 
@@ -210,11 +210,11 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 - "Cancel" option always visible to back out
 - Only support basic target patterns initially: "target creature", "target player"
 
-### 2D. Bot AI Improvements
+### ~~2D. Bot AI Improvements~~ ✅ (Partial — keyword combat awareness complete)
 
-- Bot evaluates combat math with keywords (don't attack 2/2 into a deathtouch 1/1)
+- ~~Bot evaluates combat math with keywords (don't attack 2/2 into a deathtouch 1/1)~~ ✅
 - Bot plays removal/damage spells on biggest threat
-- Bot respects flying/reach blocking rules
+- ~~Bot respects flying/reach blocking rules~~ ✅
 
 ### 2E. Visual Polish
 
