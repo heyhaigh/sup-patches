@@ -184,7 +184,22 @@ function getClientHtml() {
     .turnBar .btn:hover { background:rgba(255,255,255,0.18); }
     .turnBar .btnPrimary { background:rgba(11,116,255,0.7); border-color:rgba(11,116,255,0.5); }
     .turnBar .btnPrimary:hover { background:rgba(11,116,255,0.85); }
+    .manaBar { display:flex; gap:3px; align-items:center; }
+    .manaGem { width:18px; height:18px; border-radius:50%; border:1.5px solid rgba(255,255,255,0.2); transition:all 200ms ease; }
+    .manaGem.full { background:radial-gradient(circle at 35% 35%, #c084fc, #7c3aed 60%, #5b21b6); border-color:rgba(124,58,237,0.5); box-shadow:0 0 6px rgba(124,58,237,0.3); }
+    .manaGem.empty { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); }
+    .manaText { font-size:12px; font-weight:700; color:rgba(255,255,255,0.7); margin-left:4px; }
+    .cardImg.unplayable { opacity:0.45; filter:saturate(0.3); }
+    .cardImg.unplayable:hover { opacity:0.6; filter:saturate(0.5); }
     .botThinking { display:flex; align-items:center; gap:8px; padding:8px 16px; background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.25); border-radius:10px; color:rgba(255,255,255,0.85); font-size:13px; font-weight:600; }
+    .cardWrap { position:relative; display:inline-block; flex:0 0 auto; }
+    .ptBadge { position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.82); color:#fff; font-size:10px; font-weight:800; padding:2px 5px; border-radius:5px; line-height:1; pointer-events:none; border:1px solid rgba(255,255,255,0.2); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; z-index:2; }
+    .ptBadge .ptDamaged { color:#ef4444; }
+    .cardWrap.summonSick .cardImg { opacity:0.55; filter:saturate(0.4); }
+    .summonSickIcon { position:absolute; top:4px; right:4px; width:18px; height:18px; background:rgba(0,0,0,0.7); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; pointer-events:none; z-index:2; border:1px solid rgba(255,255,255,0.15); }
+    .spellOverlay { position:fixed; top:0; left:0; width:100%; height:100%; z-index:100; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); pointer-events:none; }
+    .spellOverlay img { width:240px; height:336px; border-radius:16px; box-shadow:0 0 60px rgba(124,58,237,0.5),0 20px 60px rgba(0,0,0,0.4); animation:spellCast 1.6s ease-out forwards; }
+    @keyframes spellCast { 0%{transform:scale(0.3) rotate(-8deg);opacity:0} 15%{transform:scale(1.05) rotate(0deg);opacity:1} 70%{transform:scale(1) rotate(0deg);opacity:1} 100%{transform:scale(0.4) translateY(60vh) rotate(12deg);opacity:0} }
     .botThinking .spinner { width:14px; height:14px; border:2px solid rgba(251,191,36,0.3); border-top-color:#fbbf24; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
     .turnOrder { display:flex; gap:4px; align-items:center; }
     .turnDot { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); transition:all 200ms ease; }
@@ -929,7 +944,7 @@ function getClientHtml() {
     const id = card.id;
     const cur = Number(state.activeDeck.cards[id] || 0);
     state.activeDeck.cards[id] = cur + 1;
-    state.activeDeck.cardMeta[id] = { name: card.name, typeLine: card.typeLine };
+    state.activeDeck.cardMeta[id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null };
     updateDeckBuilderUI();
   }
 
@@ -954,7 +969,7 @@ function getClientHtml() {
     }
     state.activeDeck.commander = card.id; state.activeDeck.commanderName = card.name;
     state.activeDeck.cards[card.id] = 1;
-    state.activeDeck.cardMeta[card.id] = { name: card.name, typeLine: card.typeLine };
+    state.activeDeck.cardMeta[card.id] = { name: card.name, typeLine: card.typeLine, cmc: Number(card.cmc) || 0, power: card.power || null, toughness: card.toughness || null };
     updateDeckBuilderUI();
   }
 
@@ -1225,8 +1240,15 @@ function getClientHtml() {
     if (panel) panel.classList.add('visible');
     img.src = c.imageNormal || c.imageSmall || '';
     title.textContent = c.name || state.selected.id;
-    sub.textContent = (c.typeLine || '') + (state.selected.zone ? ' \u2022 ' + state.selected.zone : '');
-    $('#btnPlaySelected').disabled = !(state.selected.zone === 'hand' && state.selected.seat === state.lastMatch?.viewerSeat);
+    const cmcStr = c.cmc != null ? ' \u2022 ' + c.cmc + ' mana' : '';
+    sub.textContent = (c.typeLine || '') + cmcStr + (state.selected.zone ? ' \u2022 ' + state.selected.zone : '');
+    const canAfford = (Number(c?.cmc) || 0) <= (state.lastMatch?.game?.manaBySeat?.[state.lastMatch.viewerSeat]?.current || 0);
+    var playBtn = $('#btnPlaySelected');
+    playBtn.disabled = !(state.selected.zone === 'hand' && state.selected.seat === state.lastMatch?.viewerSeat && canAfford);
+    if (state.selected.zone === 'hand') {
+      var ct = clientCardType(state.selected.id);
+      playBtn.textContent = (ct === 'instant' || ct === 'sorcery') ? 'Cast spell' : 'Play to battlefield';
+    }
     $('#btnToGraveyard').disabled = !(state.selected.zone === 'battlefield' && state.selected.seat === state.lastMatch?.viewerSeat);
     $('#btnInspect').disabled = !c;
     $$('.cardImg[data-card-id="' + state.selected.id + '"]').forEach(el => el.classList.add('selected'));
@@ -1250,6 +1272,17 @@ function getClientHtml() {
     $('#cardModal').style.display = 'none';
   }
 
+  function clientCardType(id) {
+    var tl = String(cardMeta(id)?.typeLine || '').toLowerCase();
+    if (tl.includes('creature')) return 'creature';
+    if (tl.includes('instant')) return 'instant';
+    if (tl.includes('sorcery')) return 'sorcery';
+    if (tl.includes('enchantment')) return 'enchantment';
+    if (tl.includes('artifact')) return 'artifact';
+    if (tl.includes('land')) return 'land';
+    return 'unknown';
+  }
+
   function renderCardImg(id, opts) {
     const options = opts || {};
     const c = cardMeta(id); const img = document.createElement('img');
@@ -1262,6 +1295,35 @@ function getClientHtml() {
     img.onclick = () => setSelected({ id, zone: options.zone || null, seat: options.seat || null });
     if (options.onDblClick) img.ondblclick = options.onDblClick;
     else img.ondblclick = () => openCardModal(id, options.zone || null);
+    // Wrap battlefield creatures with P/T badge + summoning sickness
+    if (options.zone === 'battlefield' && clientCardType(id) === 'creature') {
+      var wrap = document.createElement('div');
+      wrap.className = 'cardWrap';
+      var cs = options.cardState;
+      if (cs && cs.summoningSick) {
+        wrap.classList.add('summonSick');
+        var ssIcon = document.createElement('div');
+        ssIcon.className = 'summonSickIcon';
+        ssIcon.textContent = '\u23F3';
+        wrap.appendChild(ssIcon);
+      }
+      wrap.appendChild(img);
+      var badge = document.createElement('div');
+      badge.className = 'ptBadge';
+      var pw = c?.power != null ? String(c.power) : '?';
+      var tw = c?.toughness != null ? String(c.toughness) : '?';
+      var dmg = cs ? (Number(cs.damage) || 0) : 0;
+      if (dmg > 0) {
+        var remaining = (Number(tw) || 0) - dmg;
+        badge.innerHTML = escapeHtml(pw) + '/<span class="ptDamaged">' + remaining + '</span>';
+      } else {
+        badge.textContent = pw + '/' + tw;
+      }
+      wrap.appendChild(badge);
+      // Forward click/dblclick to wrapper level too
+      wrap.dataset.cardId = id;
+      return wrap;
+    }
     return img;
   }
 
@@ -1304,7 +1366,7 @@ function getClientHtml() {
     const bfArea = document.createElement('div');
     bfArea.className = 'bfArea';
     if (bf.length) {
-      for (const id of bf) bfArea.appendChild(renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer }));
+      for (const id of bf) { var cs = match?.game?.cardState?.[id] || null; bfArea.appendChild(renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer, cardState: cs })); }
     } else {
       bfArea.innerHTML = '<div class="emptyZone">No permanents</div>';
     }
@@ -1324,9 +1386,16 @@ function getClientHtml() {
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const isMulti = seats.length > 2;
 
-    const cacheKey = (match.game?.turn || '?') + ':' + activeSeat + ':' + step + ':' + seats.length;
+    const mana = match.game?.manaBySeat?.[match.viewerSeat] || { current: 0, max: 0 };
+    const cacheKey = (match.game?.turn || '?') + ':' + activeSeat + ':' + step + ':' + seats.length + ':' + mana.current + '/' + mana.max;
     if (bar.dataset.cacheKey === cacheKey) return;
     bar.dataset.cacheKey = cacheKey;
+
+    let manaHtml = '<div class="manaBar">';
+    for (let i = 0; i < mana.max; i++) {
+      manaHtml += '<div class="manaGem ' + (i < mana.current ? 'full' : 'empty') + '"></div>';
+    }
+    manaHtml += '<div class="manaText">' + mana.current + '/' + mana.max + '</div></div>';
 
     let turnOrderHtml = '';
     if (isMulti) {
@@ -1342,6 +1411,7 @@ function getClientHtml() {
     bar.innerHTML = '<div class="turnInfo">Turn <span class="turnHighlight">' + (match.game?.turn || '?') + '</span></div>'
       + '<div class="turnInfo">' + (isMyTurn ? '<span class="turnHighlight">Your turn</span>' : escapeHtml(activeName) + "'s turn") + '</div>'
       + '<div class="turnInfo">' + escapeHtml(stepLabel) + '</div>'
+      + manaHtml
       + turnOrderHtml
       + '<button id="btnGameDraw" class="btn">Draw</button>'
       + '<button id="btnGameEndTurn" class="btn btnPrimary"' + (isMyTurn ? '' : ' disabled') + '>End turn</button>';
@@ -1378,11 +1448,15 @@ function getClientHtml() {
     if (!hand.length) {
       handTray.innerHTML = '<div class="emptyZone">No cards in hand</div>';
     } else {
+      const myMana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
       for (const id of hand) {
-        handTray.appendChild(renderCardImg(id, {
+        const img = renderCardImg(id, {
           zone: 'hand', seat: mySeat, w: 90, h: 126,
           onDblClick: async () => { setSelected({ id, zone: 'hand', seat: mySeat }); await playSelectedToBattlefield(); }
-        }));
+        });
+        const cmc = Number(cardMeta(id)?.cmc) || 0;
+        if (cmc > myMana.current) img.classList.add('unplayable');
+        handTray.appendChild(img);
       }
     }
     myEl.appendChild(handTray);
@@ -1487,11 +1561,26 @@ function getClientHtml() {
     await refreshMatch();
   }
 
+  function showSpellCastAnimation(cardId) {
+    var c = cardMeta(cardId);
+    if (!c) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'spellOverlay';
+    var animImg = document.createElement('img');
+    animImg.src = c.imageNormal || c.imageSmall || '';
+    animImg.alt = c.name || cardId;
+    overlay.appendChild(animImg);
+    document.body.appendChild(overlay);
+    setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 1700);
+  }
+
   async function playSelectedToBattlefield() {
     const sel = state.selected; if (!state.activeMatchId || !sel?.id) return;
     if (!(sel.zone === 'hand' && sel.seat === state.lastMatch?.viewerSeat)) { toast('Select a card in your hand to play.', { type: 'warn' }); return; }
+    var isSpell = (clientCardType(sel.id) === 'instant' || clientCardType(sel.id) === 'sorcery');
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: sel.id } });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    if (isSpell) showSpellCastAnimation(sel.id);
     await refreshMatch();
   }
 
@@ -1790,9 +1879,7 @@ function scryfallSearchAll(query, opts) {
 
 function buildQuickstartStandardDeck(color) {
     const c = String(color || '').toUpperCase();
-    const landName = basicLandNameForColor(c);
-    const landId = getBasicLandIdByName(landName);
-    const pool = scryfallSearchAll(`f:standard id=${c} -t:land -type:basic`, { order: 'popular', maxPages: 3 });
+    const pool = scryfallSearchAll('f:standard id=' + c + ' -t:land -type:basic', { order: 'popular', maxPages: 3 });
     const valid = pool.filter((x) => x && x.object === 'card' && x.id && x.name);
     if (valid.length < 6) throw new Error('Not enough Standard-legal cards found for this mono-color quickstart.');
     // Bucket by CMC for curve awareness
@@ -1803,23 +1890,36 @@ function buildQuickstartStandardDeck(color) {
         else if (cmc <= 4) mid.push(card);
         else high.push(card);
     }
-    // Target: 4 low-CMC (4x=16), 3 mid-CMC (4x=12), 2 high-CMC (4x=8) = 36 spells + 24 lands = 60
+    // Target 30 cards (no lands): 4 low-CMC (4x=16), 2 mid-CMC (4x=8), 2 high-CMC (3x=6) = 30
     const picks = [];
     picks.push(...low.slice(0, 4));
-    picks.push(...mid.slice(0, 3));
+    picks.push(...mid.slice(0, 2));
     picks.push(...high.slice(0, 2));
-    // Fill remaining slots from any bucket if we didn't hit 9 unique cards
-    if (picks.length < 9) {
+    // Fill remaining unique slots if needed
+    if (picks.length < 8) {
         const used = new Set(picks.map(p => p.id));
-        for (const card of valid) { if (!used.has(card.id)) { picks.push(card); used.add(card.id); if (picks.length >= 9) break; } }
+        for (const card of valid) { if (!used.has(card.id)) { picks.push(card); used.add(card.id); if (picks.length >= 8) break; } }
     }
     const cards = {}; const cardMeta = {};
-    cards[landId] = 24; cardMeta[landId] = { name: landName, typeLine: 'Basic Land', cmc: 0 };
-    for (const card of picks) { cards[card.id] = 4; cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0 }; }
+    for (let i = 0; i < picks.length; i++) {
+        const card = picks[i];
+        // First 6 picks get 4 copies, last 2 get 3 copies = 24 + 6 = 30
+        cards[card.id] = i < 6 ? 4 : 3;
+        cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null };
+    }
     const total = Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0);
-    if (total < 60) cards[landId] = (Number(cards[landId]) || 0) + (60 - total);
+    // Fill to 30 if short using extra low-CMC cards at 4 copies
+    if (total < 30 && low.length > 4) {
+        const used = new Set(Object.keys(cards));
+        for (const card of low) {
+            if (used.has(card.id)) continue;
+            cards[card.id] = Math.min(4, 30 - Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0));
+            cardMeta[card.id] = { name: card.name, typeLine: card.type_line || '', cmc: Number(card.cmc) || 0, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null };
+            if (Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0) >= 30) break;
+        }
+    }
     const names = { W:'Quickstart \u2014 Mono-White Aggro', U:'Quickstart \u2014 Mono-Blue Tempo', B:'Quickstart \u2014 Mono-Black Midrange', R:'Quickstart \u2014 Mono-Red Aggro', G:'Quickstart \u2014 Mono-Green Stompy' };
-    return { name: names[c] || `Quickstart \u2014 Mono-${c}`, format: 'standard', cards, cardMeta, commander: null, commanderName: null };
+    return { name: names[c] || ('Quickstart \u2014 Mono-' + c), format: 'standard', cards, cardMeta, commander: null, commanderName: null };
 }
 
 function resolveCommanderByName(name) {
@@ -1865,11 +1965,11 @@ function buildQuickstartCommanderDeck(commanderCard) {
     const buckets = { ramp: [], draw: [], removal: [], other: [] };
     for (const c of valid) { const cat = cmdDeckCategorize(c); if (cat !== 'land') (buckets[cat] || buckets.other).push(c); }
 
-    // Target ratios: ~10 ramp, ~10 draw, ~5 removal, ~37 other = 62 nonland slots (+ commander + 37 lands = 100)
+    // Target 60 cards (no lands): commander (1) + 59 spells. ~8 ramp, ~8 draw, ~4 removal, ~39 other
     const cards = {}; const cardMeta = {};
-    cards[cmd.id] = 1; cardMeta[cmd.id] = { name: cmd.name, typeLine: cmd.type_line || '', cmc: Number(cmd.cmc) || 0 };
+    cards[cmd.id] = 1; cardMeta[cmd.id] = { name: cmd.name, typeLine: cmd.type_line || '', cmc: Number(cmd.cmc) || 0, power: cmd.power != null ? String(cmd.power) : null, toughness: cmd.toughness != null ? String(cmd.toughness) : null };
     const used = new Set([cmd.id]);
-    const targets = { ramp: 10, draw: 10, removal: 5, other: 37 };
+    const targets = { ramp: 8, draw: 8, removal: 4, other: 39 };
     const chosen = [];
     for (const [cat, target] of Object.entries(targets)) {
         const src = buckets[cat] || [];
@@ -1880,24 +1980,17 @@ function buildQuickstartCommanderDeck(commanderCard) {
             if (picked >= target) break;
         }
     }
-    // Fill remaining from any category up to 62 total nonland cards
-    if (chosen.length < 62) {
+    // Fill remaining from any category up to 59 total nonland cards
+    if (chosen.length < 59) {
         for (const c of valid) {
             if (used.has(c.id)) continue;
             chosen.push(c); used.add(c.id);
-            if (chosen.length >= 62) break;
+            if (chosen.length >= 59) break;
         }
     }
-    if (chosen.length < 40) throw new Error('Not enough Commander cards found for this commander color identity.');
-    for (const c of chosen) { cards[c.id] = 1; cardMeta[c.id] = { name: c.name, typeLine: c.type_line || '', cmc: Number(c.cmc) || 0 }; }
-    let currentTotal = Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0);
-    let remaining = 100 - currentTotal; if (remaining < 0) remaining = 0;
-    const basics = colors.length ? colors.map(basicLandNameForColor) : ['Wastes'];
-    const ids = basics.map(getBasicLandIdByName);
-    for (let i = 0; i < remaining; i++) { const idx = i % ids.length; cards[ids[idx]] = (Number(cards[ids[idx]]) || 0) + 1; if (!cardMeta[ids[idx]]) cardMeta[ids[idx]] = { name: basics[idx], typeLine: 'Basic Land', cmc: 0 }; }
-    const totalAfter = Object.values(cards).reduce((a, b) => a + (Number(b) || 0), 0);
-    if (totalAfter !== 100) { cards[ids[0]] = (Number(cards[ids[0]]) || 0) + (100 - totalAfter); if (cards[ids[0]] <= 0) delete cards[ids[0]]; }
-    return { name: `Quickstart \u2014 ${cmd.name}`, format: 'commander', cards, cardMeta, commander: cmd.id, commanderName: cmd.name };
+    if (chosen.length < 30) throw new Error('Not enough Commander cards found for this commander color identity.');
+    for (const c of chosen) { cards[c.id] = 1; cardMeta[c.id] = { name: c.name, typeLine: c.type_line || '', cmc: Number(c.cmc) || 0, power: c.power != null ? String(c.power) : null, toughness: c.toughness != null ? String(c.toughness) : null }; }
+    return { name: 'Quickstart \u2014 ' + cmd.name, format: 'commander', cards, cardMeta, commander: cmd.id, commanderName: cmd.name };
 }
 
 // --- Deck validation ---
@@ -1905,9 +1998,9 @@ function buildQuickstartCommanderDeck(commanderCard) {
 function validateDeck(deck) {
     const errors = [];
     const n = deckTotalCount(deck);
-    if (deck.format === "standard") { if (n < 60) errors.push(`Standard deck must have at least 60 cards (has ${n}).`); }
+    if (deck.format === "standard") { if (n < 30) errors.push("Standard deck must have at least 30 cards (has " + n + ")."); }
     else if (deck.format === "commander") {
-        if (n !== 100) errors.push(`Commander deck must have exactly 100 cards (has ${n}).`);
+        if (n !== 60) errors.push("Commander deck must have exactly 60 cards (has " + n + ").");
         if (!deck.commander) errors.push("Commander deck requires a commander.");
         if (deck.commander) { const cmdCount = Number(deck.cards?.[deck.commander] || 0); if (cmdCount !== 1) errors.push(`Commander must be included exactly once (currently ${cmdCount}).`); }
     } else errors.push("Unknown format.");
@@ -1977,7 +2070,7 @@ function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponent
         v: 1, matchId, format, createdAt: now, phase: "lobby",
         hostUserId: hostUser.id, readyByUserId: { [hostUser.id]: false },
         players: [{ userId: hostUser.id, username: hostUser.username, joinedAt: now, seat: 1 }],
-        game: { turn: 0, activePlayerSeat: 1, prioritySeat: 1, step: "begin", stack: [], zones: {}, lifeBySeat: {}, mulligansBySeat: {}, keptBySeat: {} },
+        game: { turn: 0, activePlayerSeat: 1, prioritySeat: 1, step: "begin", stack: [], zones: {}, lifeBySeat: {}, manaBySeat: {}, mulligansBySeat: {}, keptBySeat: {}, cardState: {} },
         decks: { 1: { deckId: hostDeck.id, format: hostDeck.format, name: hostDeck.name, commander: hostDeck.commander, cards: hostDeck.cards, cardMeta: hostDeck.cardMeta || {} } },
         botsBySeat: {},
         log: [{ t: now, type: "MATCH_CREATED", by: hostUser.username, opponentType: opponentType || "human" }],
@@ -2038,6 +2131,8 @@ function engineApplyAction(match, user, action) {
             const hand = []; for (let i = 0; i < 7; i++) { const top = library.shift(); if (!top) break; hand.push(top); }
             match.game.zones[seat] = { library, hand, graveyard: [], exile: [], battlefield: [], command: commanderId ? [commanderId] : [] };
             match.game.lifeBySeat[seat] = match.format === "commander" ? 40 : 20;
+            if (!match.game.manaBySeat) match.game.manaBySeat = {};
+            match.game.manaBySeat[seat] = { current: 0, max: 0 };
             match.game.mulligansBySeat[seat] = 0; match.game.keptBySeat[seat] = false;
             if (p.isBot) match.game.keptBySeat[seat] = true;
         }
@@ -2075,6 +2170,9 @@ function engineApplyAction(match, user, action) {
             if (matchHasBot(match) && match.players.length === 2) { const human = match.players.find((p) => !p.isBot); startSeat = human?.seat || 1; }
             else { const seats = match.players.map((p) => p.seat); startSeat = seats[sup.random.integer(0, Math.max(0, seats.length - 1))] || 1; }
             match.game.activePlayerSeat = startSeat; match.game.prioritySeat = startSeat;
+            if (!match.game.manaBySeat) match.game.manaBySeat = {};
+            if (!match.game.manaBySeat[startSeat]) match.game.manaBySeat[startSeat] = { current: 0, max: 0 };
+            match.game.manaBySeat[startSeat].max = 1; match.game.manaBySeat[startSeat].current = 1;
             match.log.push({ t: Date.now(), type: "MULLIGANS_DONE", by: "engine" });
             match.log.push({ t: Date.now(), type: "TURN_START", by: "engine", turn: match.game.turn, seat: startSeat });
             engineRunBotsIfActive(match);
@@ -2087,8 +2185,14 @@ function engineApplyAction(match, user, action) {
         const seat = player.seat;
         if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
-        const ok = engineMoveCard(match, seat, "hand", "battlefield", cardId); if (!ok.ok) return ok;
-        match.log.push({ t: Date.now(), type: "PLAY", by: user.username, seat, cardId });
+        const deckMeta = match.decks?.[seat]?.cardMeta || {};
+        const cmc = Number(deckMeta[cardId]?.cmc) || 0;
+        const mana = match.game.manaBySeat?.[seat] || { current: 0, max: 0 };
+        if (cmc > mana.current) return { ok: false, error: "not enough mana (" + cmc + " needed, " + mana.current + " available)" };
+        var isSpell = engineIsSpell(match, seat, cardId);
+        const ok = enginePlayCard(match, seat, cardId); if (!ok.ok) return ok;
+        mana.current = Math.max(0, mana.current - cmc);
+        match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId });
         if (match.game.step === "begin") match.game.step = "main";
         return { ok: true, match };
     }
@@ -2146,7 +2250,9 @@ function engineMoveCard(match, seat, fromZone, toZone, cardId) {
     if (!Array.isArray(from)) return { ok: false, error: `zone ${fromZone} not available` };
     if (!Array.isArray(to)) return { ok: false, error: `zone ${toZone} not available` };
     const idx = from.indexOf(cardId); if (idx < 0) return { ok: false, error: `card not in ${fromZone}` };
-    from.splice(idx, 1); to.push(cardId); return { ok: true };
+    from.splice(idx, 1); to.push(cardId);
+    if (fromZone === "battlefield" && match.game.cardState?.[cardId]) { delete match.game.cardState[cardId]; }
+    return { ok: true };
 }
 
 function engineSeatOrder(match) { return (match.players || []).map((p) => p.seat).filter((n) => Number.isFinite(n)).sort((a, b) => a - b); }
@@ -2163,7 +2269,16 @@ function engineAdvanceTurn(match, opts) {
     if (next <= cur) match.game.turn = (Number(match.game.turn) || 1) + 1;
     match.game.activePlayerSeat = next; match.game.prioritySeat = next;
     match.game.step = "begin";
+    if (!match.game.manaBySeat) match.game.manaBySeat = {};
+    const mana = match.game.manaBySeat[next] || { current: 0, max: 0 };
+    mana.max = Math.min(10, mana.max + 1);
+    mana.current = mana.max;
+    match.game.manaBySeat[next] = mana;
     engineEnsureZones(match, next); engineDrawCards(match, next, 1);
+    if (match.game.cardState) {
+        var bf = match.game.zones?.[next]?.battlefield || [];
+        for (var ci = 0; ci < bf.length; ci++) { if (match.game.cardState[bf[ci]]) match.game.cardState[bf[ci]].summoningSick = false; }
+    }
     match.log.push({ t: Date.now(), type: "TURN_START", by: (opts || {}).by || "engine", turn: match.game.turn, seat: next });
 }
 
@@ -2185,73 +2300,82 @@ function engineBotIsLand(match, seat, cardId) {
     return tl.includes("land");
 }
 
+function engineCardType(match, seat, cardId) {
+    const tl = String((match.decks?.[seat]?.cardMeta || {})[cardId]?.typeLine || "").toLowerCase();
+    if (tl.includes("creature")) return "creature";
+    if (tl.includes("instant")) return "instant";
+    if (tl.includes("sorcery")) return "sorcery";
+    if (tl.includes("enchantment")) return "enchantment";
+    if (tl.includes("artifact")) return "artifact";
+    if (tl.includes("land")) return "land";
+    return "unknown";
+}
+function engineIsSpell(match, seat, cardId) { var t = engineCardType(match, seat, cardId); return t === "instant" || t === "sorcery"; }
+function engineIsCreature(match, seat, cardId) { return engineCardType(match, seat, cardId) === "creature"; }
+
+function enginePlayCard(match, seat, cardId) {
+    if (engineIsSpell(match, seat, cardId)) {
+        return engineMoveCard(match, seat, "hand", "graveyard", cardId);
+    }
+    var result = engineMoveCard(match, seat, "hand", "battlefield", cardId);
+    if (result.ok && engineIsCreature(match, seat, cardId)) {
+        if (!match.game.cardState) match.game.cardState = {};
+        match.game.cardState[cardId] = { tapped: false, summoningSick: true, damage: 0 };
+    }
+    return result;
+}
+
 function engineBotTakeTurn(match, botPlayer) {
     const seat = botPlayer.seat; const diff = botDifficultyNormalize(botPlayer.difficulty);
     engineEnsureZones(match, seat);
     const hand = Array.isArray(match.game.zones[seat].hand) ? match.game.zones[seat].hand : [];
     const bf = Array.isArray(match.game.zones[seat].battlefield) ? match.game.zones[seat].battlefield : [];
     const played = [];
+    if (!match.game.manaBySeat) match.game.manaBySeat = {};
+    const mana = match.game.manaBySeat[seat] || { current: 0, max: 0 };
+    match.game.manaBySeat[seat] = mana;
 
-    if (!hand.length || (diff === "easy" && sup.random.integer(0, 4) < 2)) {
-        // Easy: 40% chance to pass even with cards in hand
+    const getCmc = (id) => Number(engineBotCardMeta(match, seat, id).cmc) || 0;
+    const affordable = hand.filter(id => getCmc(id) <= mana.current);
+
+    if (!affordable.length || (diff === "easy" && sup.random.integer(0, 4) < 2)) {
         match.log.push({ t: Date.now(), type: "BOT_PASS", by: "bot", seat, difficulty: diff });
         engineAdvanceTurn(match, { by: "bot" });
         return;
     }
 
-    const lands = hand.filter(id => engineBotIsLand(match, seat, id));
-    const nonLands = hand.filter(id => !engineBotIsLand(match, seat, id));
-
     if (diff === "easy") {
-        // Easy: play 1 random card (no type preference)
-        const idx = sup.random.integer(0, hand.length - 1);
-        const cardId = hand[idx];
-        engineMoveCard(match, seat, "hand", "battlefield", cardId);
+        // Easy: play 1 random affordable card
+        const idx = sup.random.integer(0, affordable.length - 1);
+        const cardId = affordable[idx];
+        enginePlayCard(match, seat, cardId);
+        mana.current = Math.max(0, mana.current - getCmc(cardId));
         played.push(cardId);
     } else if (diff === "medium") {
-        // Medium: play a land first if available, then 1 lower-CMC non-land
-        if (lands.length) {
-            const landId = lands[sup.random.integer(0, lands.length - 1)];
-            engineMoveCard(match, seat, "hand", "battlefield", landId);
-            played.push(landId);
-        }
-        if (nonLands.length) {
-            // Sort by CMC ascending, pick lowest
-            const sorted = nonLands.slice().sort((a, b) => {
-                const ca = Number(engineBotCardMeta(match, seat, a).cmc) || 0;
-                const cb = Number(engineBotCardMeta(match, seat, b).cmc) || 0;
-                return ca - cb;
-            });
-            const pick = sorted[0];
-            engineMoveCard(match, seat, "hand", "battlefield", pick);
-            played.push(pick);
+        // Medium: sort affordable by CMC ascending, play greedily (cheapest first)
+        const sorted = affordable.slice().sort((a, b) => getCmc(a) - getCmc(b));
+        for (const cardId of sorted) {
+            if (getCmc(cardId) > mana.current) continue;
+            enginePlayCard(match, seat, cardId);
+            mana.current = Math.max(0, mana.current - getCmc(cardId));
+            played.push(cardId);
         }
     } else {
-        // Hard: land first, then 1-2 non-lands by CMC, cap board at 6 permanents
-        if (lands.length) {
-            const landId = lands[sup.random.integer(0, lands.length - 1)];
-            engineMoveCard(match, seat, "hand", "battlefield", landId);
-            played.push(landId);
-        }
-        const boardSize = bf.length + played.length;
-        const maxPlays = boardSize >= 6 ? 1 : 2;
-        if (nonLands.length) {
-            // Sort by CMC ascending (develop board efficiently)
-            const sorted = nonLands.slice().sort((a, b) => {
-                const ca = Number(engineBotCardMeta(match, seat, a).cmc) || 0;
-                const cb = Number(engineBotCardMeta(match, seat, b).cmc) || 0;
-                return ca - cb;
-            });
-            for (let i = 0; i < Math.min(maxPlays, sorted.length); i++) {
-                engineMoveCard(match, seat, "hand", "battlefield", sorted[i]);
-                played.push(sorted[i]);
-            }
+        // Hard: sort affordable by CMC descending (value maximization), cap board at 6
+        const sorted = affordable.slice().sort((a, b) => getCmc(b) - getCmc(a));
+        for (const cardId of sorted) {
+            if (getCmc(cardId) > mana.current) continue;
+            if (bf.length + played.length >= 6) break;
+            enginePlayCard(match, seat, cardId);
+            mana.current = Math.max(0, mana.current - getCmc(cardId));
+            played.push(cardId);
         }
     }
 
     if (played.length) {
         for (const cardId of played) {
-            match.log.push({ t: Date.now(), type: "BOT_PLAY", by: "bot", seat, difficulty: diff, cardId });
+            var logType = engineIsSpell(match, seat, cardId) ? "BOT_CAST_SPELL" : "BOT_PLAY";
+            match.log.push({ t: Date.now(), type: logType, by: "bot", seat, difficulty: diff, cardId });
         }
     } else {
         match.log.push({ t: Date.now(), type: "BOT_PASS", by: "bot", seat, difficulty: diff });
@@ -2331,5 +2455,5 @@ function simplifyCard(card) {
     if (!card || typeof card !== "object") return null;
     const imageSmall = card.image_uris?.small || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.small || card.card_faces?.[0]?.image_uris?.normal || null;
     const imageNormal = card.image_uris?.normal || card.image_uris?.large || card.card_faces?.[0]?.image_uris?.normal || card.card_faces?.[0]?.image_uris?.large || imageSmall || null;
-    return { id: card.id, name: card.name, typeLine: card.type_line, manaCost: card.mana_cost, oracleText: card.oracle_text, imageSmall, imageNormal, legalities: card.legalities, cmc: card.cmc, colors: card.colors, colorIdentity: card.color_identity, set: card.set, collectorNumber: card.collector_number };
+    return { id: card.id, name: card.name, typeLine: card.type_line, manaCost: card.mana_cost, oracleText: card.oracle_text, imageSmall, imageNormal, legalities: card.legalities, cmc: card.cmc, colors: card.colors, colorIdentity: card.color_identity, set: card.set, collectorNumber: card.collector_number, power: card.power != null ? String(card.power) : null, toughness: card.toughness != null ? String(card.toughness) : null, keywords: Array.isArray(card.keywords) ? card.keywords : [] };
 }

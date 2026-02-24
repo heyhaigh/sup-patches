@@ -319,8 +319,9 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 | **1** | The Game Exists | **Large (8-13 sessions)** | Mana, combat, life totals, win/loss. It's a game. |
 | **2** | The Game Is Strategic | **Large (5-8 sessions)** | Keywords, auras, targeting, combat AI, animations. Worth replaying. |
 | **3** | The Game Is Polished | **Medium (3-5 sessions)** | Polish, edge cases, mobile UX, game over. Worth sharing. |
+| **4** | Classic Mode (Lands) | **Large (4-6 sessions)** | Traditional land mechanics as opt-in mode. Full MTG card pool. |
 
-**Total: ~16-26 sessions to a polished, playable game.**
+**Total: ~16-26 sessions to a polished Spark game. ~20-32 with Classic mode.**
 
 **Minimum viable fun: End of Phase 1.** At that point you have mana tension, creatures fighting, and someone winning. It's simplified Magic, but it's a real game.
 
@@ -340,3 +341,207 @@ Ship each sub-step as a working state:
 8. **Bot combat AI** — basic attack/block heuristics
 
 **Critical rule: Each step must be fully working and tested before the next begins.**
+
+---
+
+## Phase 4: Classic Mode — Traditional Lands & Colored Mana (Future)
+
+> **Status:** Deferred until after Phase 1-3 ship. Build only if player feedback demands it.
+>
+> **Rationale:** Three independent agents (game designer, research, project manager) assessed this and reached consensus: auto-mana is the right default for a digital fan game. Combat, keywords, and polish are higher priority. The retrofit cost is approximately equal whether built now or later — the 13 mana touchpoints are localized and well-understood.
+
+### Why Consider Classic Mode At All
+
+Auto-mana removes MTG's deepest strategic subsystem. While the tradeoffs are worthwhile for the default experience, significant design space is lost:
+
+- **Deckbuilding depth:** ~40% of traditional deckbuilding decisions revolve around the mana base — how many lands, what color ratio, utility lands vs. color sources, dual lands vs. basics
+- **Card ecosystem:** ~1,220-1,570 Commander-legal cards and ~160-215 Standard-legal cards become broken or meaningless without lands (ramp spells, landfall, land destruction, domain, dual lands, fetch lands, utility lands, mana dorks)
+- **Color-fixing risk/reward:** Multi-color decks in real MTG trade consistency for power. With auto-mana, there's no cost to greed
+- **Green's identity:** ~40% of green's mechanical identity is land-tied (ramp, landfall, land animation, land recursion). Without lands, green loses its primary strategic axis
+- **9+ archetypes die entirely:** Landfall, Lands Matter, Domain, Tron, Valakut combo, Maze's End, Dark Depths, Green Ramp, Stax/Resource Denial
+
+However, ~88-91% of Standard cards and ~94-95% of Commander cards remain fully functional without lands. The losses are qualitatively significant but numerically manageable.
+
+### The Multi-Color Problem (Critical Design Decision)
+
+The single hardest challenge with auto-mana: without lands producing specific colors, there's no cost to playing all 5 colors. "Goodstuff" decks that cherry-pick the best card at every CMC from every color would dominate.
+
+**Recommended solution for auto-mana mode — Mana Pip System:**
+- Each turn you gain +1 mana AND choose what color that pip is
+- Cards with colored costs (e.g., `{1}{W}{W}` for Wrath of God) require the right color pips allocated
+- Heavy color commitments (like `{B}{B}{B}` for Necropotence) require real investment across multiple turns
+- Decks declare 1-2 colors at deckbuilding; only cards within that color identity are allowed
+- Creates meaningful per-turn micro-decisions without land cards
+
+**This is a potential upgrade to the current auto-mana system (where color pips are ignored) and could be implemented independently of Classic mode, possibly as a Phase 2-3 enhancement.**
+
+### Classic Mode Design Specification
+
+Classic mode restores traditional MTG land mechanics alongside the existing auto-mana mode as a player-selectable option.
+
+#### Format Selection UI
+
+```
+Format:     [ Standard ]  [ Commander ]
+Rules:      [ Spark ✦ ]  [ Classic ]
+Opponent:   [ Human ]  [ Bot ]
+```
+
+- **Spark** (working name for auto-mana mode): No lands, auto-mana, smaller decks. The default.
+- **Classic**: Traditional lands, full-size decks, tap for mana.
+- The rules toggle is orthogonal to format — Standard Classic (60 cards) and Commander Classic (100 cards) are both valid.
+- Naming alternatives considered: Blitz, Quickcast, Arcane. "Spark" references planeswalker sparks, implies speed.
+
+#### Deck Size & Composition
+
+| Format | Spark (Auto-Mana) | Classic (Lands) |
+|--------|-------------------|-----------------|
+| Standard | 30 cards, no lands | 60 cards, ~24 lands + 36 spells |
+| Commander | 60 cards, no lands | 100 cards, ~37 lands + 63 spells |
+
+#### Engine Changes Required
+
+**Match state additions:**
+- `match.game.manaMode`: `'spark'` or `'classic'`
+- `match.game.manaPoolBySeat`: `{ W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }` per seat (Classic only)
+- `match.game.landPlayedThisTurnBySeat`: `{}` tracking 1-per-turn land limit (Classic only)
+- Permanent state: `tapped` boolean per card on battlefield (needed for combat anyway)
+
+**13 identified branch points** (all conditional on `manaMode`):
+
+| # | Function | Spark Behavior | Classic Behavior |
+|---|----------|---------------|-----------------|
+| 1 | `createInitialMatchState` | Init `manaBySeat` | Init `manaPoolBySeat` + `landPlayedThisTurnBySeat` |
+| 2 | `engineApplyAction` START_GAME | Set mana `{ current: 0, max: 0 }` | No mana init (comes from lands) |
+| 3 | `engineApplyAction` KEEP_HAND | Give starting player 1/1 mana | No auto-mana |
+| 4 | `engineApplyAction` PLAY_FROM_HAND | Validate `cmc <= manaCurrent`, deduct | Validate mana pool has required colors, deduct from pool |
+| 5 | `engineAdvanceTurn` | Auto-increment max, refill | Untap all permanents, clear mana pool, reset land play counter |
+| 6 | `engineBotTakeTurn` | Filter affordable by CMC | Play a land first, tap lands for mana, then play affordable spells |
+| 7 | Client: `setSelected()` | Check CMC affordability | Check color + CMC affordability against mana pool |
+| 8 | Client: `renderTurnBar()` | Purple mana gem bar | Colored mana pool display (W/U/B/R/G pips) |
+| 9 | Client: `renderGame()` hand | Dim by CMC | Dim by color + CMC |
+| 10 | `buildQuickstartStandardDeck` | 30 cards, `-t:land` filter | 60 cards, include ~24 basics + nonbasics |
+| 11 | `buildQuickstartCommanderDeck` | 60 cards, `-t:land` filter | 100 cards, include ~37 lands with color-appropriate duals |
+| 12 | `validateDeck` | 30 / 60 thresholds | 60 / 100 thresholds |
+| 13 | CSS | `.manaBar` gem display | Colored mana pool display, tapped land styling |
+
+**New action type for Classic mode:**
+- `PLAY_LAND`: Move land from hand to battlefield. Validate `landPlayedThisTurn < 1`. Does not cost mana.
+
+**New interaction for Classic mode:**
+- "Tap land for mana": Click/tap a land on battlefield to add its color to your mana pool. Mana pool empties at end of turn.
+- **Auto-tap option** (recommended default): When playing a spell, engine automatically selects which lands to tap. Manual tap as advanced option.
+
+#### New Systems Required
+
+| System | Complexity | Description |
+|--------|-----------|-------------|
+| Mana pool per color | Medium | Track 6 color buckets per seat. Add/drain on land tap / spell cast. |
+| Mana cost parsing | Medium | Parse `{2}{W}{W}` strings into `{ generic: 2, W: 2 }`. Validate against pool. |
+| Land play action | Small | New action type, 1/turn limit, track in game state. |
+| Auto-tap algorithm | Medium | Given a mana cost and available lands, determine optimal tap combination. Greedy algorithm: tap lands that produce only the needed color first, save flexible lands for last. |
+| Land row UI | Small-Medium | Separate battlefield row for lands vs. non-lands. Tapped = 90deg rotation (shared with combat tap). |
+| Bot land strategy | Small-Medium | Play best color-fixing land available. Easy: random land. Hard: play the land that enables this turn's best spell. |
+| Dual land deck building | Medium | Quickstart decks need color-appropriate dual lands from the format's available pool. |
+
+**Estimated scope:** ~500-700 new lines of code, ~80 lines of conditional wrappers at branch points. File grows from ~2,400 to ~3,100 lines.
+
+#### Dual Land Integration for Quickstart Decks
+
+Classic mode quickstart decks should include format-appropriate dual lands:
+
+**Standard Classic (60 cards):**
+- ~10 basic lands (split by deck's color identity)
+- ~8 dual lands (shock lands, check lands, pain lands — whatever's Standard-legal)
+- ~6 utility lands (creature lands, modal DFCs if parseable)
+- ~36 spells (same curve logic as Spark mode but more picks to fill 36 slots)
+
+**Commander Classic (100 cards):**
+- ~12 basic lands
+- ~15 dual/tri lands (from Commander's deep pool: shocks, fetches, checks, pains, triomes)
+- ~10 utility lands (Sol Ring land equivalents, creature lands, etc.)
+- ~62 spells (same category ratios as current: ramp, draw, removal, other)
+- Commander + 99
+
+Dual land selection would use Scryfall queries filtered by format legality and the deck's color identity:
+```
+f:standard t:land id<=WU -type:basic     # Standard dual lands for W/U deck
+legal:commander t:land id<=WUB -type:basic # Commander dual lands for Esper
+```
+
+#### Cards That Need Filtering By Mode
+
+Cards that are dead in Spark mode but functional in Classic:
+
+| Category | Example Cards | Spark | Classic |
+|----------|--------------|-------|---------|
+| Ramp spells | Cultivate, Rampant Growth, Kodama's Reach | Excluded from deckbuilder | Included |
+| Landfall | Lotus Cobra, Omnath, Scute Swarm | Excluded | Included |
+| Land destruction | Stone Rain, Field of Ruin | Excluded | Included |
+| Land recursion | Crucible of Worlds, Life from the Loam | Excluded | Included |
+| Land tutors | Expedition Map, Sylvan Scrying | Excluded | Included |
+| Mana dorks | Llanowar Elves, Birds of Paradise | Functional but redundant | Core green strategy |
+| Domain cards | Leyline Binding, Tribal Flames | Dead (0 types) | Functional |
+
+**Implementation:** Add a `sparkBanned` tag or filter at deck-building time. In Spark mode, Scryfall queries add `-keyword:landfall` and filter results whose oracle text matches land-specific patterns. In Classic mode, no filtering needed — all cards are valid.
+
+#### Bot AI Differences by Mode
+
+| Difficulty | Spark | Classic |
+|-----------|-------|---------|
+| **Easy** | Play 1 random affordable card | Play a land (random), tap all lands, play 1 random affordable spell |
+| **Medium** | Cheapest-first greedy curve | Play best color-fixing land, tap lands optimally, play spells by curve |
+| **Hard** | Most expensive first, board cap 6 | Sequence land drops for upcoming turns, hold fetch lands for landfall triggers, play high-value spells first |
+
+#### Migration & Compatibility
+
+- Existing matches (all Spark) continue to work — `manaMode` defaults to `'spark'` if missing
+- Existing decks can be tagged with their mode or auto-detected (decks with 0 lands = Spark, decks with lands = Classic)
+- Quickstart deck builder generates the appropriate deck based on selected rules mode
+
+### Comparison With Other Digital Card Games
+
+| Game | Resource System | Designed For It? | Result |
+|------|----------------|-----------------|--------|
+| Hearthstone | Auto +1/turn, cap 10 | Yes (from scratch) | Massive success, but lacks MTG's color depth |
+| Legends of Runeterra | Auto +1/turn + spell mana banking | Yes (from scratch) | Praised for mana innovation |
+| Pokemon TCG Live | Energy cards (kept land-equivalent) | N/A | Resource cards are core to strategy |
+| Marvel SNAP | Auto +1/turn, 6-turn games | Yes (from scratch) | Ultra-fast, works for its scope |
+| MTG Arena | Full land system | No (faithful port) | Uses "hand smoother" to patch mana screw in BO1 |
+| **Our Game (Spark)** | Auto +1/turn, cap 10 | Retrofitted | Works for 88-95% of card pool |
+| **Our Game (Classic)** | Traditional lands | Additive mode | Full card pool, full MTG experience |
+
+**Key insight from research:** No game has successfully retrofitted auto-mana onto an existing land-based system. We're doing it in reverse (starting with auto-mana, potentially adding lands), which is architecturally cleaner — the simpler system is the default, complexity is opt-in.
+
+### Risk Assessment
+
+| Risk | Severity | Mitigation |
+|------|---------|-----------|
+| Two modes doubles testing surface for every future feature | High | Build Classic only after Phases 1-3 are stable. Classic inherits combat/keywords/targeting. |
+| Playerbase split (if multiplayer added) | Medium | Default to Spark. Classic is advanced/optional. |
+| Aggro dominance in Spark mode (perfect curve every game) | Medium | Consider higher starting life (25 Standard / 45 Commander) or card pool curation |
+| Classic mode auto-tap algorithm complexity | Medium | Start with greedy auto-tap. Manual tap as future option. |
+| Green underpowered in Spark mode | Low-Medium | Accept it, or buff green via custom "ramp" cards that increase mana cap |
+| Balancing cards across two mana systems | High | Don't try. Accept that some cards are better in one mode. That's a feature, not a bug. |
+
+### Implementation Order (When the Time Comes)
+
+1. Add `manaMode` field to match creation + lobby UI toggle
+2. Branch `engineAdvanceTurn` and `PLAY_FROM_HAND` (core mana divergence)
+3. Build mana cost string parser (`{2}{W}{W}` → `{ generic: 2, W: 2 }`)
+4. Build auto-tap algorithm (greedy: specific-color lands first, flexible lands last)
+5. Add `PLAY_LAND` action type with 1/turn limit
+6. Update quickstart deck builders with land-inclusive variants
+7. Update client: mana pool display replacing gem bar, land row on battlefield
+8. Update bot: land-play-first strategy, color-aware spell selection
+9. Update `validateDeck` with mode-aware thresholds
+10. Playtest extensively — land ratios, color screw rates, game pacing differences
+
+### Decision Log
+
+| Date | Decision | Rationale |
+|------|---------|-----------|
+| 2026-02-23 | Ship auto-mana (Spark) as only mode for Phases 1-3 | Combat and core gameplay are higher priority than mana variety. Retrofit cost is equal now vs. later. |
+| 2026-02-23 | Defer Classic mode to Phase 4 | Three-agent consensus: don't split development effort before the game is fun. |
+| 2026-02-23 | Default experience = Spark, Classic = advanced option | Every successful digital card game defaults to simpler mana. Players who want full MTG can play Arena. |
+| 2026-02-23 | Mana Pip color-choice system is a candidate Spark enhancement | Could add meaningful color decisions to auto-mana without lands. Evaluate during Phase 2-3. |
