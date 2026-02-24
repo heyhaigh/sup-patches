@@ -273,6 +273,16 @@ function getClientHtml() {
     .inspectFloat .inspectorTitle { font-weight:800; font-size:13px; color:#fff; margin-top:8px; }
     .inspectFloat .inspectorSub { font-size:11px; color:rgba(255,255,255,0.55); margin-top:4px; }
     .inspectFloat .btn { width:100%; margin-top:6px; font-size:11px; padding:6px 10px; }
+    .zoneBrowserOverlay { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; animation:gameOverIn 0.3s ease; }
+    .zoneBrowserContent { background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); max-width:600px; width:90vw; max-height:80vh; overflow:auto; padding:16px; position:relative; }
+    .zoneBrowserTitle { font-size:16px; font-weight:700; margin:0 0 12px 0; }
+    .zoneBrowserClose { position:absolute; top:10px; right:12px; background:none; border:none; font-size:20px; cursor:pointer; color:var(--muted); padding:4px 8px; }
+    .zoneBrowserGrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:10px; }
+    .zoneBrowserGrid .cardImg { width:100%; height:auto; aspect-ratio:5/7; border-radius:8px; cursor:pointer; transition:transform 120ms ease; border:1px solid var(--border); }
+    .zoneBrowserGrid .cardImg:hover { transform:scale(1.05); }
+    .zoneBrowserEmpty { color:var(--muted); font-size:13px; font-style:italic; text-align:center; padding:20px 0; }
+    .zoneBadge.clickable { cursor:pointer; border:1px solid var(--border2); transition:background 120ms ease; }
+    .zoneBadge.clickable:hover { background:rgba(18,21,26,0.08); }
     @media (max-width:980px) {
       .body { grid-template-columns:1fr; }
       .sidebar { border-right:none; border-bottom:1px solid var(--border); }
@@ -1528,6 +1538,52 @@ function getClientHtml() {
     renderGame(state.lastMatch);
   }
 
+  function openZoneBrowser(seat, zoneName) {
+    var match = state.lastMatch;
+    if (!match) return;
+    var zones = match?.game?.zones?.[seat];
+    if (!zones) return;
+    var cards = zones[zoneName] || [];
+    if (!Array.isArray(cards) || !cards.length) return;
+    var p = (match.players || []).find(function(x) { return x.seat === seat; });
+    var ownerName = p ? (p.isBot ? p.username : ('@' + p.username)) : ('Seat ' + seat);
+    var zoneLabel = zoneName === 'graveyard' ? 'Graveyard' : 'Exile';
+    // Remove existing overlay
+    var existing = document.querySelector('.zoneBrowserOverlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.className = 'zoneBrowserOverlay';
+    var content = document.createElement('div');
+    content.className = 'zoneBrowserContent';
+    var title = document.createElement('div');
+    title.className = 'zoneBrowserTitle';
+    title.textContent = ownerName + ' \u2014 ' + zoneLabel + ' (' + cards.length + ')';
+    content.appendChild(title);
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'zoneBrowserClose';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.setAttribute('aria-label', 'Close zone browser');
+    closeBtn.onclick = function() { overlay.remove(); };
+    content.appendChild(closeBtn);
+    var grid = document.createElement('div');
+    grid.className = 'zoneBrowserGrid';
+    for (var i = 0; i < cards.length; i++) {
+      var cid = cards[i];
+      var meta = cardMeta(cid);
+      var img = document.createElement('img');
+      img.className = 'cardImg';
+      img.src = meta?.imageSmall || meta?.imageNormal || '';
+      img.alt = meta?.name || cid;
+      img.loading = 'lazy';
+      (function(capturedId) { img.onclick = function() { overlay.remove(); openCardModal(capturedId, zoneName); }; })(cid);
+      grid.appendChild(img);
+    }
+    content.appendChild(grid);
+    overlay.appendChild(content);
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
+  }
+
   function getCombatEligibleAttackers(match) {
     var mySeat = match?.viewerSeat;
     if (!mySeat) return [];
@@ -1710,8 +1766,13 @@ function getClientHtml() {
     if (Array.isArray(cmd) && cmd.length) counts.push(['Cmd', cmd.length]);
     for (const [label, n] of counts) {
       const b = document.createElement('div');
-      b.className = 'zoneBadge';
+      var isClickableZone = (label === 'GY' || label === 'Exile') && n > 0;
+      b.className = 'zoneBadge' + (isClickableZone ? ' clickable' : '');
       b.textContent = label + ' ' + n;
+      if (isClickableZone) {
+        var zoneName = label === 'GY' ? 'graveyard' : 'exile';
+        (function(capturedSeat, capturedZone) { b.onclick = function() { openZoneBrowser(capturedSeat, capturedZone); }; })(seat, zoneName);
+      }
       zr.appendChild(b);
     }
     el.appendChild(zr);
