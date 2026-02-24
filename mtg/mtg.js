@@ -35,6 +35,7 @@ function launch() {
 function getClientHtml() {
     return /* html */ `
 <div class="appRoot">
+  <script>document.addEventListener('DOMContentLoaded',function(){var d=document.getElementById('tabDiag');if(d)d.textContent='EARLY SCRIPT OK — big script may be truncated';});</script>
   <style>
     :root {
       --bg: #f6f7f9; --surface: #ffffff; --surface2: #fbfbfc;
