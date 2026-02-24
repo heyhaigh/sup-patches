@@ -292,12 +292,18 @@ function getClientHtml() {
       .cardModalImg { max-height:45vh; width:auto; margin:0 auto; display:block; }
       .appRoot.matchActive .body { grid-template-columns:1fr; }
       .gameBoard { height:auto; min-height:100vh; border-radius:0; }
-      .handTray { justify-content:flex-start; }
-      .handTray .cardImg { width:72px; height:100px; }
+      .btn,.navBtn,.zoneBadge,.cardModalClose,.zoneBrowserClose { min-height:44px; min-width:44px; }
+      .bfArea .cardWrap .cardImg { width:60px; height:84px; }
+      .handTray { justify-content:flex-start; -webkit-overflow-scrolling:touch; }
+      .handTray .cardImg { width:72px; height:100px; min-width:72px; flex:0 0 auto; }
+      .turnBar { flex-wrap:wrap; gap:6px; padding:8px 10px; }
+      .turnBar .turnActions { order:2; width:100%; display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
       .inspectFloat { position:fixed; top:auto; bottom:0; right:0; left:0; width:100%; border-radius:16px 16px 0 0; }
       .oppSide.multi { flex-direction:column; gap:4px; }
       .oppSide.multi .seatPanel { min-width:0; }
       .oppSide.multi .bfArea .cardImg { width:48px; height:66px; }
+      .zoneBrowserContent { max-width:95vw; }
+      .zoneBrowserGrid { grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:6px; }
     }
   </style>
 
