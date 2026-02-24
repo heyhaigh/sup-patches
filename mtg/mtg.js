@@ -1410,7 +1410,7 @@ function getClientHtml() {
     var oracle = String(c.oracleText || '');
     var tl = String(c.typeLine || '').toLowerCase();
     if (tl.includes('creature') && oracle.length > 0) {
-      var abilityPatterns = /\b(when|whenever|at the beginning|sacrifice|create|counter|destroy|exile|return|put|search|discard|draw|gain|lose|pay|tap|untap|transform|equip|attach|enchant|fight|mill|scry|surveil|venture|explore|populate|proliferate|amass|adapt|monstrosity|ward|protection from|shroud|flash|wither|infect|persist|undying|affinity|cascade|convoke|delve|emerge|mutate|dash|evoke|ninjutsu|prowl|bestow|morph|kicker|madness|aftermath|fuse|overload|splice|entwine|escalate|strive|devour|exploit|fabricate|extort|tribute|riot|spectacle|escape|foretell|disturb|daybound|nightbound|champion|changeling|living weapon)\b/i;
+      var abilityPatterns = /\\b(when|whenever|at the beginning|sacrifice|create|counter|destroy|exile|return|put|search|discard|draw|gain|lose|pay|tap|untap|transform|equip|attach|enchant|fight|mill|scry|surveil|venture|explore|populate|proliferate|amass|adapt|monstrosity|ward|protection from|shroud|flash|wither|infect|persist|undying|affinity|cascade|convoke|delve|emerge|mutate|dash|evoke|ninjutsu|prowl|bestow|morph|kicker|madness|aftermath|fuse|overload|splice|entwine|escalate|strive|devour|exploit|fabricate|extort|tribute|riot|spectacle|escape|foretell|disturb|daybound|nightbound|champion|changeling|living weapon)\\b/i;
       if (abilityPatterns.test(oracle)) {
         warnEl.textContent = '\u26A0 This creature has abilities the engine does not yet simulate. It plays as a vanilla creature with its keyword abilities.';
         warnEl.style.display = '';
@@ -1491,7 +1491,7 @@ function getClientHtml() {
     var c = cardMeta(id);
     var oracle = String(c?.oracleText || '');
     var pw = 0; var tw = 0;
-    var re = /([+-]\d+)\/([+-]\d+)/g;
+    var re = /([+-]\\d+)\\/([+-]\\d+)/g;
     var m;
     while ((m = re.exec(oracle)) !== null) { pw += parseInt(m[1], 10); tw += parseInt(m[2], 10); }
     return { power: pw, toughness: tw };
@@ -2581,24 +2581,24 @@ function getClientHtml() {
   function clientParseSpellEffects(oracleText) {
     if (!oracleText) return [];
     var effects = [];
-    var dmgRe = /deals\s+(\d+)\s+damage\s+to\s+(any target|target creature|target player|target opponent|each opponent)/gi;
+    var dmgRe = /deals\\s+(\\d+)\\s+damage\\s+to\\s+(any target|target creature|target player|target opponent|each opponent)/gi;
     var dm;
     while ((dm = dmgRe.exec(oracleText)) !== null) {
       var tType = dm[2].toLowerCase();
       if (tType === 'target opponent') tType = 'target player';
       effects.push({ type: 'damage', amount: parseInt(dm[1], 10), targetType: tType });
     }
-    var destRe = /destroy\s+target\s+(creature|permanent)/gi;
+    var destRe = /destroy\\s+target\\s+(creature|permanent)/gi;
     var de;
     while ((de = destRe.exec(oracleText)) !== null) { effects.push({ type: 'destroy', targetType: de[1].toLowerCase() }); }
-    var drawRe = /draw\s+(\w+)\s+cards?/gi;
+    var drawRe = /draw\\s+(\\w+)\\s+cards?/gi;
     var dr;
     var wordToNum = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
     while ((dr = drawRe.exec(oracleText)) !== null) { var n = parseInt(dr[1], 10); if (isNaN(n)) n = wordToNum[dr[1].toLowerCase()] || 1; effects.push({ type: 'draw', amount: n }); }
-    var lifeRe = /gain\s+(\d+)\s+life/gi;
+    var lifeRe = /gain\\s+(\\d+)\\s+life/gi;
     var lr;
     while ((lr = lifeRe.exec(oracleText)) !== null) { effects.push({ type: 'gainLife', amount: parseInt(lr[1], 10) }); }
-    var buffRe = /target\s+creature\s+gets\s+([+-]\d+)\/([+-]\d+)\s+until\s+end\s+of\s+turn/gi;
+    var buffRe = /target\\s+creature\\s+gets\\s+([+-]\\d+)\\/([+-]\\d+)\\s+until\\s+end\\s+of\\s+turn/gi;
     var br;
     while ((br = buffRe.exec(oracleText)) !== null) { effects.push({ type: 'tempBuff', power: parseInt(br[1], 10), toughness: parseInt(br[2], 10) }); }
     return effects;
