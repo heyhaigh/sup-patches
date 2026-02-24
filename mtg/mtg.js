@@ -2112,7 +2112,9 @@ function getClientHtml() {
           [String(turns), 'Turns'],
           [String(myLife), 'Life'],
           [String(myStats.creaturesKilled || 0), 'Kills'],
-          [String(myStats.damageDealt || 0), 'Damage']
+          [String(myStats.damageDealt || 0), 'Damage'],
+          [String(myStats.spellsCast || 0), 'Spells'],
+          [String(myStats.manaSpent || 0), 'Mana']
         ];
         if (match.format === 'commander' && match.game.commanderDamage) {
           var myCdMap = match.game.commanderDamage[match.viewerSeat] || {};
@@ -3300,6 +3302,10 @@ function engineApplyAction(match, user, action) {
         }
         const ok = enginePlayCard(match, seat, cardId, targetId); if (!ok.ok) return ok;
         mana.current = Math.max(0, mana.current - cmc);
+        if (!match.game.stats) match.game.stats = {};
+        if (!match.game.stats[seat]) match.game.stats[seat] = { damageDealt: 0, creaturesKilled: 0 };
+        if (isSpell) match.game.stats[seat].spellsCast = (match.game.stats[seat].spellsCast || 0) + 1;
+        match.game.stats[seat].manaSpent = (match.game.stats[seat].manaSpent || 0) + cmc;
         match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId, targetId: targetId });
         return { ok: true, match };
     }
@@ -3572,7 +3578,13 @@ function engineSeatOrder(match) { return (match.players || []).map((p) => p.seat
 
 function engineNextSeat(match, currentSeat) {
     const seats = engineSeatOrder(match); if (!seats.length) return 1;
+    const losers = match.game?.losers || [];
     const idx = seats.indexOf(Number(currentSeat) || seats[0]);
+    // Skip eliminated players
+    for (var ni = 1; ni <= seats.length; ni++) {
+        var candidate = seats[(idx < 0 ? 0 : idx + ni) % seats.length];
+        if (losers.indexOf(candidate) < 0) return candidate;
+    }
     return seats[(idx < 0 ? 0 : idx + 1) % seats.length];
 }
 
@@ -3971,6 +3983,16 @@ function engineCheckGameOver(match) {
                     break;
                 }
             }
+        }
+    }
+    // Move eliminated players' battlefield to graveyard
+    for (var eli = 0; eli < match.game.losers.length; eli++) {
+        var elSeat = match.game.losers[eli];
+        engineEnsureZones(match, elSeat);
+        var elBf = match.game.zones[elSeat].battlefield;
+        while (elBf.length) {
+            var elCard = elBf[0];
+            engineMoveCard(match, elSeat, "battlefield", "graveyard", elCard);
         }
     }
     // Determine winner
