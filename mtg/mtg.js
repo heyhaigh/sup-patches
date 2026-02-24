@@ -159,7 +159,6 @@ function getClientHtml() {
     .appRoot.matchActive #tab-play > .row:first-child { display:none; }
     .appRoot.matchActive #tab-play > .grid2 { display:none; }
     .appRoot.matchActive #tab-play > .card:last-child { display:none; }
-    .appRoot.matchActive #lobbyPanel { display:none !important; }
     /* Game board - Arena-style vertical split */
     .gameBoard { display:flex; flex-direction:column; height:calc(100vh - 52px); min-height:480px; background:linear-gradient(180deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #1a1a2e 100%); border-radius:var(--radius); overflow:hidden; position:relative; contain:layout style; }
     .gameBoardInner { display:flex; flex-direction:column; flex:1; min-height:0; }
@@ -1246,8 +1245,9 @@ function getClientHtml() {
   function renderLobby(match) {
     const panel = $('#lobbyPanel');
     const has = !!match && !!state.activeMatchId;
-    panel.style.display = has ? '' : 'none';
-    if (!has) return;
+    const inGame = has && (match.phase === 'playing' || match.phase === 'mulligan' || match.phase === 'finished');
+    panel.style.display = (has && !inGame) ? '' : 'none';
+    if (!has || inGame) return;
     const botInfo = match?.botsBySeat ? Object.entries(match.botsBySeat).map(([seat, b]) => \`bot@\${seat}:\${b?.difficulty || 'easy'}\`).join(', ') : '';
     $('#matchSummary').textContent = 'Match ' + match.matchId + ' \u2022 ' + match.format + ' \u2022 phase: ' + (match.phase || 'lobby') + (botInfo ? (' \u2022 ' + botInfo) : '');
     populateAssignDeckSelect(match);
@@ -2206,7 +2206,7 @@ function getClientHtml() {
       if (botPlays.length) toast('Bot played ' + botPlays.length + ' card' + (botPlays.length > 1 ? 's' : '') + '.', { type: 'info', ms: 2000 });
       else { const botPass = log.find(e => e.type === 'BOT_PASS' && e.t > Date.now() - 5000); if (botPass) toast('Bot passed.', { type: 'info', ms: 1500 }); }
       if (state.lastMatch?.game?.status !== 'finished') {
-        toast('Your turn \u2014 Turn ' + (state.lastMatch?.game?.turn || '?'), { type: 'info', ms: 1500 });
+        toast('Your turn - Turn ' + (state.lastMatch?.game?.turn || '?'), { type: 'info', ms: 1500 });
       }
     }
   }
