@@ -89,25 +89,15 @@ Below is a concrete, "do-this-next" list, organized by priority. It's written to
 
 ---
 
-## P3 — Commander match mode (optional / longer-term)
+## P3 — Commander match mode ✅
 
-### 9) Commander "table" scaffolding (2-4 seats)
+### 9) Commander "table" scaffolding (2-4 seats) ✅
 
-**Goal:** Multiplayer match container works even if rules remain lightweight.
+**Implemented:**
 
-**Tasks:**
-
-- **9.1 Support 2-4 seats**
-  - seat assignment UI
-  - ready checks per seat
-  - turn order list visible
-
-- **9.2 Hidden zones remain private**
-  - hands and libraries are always viewer-specific summaries
-
-- **9.3 Multiplayer-friendly UI**
-  - compact opponent panels
-  - clear active-player highlight
-
-**Acceptance criteria:**
-- A 3-4 player lobby can start and reach a playable "table" state without leaking hidden info.
+- **Seat assignment** — auto-assigned on join (`seat = players.length + 1`), up to 5 players for Commander
+- **Ready checks per seat** — each player must assign deck + set ready before host can start
+- **Turn order display** — lobby shows turn order chip row for 3+ players (seat number + player name, viewer highlighted). Game turn bar shows numbered seat dots with gold highlight on active seat.
+- **Hidden zones remain private** — `getMatchViewForUser()` replaces non-viewer hand/library with `{ count: N }`, no card data leaked
+- **Compact multiplayer opponent panels** — `.oppSide.multi` renders opponents side-by-side with smaller cards (52×72) when 3+ opponents. Stacks vertically on mobile.
+- **Active-player highlight** — `.seatPanel.active` gold border + subtle background on the active player's board panel, transitions smoothly on turn change
