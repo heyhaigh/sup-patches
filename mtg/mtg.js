@@ -1438,7 +1438,7 @@ function getClientHtml() {
   }
   function clientCanBlock(blockerId, attackerId) {
     if (clientHasKeyword(attackerId, 'Flying') && !clientHasKeyword(blockerId, 'Flying') && !clientHasKeyword(blockerId, 'Reach')) return false;
-    if (clientHasKeyword(attackerId, 'Menace')) return false;
+    // Menace checked at group level in confirmBlockers, not per-blocker
     return true;
   }
 
@@ -1771,7 +1771,7 @@ function getClientHtml() {
           if (isViewer) {
             // Viewer's creatures
             var isBlocking = false;
-            for (var bk in state.pendingBlockers) { if (state.pendingBlockers[bk] === cid) { isBlocking = true; break; } }
+            for (var bk in state.pendingBlockers) { var bArr = state.pendingBlockers[bk]; if (Array.isArray(bArr) ? bArr.indexOf(cid) >= 0 : bArr === cid) { isBlocking = true; break; } }
             if (isBlocking) {
               cWrap.classList.add('blocking');
             } else if (eligibleBlk.indexOf(cid) >= 0) {
@@ -1807,7 +1807,8 @@ function getClientHtml() {
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const isMulti = seats.length > 2;
     const pendingAtkCount = Object.keys(state.pendingAttackers).length;
-    const pendingBlkCount = Object.keys(state.pendingBlockers).length;
+    var pendingBlkCount = 0;
+    for (var pbk in state.pendingBlockers) { var pbArr = state.pendingBlockers[pbk]; pendingBlkCount += Array.isArray(pbArr) ? pbArr.length : 1; }
 
     const mana = match.game?.manaBySeat?.[match.viewerSeat] || { current: 0, max: 0 };
     const cacheKey = (match.game?.turn || '?') + ':' + activeSeat + ':' + step + ':' + seats.length + ':' + mana.current + '/' + mana.max + ':' + pendingAtkCount + ':' + pendingBlkCount + ':' + (state.combatMode || 'none');
@@ -2155,10 +2156,25 @@ function getClientHtml() {
 
   async function confirmBlockers() {
     if (!state.activeMatchId) return;
-    var blockerCount = Object.keys(state.pendingBlockers).length;
-    if (!blockerCount) {
+    var totalBlockers = 0;
+    for (var bk in state.pendingBlockers) {
+      var bArr = state.pendingBlockers[bk];
+      totalBlockers += Array.isArray(bArr) ? bArr.length : 1;
+    }
+    if (!totalBlockers) {
       await noBlocks();
       return;
+    }
+    // Client-side Menace check
+    for (var mk in state.pendingBlockers) {
+      if (clientHasKeyword(mk, 'Menace')) {
+        var mArr = state.pendingBlockers[mk];
+        var mCount = Array.isArray(mArr) ? mArr.length : 1;
+        if (mCount < 2) {
+          toast('Menace requires at least 2 blockers. Assign another blocker or remove the assignment.', { type: 'warn', ms: 3000 });
+          return;
+        }
+      }
     }
     var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'DECLARE_BLOCKERS', blockers: state.pendingBlockers } });
     if (!res.ok) { toast('Declare blockers failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
@@ -2211,6 +2227,20 @@ function getClientHtml() {
 
   function handleBlockerClick(cardId, isMine) {
     if (isMine) {
+      // Check if this creature is already assigned as a blocker — unassign it
+      for (var bk in state.pendingBlockers) {
+        var bArr = state.pendingBlockers[bk];
+        if (Array.isArray(bArr)) {
+          var idx = bArr.indexOf(cardId);
+          if (idx >= 0) {
+            bArr.splice(idx, 1);
+            if (bArr.length === 0) delete state.pendingBlockers[bk];
+            toast('Blocker unassigned.', { type: 'info', ms: 1000 });
+            renderGame(state.lastMatch);
+            return;
+          }
+        }
+      }
       // Select this creature as blocker
       state.selectedBlocker = cardId;
       toast('Blocker selected \u2014 now click an attacking creature to assign.', { type: 'info', ms: 1500 });
@@ -2227,17 +2257,19 @@ function getClientHtml() {
         toast('That creature is not attacking you.', { type: 'warn', ms: 1500 });
         return;
       }
-      // Check keyword blocking restrictions
+      // Check keyword blocking restrictions (Flying/Reach)
       if (!clientCanBlock(state.selectedBlocker, cardId)) {
-        if (clientHasKeyword(cardId, 'Menace')) {
-          toast('Cannot block \u2014 Menace creatures require 2+ blockers.', { type: 'warn', ms: 2000 });
-        } else if (clientHasKeyword(cardId, 'Flying')) {
+        if (clientHasKeyword(cardId, 'Flying')) {
           toast('Cannot block \u2014 only Flying or Reach creatures can block a flyer.', { type: 'warn', ms: 2000 });
         }
         state.selectedBlocker = null;
         return;
       }
-      state.pendingBlockers[cardId] = state.selectedBlocker;
+      // Add to blocker array for this attacker
+      if (!state.pendingBlockers[cardId]) state.pendingBlockers[cardId] = [];
+      if (state.pendingBlockers[cardId].indexOf(state.selectedBlocker) < 0) {
+        state.pendingBlockers[cardId].push(state.selectedBlocker);
+      }
       state.selectedBlocker = null;
       renderGame(state.lastMatch);
     }
@@ -3212,35 +3244,43 @@ function engineApplyAction(match, user, action) {
         var blockerKeys = Object.keys(blockerMap);
         for (var bi = 0; bi < blockerKeys.length; bi++) {
             var attackerId = blockerKeys[bi];
-            var blockerId = blockerMap[attackerId];
+            // Normalize to array
+            var blockerArr = blockerMap[attackerId];
+            if (!Array.isArray(blockerArr)) blockerArr = [blockerArr];
             // Validate attacker is targeting this seat
             if (!match.game.combat.attackers[attackerId] || Number(match.game.combat.attackers[attackerId]) !== seat) {
                 return { ok: false, error: "attacker " + attackerId + " is not attacking you" };
             }
-            // Validate blocker on our BF
-            if (myBf2.indexOf(blockerId) < 0) return { ok: false, error: "blocker " + blockerId + " not on your battlefield" };
-            if (!engineIsCreature(match, seat, blockerId)) return { ok: false, error: "blocker " + blockerId + " is not a creature" };
-            var bcs = match.game.cardState[blockerId];
-            if (bcs && bcs.tapped) return { ok: false, error: "blocker " + blockerId + " is tapped" };
-            if (usedBlockers[blockerId]) return { ok: false, error: "blocker " + blockerId + " already assigned" };
-            // Flying: only Flying/Reach can block
             var atkSeatForBlock = engineFindSeatForCard(match, attackerId);
-            if (atkSeatForBlock && engineHasKeyword(match, atkSeatForBlock, attackerId, "Flying")) {
-                if (!engineHasKeyword(match, seat, blockerId, "Flying") && !engineHasKeyword(match, seat, blockerId, "Reach")) {
-                    return { ok: false, error: "blocker " + blockerId + " cannot block a Flying creature without Flying or Reach" };
+            for (var bai = 0; bai < blockerArr.length; bai++) {
+                var blockerId = blockerArr[bai];
+                // Validate blocker on our BF
+                if (myBf2.indexOf(blockerId) < 0) return { ok: false, error: "blocker " + blockerId + " not on your battlefield" };
+                if (!engineIsCreature(match, seat, blockerId)) return { ok: false, error: "blocker " + blockerId + " is not a creature" };
+                var bcs = match.game.cardState[blockerId];
+                if (bcs && bcs.tapped) return { ok: false, error: "blocker " + blockerId + " is tapped" };
+                if (usedBlockers[blockerId]) return { ok: false, error: "blocker " + blockerId + " already assigned" };
+                // Flying: only Flying/Reach can block
+                if (atkSeatForBlock && engineHasKeyword(match, atkSeatForBlock, attackerId, "Flying")) {
+                    if (!engineHasKeyword(match, seat, blockerId, "Flying") && !engineHasKeyword(match, seat, blockerId, "Reach")) {
+                        return { ok: false, error: "blocker " + blockerId + " cannot block a Flying creature without Flying or Reach" };
+                    }
                 }
+                usedBlockers[blockerId] = true;
             }
-            // Menace: cannot be blocked by a single creature
-            if (atkSeatForBlock && engineHasKeyword(match, atkSeatForBlock, attackerId, "Menace")) {
-                return { ok: false, error: "attacker " + attackerId + " has Menace and cannot be blocked by a single creature" };
+            // Menace: require 2+ blockers
+            if (atkSeatForBlock && engineHasKeyword(match, atkSeatForBlock, attackerId, "Menace") && blockerArr.length < 2) {
+                return { ok: false, error: "attacker " + attackerId + " has Menace and requires at least 2 blockers" };
             }
-            usedBlockers[blockerId] = true;
         }
-        // Store blockers
+        // Store blockers as arrays
         for (var bi2 = 0; bi2 < blockerKeys.length; bi2++) {
-            match.game.combat.blockers[blockerKeys[bi2]] = blockerMap[blockerKeys[bi2]];
+            var bVal = blockerMap[blockerKeys[bi2]];
+            match.game.combat.blockers[blockerKeys[bi2]] = Array.isArray(bVal) ? bVal : [bVal];
         }
-        match.log.push({ t: Date.now(), type: "BLOCKERS_DECLARED", by: user.username, seat: seat, count: blockerKeys.length });
+        var totalBlockerCount = 0;
+        for (var bk2 in match.game.combat.blockers) { totalBlockerCount += match.game.combat.blockers[bk2].length; }
+        match.log.push({ t: Date.now(), type: "BLOCKERS_DECLARED", by: user.username, seat: seat, count: totalBlockerCount });
         engineResolveCombatDamage(match);
         if (match.game?.status === "finished") return { ok: true, match };
         // Check if active player is bot (bot was attacking)
@@ -3471,14 +3511,17 @@ function engineResolveCombatDamage(match) {
 
     // Determine if any combatant has first strike or double strike
     var hasFirstStrike = false;
-    for (var fi = 0; fi < attackerIds.length; fi++) {
+    for (var fi = 0; fi < attackerIds.length && !hasFirstStrike; fi++) {
         var fAtkId = attackerIds[fi];
         var fAtkSeat = engineFindSeatForCard(match, fAtkId);
         if (fAtkSeat && (engineHasKeyword(match, fAtkSeat, fAtkId, "First Strike") || engineHasKeyword(match, fAtkSeat, fAtkId, "Double Strike"))) { hasFirstStrike = true; break; }
-        var fBlkId = blockers[fAtkId];
-        if (fBlkId) {
-            var fBlkSeat = engineFindSeatForCard(match, fBlkId);
-            if (fBlkSeat && (engineHasKeyword(match, fBlkSeat, fBlkId, "First Strike") || engineHasKeyword(match, fBlkSeat, fBlkId, "Double Strike"))) { hasFirstStrike = true; break; }
+        var fBlkArr = blockers[fAtkId];
+        if (fBlkArr) {
+            var fBlkList = Array.isArray(fBlkArr) ? fBlkArr : [fBlkArr];
+            for (var fbi = 0; fbi < fBlkList.length; fbi++) {
+                var fBlkSeat = engineFindSeatForCard(match, fBlkList[fbi]);
+                if (fBlkSeat && (engineHasKeyword(match, fBlkSeat, fBlkList[fbi], "First Strike") || engineHasKeyword(match, fBlkSeat, fBlkList[fbi], "Double Strike"))) { hasFirstStrike = true; break; }
+            }
         }
     }
 
@@ -3498,6 +3541,27 @@ function engineResolveCombatDamage(match) {
     match.log.push({ t: Date.now(), type: "COMBAT_RESOLVED" });
 }
 
+function engineEnsureCardState(match, cardId) {
+    if (!match.game.cardState) match.game.cardState = {};
+    if (!match.game.cardState[cardId]) match.game.cardState[cardId] = { tapped: false, summoningSick: false, damage: 0, damageSourceIds: [] };
+    if (!match.game.cardState[cardId].damageSourceIds) match.game.cardState[cardId].damageSourceIds = [];
+}
+
+function engineApplyPlayerDamage(match, atkSeat, atkId, defSeat, amount) {
+    if (amount <= 0) return;
+    if (match.game.lifeBySeat[defSeat] != null) {
+        match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - amount);
+    }
+    if (!match.game.stats) match.game.stats = {};
+    if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
+    match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + amount;
+    match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: amount, by: atkId });
+    if (engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
+        match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + amount;
+        match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: amount, by: atkId });
+    }
+}
+
 function engineCombatDamageStep(match, attackers, blockers, step) {
     if (!match.game.cardState) match.game.cardState = {};
     if (!match.game.lifeBySeat) match.game.lifeBySeat = {};
@@ -3512,116 +3576,115 @@ function engineCombatDamageStep(match, attackers, blockers, step) {
 
         var atkHasFS = engineHasKeyword(match, atkSeat, atkId, "First Strike");
         var atkHasDS = engineHasKeyword(match, atkSeat, atkId, "Double Strike");
-        // Does this attacker deal damage in this step?
         var atkDeals = false;
         if (step === "first_strike") { atkDeals = atkHasFS || atkHasDS; }
-        else { atkDeals = !atkHasFS || atkHasDS; } // normal: non-FS deal, DS deal again
+        else { atkDeals = !atkHasFS || atkHasDS; }
 
-        var blockerId = blockers[atkId];
-        if (blockerId) {
-            var blkSeat = engineFindSeatForCard(match, blockerId);
-            // Blocker may have died in first strike step — check if still on battlefield
-            var blkAlive = false;
-            if (blkSeat) {
-                var blkBf = match.game.zones?.[blkSeat]?.battlefield || [];
-                blkAlive = blkBf.indexOf(blockerId) >= 0;
+        // Normalize blockers to array
+        var rawBlk = blockers[atkId];
+        var blkArr = rawBlk ? (Array.isArray(rawBlk) ? rawBlk : [rawBlk]) : [];
+
+        // Filter to alive blockers (still on battlefield)
+        var aliveBlockers = [];
+        for (var ab = 0; ab < blkArr.length; ab++) {
+            var bSeat = engineFindSeatForCard(match, blkArr[ab]);
+            if (bSeat) {
+                var bBf = match.game.zones?.[bSeat]?.battlefield || [];
+                if (bBf.indexOf(blkArr[ab]) >= 0) aliveBlockers.push({ id: blkArr[ab], seat: bSeat });
             }
+        }
 
-            if (!blkAlive) {
-                // Blocker died in earlier step — attacker hits player
-                if (atkDeals && atkPower > 0) {
-                    if (match.game.lifeBySeat[defSeat] != null) {
-                        match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - atkPower);
+        if (blkArr.length > 0 && aliveBlockers.length === 0) {
+            // All blockers died in first strike — attacker hits player
+            if (atkDeals && atkPower > 0) {
+                engineApplyPlayerDamage(match, atkSeat, atkId, defSeat, atkPower);
+            }
+            continue;
+        }
+
+        if (aliveBlockers.length > 0) {
+            // Blocked combat — multiple blockers possible
+            engineEnsureCardState(match, atkId);
+
+            // Attacker deals damage distributed among blockers
+            if (atkDeals && atkPower > 0) {
+                var hasTrample = engineHasKeyword(match, atkSeat, atkId, "Trample");
+                var hasDeathtouch = engineHasKeyword(match, atkSeat, atkId, "Deathtouch");
+                var remainingDmg = atkPower;
+                var totalDmgToBlockers = 0;
+
+                if (hasTrample) {
+                    // Trample: assign minimum lethal to each blocker, excess to player
+                    for (var tb = 0; tb < aliveBlockers.length; tb++) {
+                        var tBlk = aliveBlockers[tb];
+                        engineEnsureCardState(match, tBlk.id);
+                        var tTough = engineGetCreatureToughness(match, tBlk.seat, tBlk.id);
+                        var tExisting = Number(match.game.cardState[tBlk.id].damage) || 0;
+                        var tLethal = tTough - tExisting;
+                        if (hasDeathtouch && tLethal > 1) tLethal = 1;
+                        if (tLethal < 0) tLethal = 0;
+                        var tAssign = Math.min(remainingDmg, tLethal);
+                        if (tAssign > 0) {
+                            match.game.cardState[tBlk.id].damage = (Number(match.game.cardState[tBlk.id].damage) || 0) + tAssign;
+                            match.game.cardState[tBlk.id].damageSourceIds.push(atkId);
+                            totalDmgToBlockers += tAssign;
+                        }
+                        remainingDmg -= tAssign;
                     }
-                    if (!match.game.stats) match.game.stats = {};
-                    if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
-                    match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + atkPower;
-                    match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: atkPower, by: atkId });
-                    // Lifelink on unblocked trample-through
+                    // Excess tramples to player
+                    if (remainingDmg > 0) {
+                        engineApplyPlayerDamage(match, atkSeat, atkId, defSeat, remainingDmg);
+                        totalDmgToBlockers += 0; // player damage handled by helper (includes lifelink)
+                    }
+                    // Lifelink for damage to blockers only (player lifelink handled in helper)
+                    if (totalDmgToBlockers > 0 && engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
+                        match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + totalDmgToBlockers;
+                        match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: totalDmgToBlockers, by: atkId });
+                    }
+                } else {
+                    // No trample: distribute evenly among blockers
+                    var perBlocker = Math.floor(atkPower / aliveBlockers.length);
+                    var extraDmg = atkPower - (perBlocker * aliveBlockers.length);
+                    for (var db = 0; db < aliveBlockers.length; db++) {
+                        var dBlk = aliveBlockers[db];
+                        engineEnsureCardState(match, dBlk.id);
+                        var dmgForThis = perBlocker + (db === 0 ? extraDmg : 0);
+                        if (dmgForThis > 0) {
+                            match.game.cardState[dBlk.id].damage = (Number(match.game.cardState[dBlk.id].damage) || 0) + dmgForThis;
+                            match.game.cardState[dBlk.id].damageSourceIds.push(atkId);
+                        }
+                    }
+                    // Lifelink
                     if (engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
                         match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + atkPower;
                         match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: atkPower, by: atkId });
                     }
                 }
-                continue;
             }
 
-            // Blocker is alive — blocked combat
-            var blkPower = engineGetCreaturePower(match, blkSeat, blockerId);
-            var blkHasFS = engineHasKeyword(match, blkSeat, blockerId, "First Strike");
-            var blkHasDS = engineHasKeyword(match, blkSeat, blockerId, "Double Strike");
-            var blkDeals = false;
-            if (step === "first_strike") { blkDeals = blkHasFS || blkHasDS; }
-            else { blkDeals = !blkHasFS || blkHasDS; }
-
-            if (!match.game.cardState[atkId]) match.game.cardState[atkId] = { tapped: false, summoningSick: false, damage: 0, damageSourceIds: [] };
-            if (!match.game.cardState[blockerId]) match.game.cardState[blockerId] = { tapped: false, summoningSick: false, damage: 0, damageSourceIds: [] };
-            if (!match.game.cardState[atkId].damageSourceIds) match.game.cardState[atkId].damageSourceIds = [];
-            if (!match.game.cardState[blockerId].damageSourceIds) match.game.cardState[blockerId].damageSourceIds = [];
-
-            // Attacker deals damage to blocker
-            if (atkDeals && atkPower > 0) {
-                var dmgToBlocker = atkPower;
-                var dmgToPlayer = 0;
-                // Trample: excess damage goes to player
-                if (engineHasKeyword(match, atkSeat, atkId, "Trample")) {
-                    var blkToughness = engineGetCreatureToughness(match, blkSeat, blockerId);
-                    var existingBlkDmg = Number(match.game.cardState[blockerId].damage) || 0;
-                    var lethalNeeded = blkToughness - existingBlkDmg;
-                    // Deathtouch + Trample: only 1 damage needed to be lethal
-                    if (engineHasKeyword(match, atkSeat, atkId, "Deathtouch") && lethalNeeded > 1) lethalNeeded = 1;
-                    if (lethalNeeded < 0) lethalNeeded = 0;
-                    if (atkPower > lethalNeeded) {
-                        dmgToBlocker = lethalNeeded;
-                        dmgToPlayer = atkPower - lethalNeeded;
+            // Each alive blocker deals damage back to attacker
+            for (var rb = 0; rb < aliveBlockers.length; rb++) {
+                var rBlk = aliveBlockers[rb];
+                var rBlkPower = engineGetCreaturePower(match, rBlk.seat, rBlk.id);
+                var rBlkHasFS = engineHasKeyword(match, rBlk.seat, rBlk.id, "First Strike");
+                var rBlkHasDS = engineHasKeyword(match, rBlk.seat, rBlk.id, "Double Strike");
+                var rBlkDeals = false;
+                if (step === "first_strike") { rBlkDeals = rBlkHasFS || rBlkHasDS; }
+                else { rBlkDeals = !rBlkHasFS || rBlkHasDS; }
+                if (rBlkDeals && rBlkPower > 0) {
+                    match.game.cardState[atkId].damage = (Number(match.game.cardState[atkId].damage) || 0) + rBlkPower;
+                    match.game.cardState[atkId].damageSourceIds.push(rBlk.id);
+                    if (engineHasKeyword(match, rBlk.seat, rBlk.id, "Lifelink")) {
+                        match.game.lifeBySeat[rBlk.seat] = (match.game.lifeBySeat[rBlk.seat] || 0) + rBlkPower;
+                        match.log.push({ t: Date.now(), type: "LIFELINK", seat: rBlk.seat, amount: rBlkPower, by: rBlk.id });
                     }
                 }
-                match.game.cardState[blockerId].damage = (Number(match.game.cardState[blockerId].damage) || 0) + dmgToBlocker;
-                if (dmgToBlocker > 0) match.game.cardState[blockerId].damageSourceIds.push(atkId);
-                if (dmgToPlayer > 0) {
-                    if (match.game.lifeBySeat[defSeat] != null) {
-                        match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - dmgToPlayer);
-                    }
-                    if (!match.game.stats) match.game.stats = {};
-                    if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
-                    match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + dmgToPlayer;
-                    match.log.push({ t: Date.now(), type: "TRAMPLE_DAMAGE", seat: defSeat, damage: dmgToPlayer, by: atkId });
-                }
-                // Lifelink: gain life = total damage dealt
-                if (engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
-                    var totalAtkDmg = dmgToBlocker + dmgToPlayer;
-                    match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + totalAtkDmg;
-                    match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: totalAtkDmg, by: atkId });
-                }
             }
-            // Blocker deals damage to attacker
-            if (blkDeals && blkPower > 0) {
-                match.game.cardState[atkId].damage = (Number(match.game.cardState[atkId].damage) || 0) + blkPower;
-                match.game.cardState[atkId].damageSourceIds.push(blockerId);
-                // Lifelink for blocker
-                if (engineHasKeyword(match, blkSeat, blockerId, "Lifelink")) {
-                    match.game.lifeBySeat[blkSeat] = (match.game.lifeBySeat[blkSeat] || 0) + blkPower;
-                    match.log.push({ t: Date.now(), type: "LIFELINK", seat: blkSeat, amount: blkPower, by: blockerId });
-                }
-            }
-            if (atkDeals || blkDeals) {
-                match.log.push({ t: Date.now(), type: "COMBAT_DAMAGE", atk: atkId, blk: blockerId, atkDmg: blkDeals ? blkPower : 0, blkDmg: atkDeals ? atkPower : 0, step: step });
-            }
+            match.log.push({ t: Date.now(), type: "COMBAT_DAMAGE", atk: atkId, blk: aliveBlockers.map(function(b) { return b.id; }), step: step });
         } else {
             // Unblocked — damage to player
             if (atkDeals && atkPower > 0) {
-                if (match.game.lifeBySeat[defSeat] != null) {
-                    match.game.lifeBySeat[defSeat] = Math.max(0, match.game.lifeBySeat[defSeat] - atkPower);
-                }
-                if (!match.game.stats) match.game.stats = {};
-                if (!match.game.stats[atkSeat]) match.game.stats[atkSeat] = { damageDealt: 0, creaturesKilled: 0 };
-                match.game.stats[atkSeat].damageDealt = (match.game.stats[atkSeat].damageDealt || 0) + atkPower;
-                match.log.push({ t: Date.now(), type: "PLAYER_DAMAGE", seat: defSeat, damage: atkPower, by: atkId });
-                // Lifelink
-                if (engineHasKeyword(match, atkSeat, atkId, "Lifelink")) {
-                    match.game.lifeBySeat[atkSeat] = (match.game.lifeBySeat[atkSeat] || 0) + atkPower;
-                    match.log.push({ t: Date.now(), type: "LIFELINK", seat: atkSeat, amount: atkPower, by: atkId });
-                }
+                engineApplyPlayerDamage(match, atkSeat, atkId, defSeat, atkPower);
             }
         }
     }
@@ -3956,7 +4019,7 @@ function engineBotCanBlock(match, blockerSeat, blockerId, attackerId) {
     var atkSeat = engineFindSeatForCard(match, attackerId);
     if (!atkSeat) return false;
     if (engineHasKeyword(match, atkSeat, attackerId, "Flying") && !engineHasKeyword(match, blockerSeat, blockerId, "Flying") && !engineHasKeyword(match, blockerSeat, blockerId, "Reach")) return false;
-    if (engineHasKeyword(match, atkSeat, attackerId, "Menace")) return false;
+    // Menace no longer blocks individual assignment — checked at group level
     return true;
 }
 
@@ -3983,42 +4046,47 @@ function engineBotDeclareBlockers(match, botPlayer) {
         if (Number(attackers[ak]) === seat) incomingAttackers.push(ak);
     }
     if (!eligibleBlockers.length || !incomingAttackers.length) return;
+    var usedBlockers = {};
+    // Helper to check if attacker has Menace
+    var hasMenace = function(atkId) { var as = engineFindSeatForCard(match, atkId); return as && engineHasKeyword(match, as, atkId, "Menace"); };
+
     if (diff === "easy") {
-        // Easy: block randomly — shuffle blockers, assign 1:1 (skip illegal)
+        // Easy: block randomly — 1:1, skip Menace attackers
         var shuffled = eligibleBlockers.slice();
         for (var si = shuffled.length - 1; si > 0; si--) { var ri = sup.random.integer(0, si); var tmp = shuffled[si]; shuffled[si] = shuffled[ri]; shuffled[ri] = tmp; }
         var bIdx = 0;
         for (var bi = 0; bi < incomingAttackers.length && bIdx < shuffled.length; bi++) {
-            // Skip attackers with Menace (unblockable in our system)
+            if (hasMenace(incomingAttackers[bi])) continue; // Easy skips Menace
             if (!engineBotCanBlock(match, seat, shuffled[bIdx], incomingAttackers[bi])) continue;
-            match.game.combat.blockers[incomingAttackers[bi]] = shuffled[bIdx];
+            match.game.combat.blockers[incomingAttackers[bi]] = [shuffled[bIdx]];
+            usedBlockers[shuffled[bIdx]] = true;
             bIdx++;
         }
     } else if (diff === "medium") {
-        // Medium: only block if our creature kills the attacker (skip illegal)
-        var usedB = {};
+        // Medium: only block if our creature kills the attacker, skip Menace
         for (var ai = 0; ai < incomingAttackers.length; ai++) {
             var atkId = incomingAttackers[ai];
+            if (hasMenace(atkId)) continue; // Medium skips Menace
             var atkSeat = engineFindSeatForCard(match, atkId);
             if (!atkSeat) continue;
             var atkTough = engineGetCreatureToughness(match, atkSeat, atkId);
             for (var bi2 = 0; bi2 < eligibleBlockers.length; bi2++) {
                 var blkId = eligibleBlockers[bi2];
-                if (usedB[blkId]) continue;
+                if (usedBlockers[blkId]) continue;
                 if (!engineBotCanBlock(match, seat, blkId, atkId)) continue;
                 var blkPow = engineGetCreaturePower(match, seat, blkId);
                 if (blkPow >= atkTough || engineHasKeyword(match, seat, blkId, "Deathtouch")) {
-                    match.game.combat.blockers[atkId] = blkId;
-                    usedB[blkId] = true;
+                    match.game.combat.blockers[atkId] = [blkId];
+                    usedBlockers[blkId] = true;
                     break;
                 }
             }
         }
     } else {
         // Hard: scoring system with keyword awareness
-        var usedH = {};
         for (var ai2 = 0; ai2 < incomingAttackers.length; ai2++) {
             var atkId2 = incomingAttackers[ai2];
+            if (hasMenace(atkId2)) continue; // Handle Menace in second pass
             var atkSeat2 = engineFindSeatForCard(match, atkId2);
             if (!atkSeat2) continue;
             var atkPow2 = engineGetCreaturePower(match, atkSeat2, atkId2);
@@ -4027,40 +4095,62 @@ function engineBotDeclareBlockers(match, botPlayer) {
             var bestScore = -999;
             for (var bi3 = 0; bi3 < eligibleBlockers.length; bi3++) {
                 var blkId2 = eligibleBlockers[bi3];
-                if (usedH[blkId2]) continue;
+                if (usedBlockers[blkId2]) continue;
                 if (!engineBotCanBlock(match, seat, blkId2, atkId2)) continue;
                 var blkPow2 = engineGetCreaturePower(match, seat, blkId2);
                 var blkTough2 = engineGetCreatureToughness(match, seat, blkId2);
                 var score = 0;
-                // Kill attacker?
                 if (blkPow2 >= atkTough2) score += 10;
                 if (engineHasKeyword(match, seat, blkId2, "Deathtouch")) score += 10;
-                // Survive?
                 if (atkPow2 < blkTough2) score += 5;
                 if (engineHasKeyword(match, seat, blkId2, "Indestructible")) score += 8;
-                // First Strike: if our FS kills before they hit us
                 if (engineHasKeyword(match, seat, blkId2, "First Strike") || engineHasKeyword(match, seat, blkId2, "Double Strike")) {
                     if (blkPow2 >= atkTough2 || engineHasKeyword(match, seat, blkId2, "Deathtouch")) score += 5;
                 }
-                // Lifelink bonus
                 if (engineHasKeyword(match, seat, blkId2, "Lifelink")) score += 2;
-                // Die without killing?
                 if (atkPow2 >= blkTough2 && blkPow2 < atkTough2 && !engineHasKeyword(match, seat, blkId2, "Deathtouch") && !engineHasKeyword(match, seat, blkId2, "Indestructible")) score -= 3;
-                // Block big attacker bonus
                 if (atkPow2 >= 4) score += 3;
-                // Penalties for attacker keywords
                 if (engineHasKeyword(match, atkSeat2, atkId2, "Trample")) score -= 2;
                 if (engineHasKeyword(match, atkSeat2, atkId2, "Deathtouch") && !engineHasKeyword(match, seat, blkId2, "Indestructible")) score -= 5;
                 if ((engineHasKeyword(match, atkSeat2, atkId2, "First Strike") || engineHasKeyword(match, atkSeat2, atkId2, "Double Strike")) && atkPow2 >= blkTough2 && !engineHasKeyword(match, seat, blkId2, "Indestructible")) score -= 4;
                 if (score > bestScore) { bestScore = score; bestBlk = blkId2; }
             }
             if (bestBlk && bestScore > 0) {
-                match.game.combat.blockers[atkId2] = bestBlk;
-                usedH[bestBlk] = true;
+                match.game.combat.blockers[atkId2] = [bestBlk];
+                usedBlockers[bestBlk] = true;
+            }
+        }
+        // Hard second pass: Menace attackers — find 2 eligible blockers
+        for (var mi = 0; mi < incomingAttackers.length; mi++) {
+            var mAtkId = incomingAttackers[mi];
+            if (!hasMenace(mAtkId)) continue;
+            var mAtkSeat = engineFindSeatForCard(match, mAtkId);
+            if (!mAtkSeat) continue;
+            var mAtkPow = engineGetCreaturePower(match, mAtkSeat, mAtkId);
+            var mAtkTough = engineGetCreatureToughness(match, mAtkSeat, mAtkId);
+            // Find 2 blockers that can legally block this attacker
+            var candidates = [];
+            for (var mc = 0; mc < eligibleBlockers.length; mc++) {
+                if (usedBlockers[eligibleBlockers[mc]]) continue;
+                if (!engineBotCanBlock(match, seat, eligibleBlockers[mc], mAtkId)) continue;
+                candidates.push(eligibleBlockers[mc]);
+            }
+            if (candidates.length < 2) continue;
+            // Only block if combined power can kill attacker OR attacker power >= 4
+            var combinedPow = 0;
+            for (var cp = 0; cp < Math.min(2, candidates.length); cp++) { combinedPow += engineGetCreaturePower(match, seat, candidates[cp]); }
+            if (combinedPow >= mAtkTough || mAtkPow >= 4) {
+                match.game.combat.blockers[mAtkId] = [candidates[0], candidates[1]];
+                usedBlockers[candidates[0]] = true;
+                usedBlockers[candidates[1]] = true;
             }
         }
     }
-    var blockerCount = Object.keys(match.game.combat.blockers).length;
+    var blockerCount = 0;
+    for (var bk in match.game.combat.blockers) {
+        var bArr = match.game.combat.blockers[bk];
+        blockerCount += Array.isArray(bArr) ? bArr.length : 1;
+    }
     if (blockerCount) {
         match.log.push({ t: Date.now(), type: "BLOCKERS_DECLARED", by: "bot", seat: seat, count: blockerCount });
     }
