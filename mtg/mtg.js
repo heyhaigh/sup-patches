@@ -67,8 +67,7 @@ function getClientHtml() {
     .noteBox { margin-top:14px; padding:12px; border-radius:14px; background:rgba(255,255,255,0.8); border:1px solid var(--border); box-shadow:0 8px 20px rgba(0,0,0,0.04); }
     .noteBox ul { margin:8px 0 0 16px; padding:0; color:var(--muted); font-size:12px; line-height:1.35; }
     .content { padding:16px; min-height:0; overflow:auto; }
-    .tabPanel { display:none !important; }
-    .tabPanel.activeTab { display:block !important; }
+    /* tab visibility controlled entirely via inline JS — no CSS display rules */
     .statusLine { font-size:12px; color:var(--muted); margin:0 0 12px 2px; min-height:16px; }
     .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
     .sectionTitle { font-size:18px; font-weight:700; letter-spacing:-0.02em; margin:0; }
@@ -387,7 +386,7 @@ function getClientHtml() {
           </div>
         </div>
 
-        <section id="tab-play" class="tabPanel activeTab">
+        <div id="tab-play" class="tabPanel">
           <div class="row" style="margin-bottom:12px;">
             <div><div class="sectionTitle">Play</div><div class="sectionSub">Create or join a match.</div></div>
           </div>
@@ -491,17 +490,17 @@ function getClientHtml() {
               <span id="matchActionResult" class="small"></span>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section id="tab-decks" class="tabPanel">
+        <div id="tab-decks" class="tabPanel" style="display:none">
           <div class="row" style="margin-bottom:12px;">
             <div><div class="sectionTitle">Decks</div><div class="sectionSub">Your deck library.</div></div>
             <button id="btnNewDeck" class="btn btnPrimary">New Deck</button>
           </div>
           <div id="deckList" class="list"></div>
-        </section>
+        </div>
 
-        <section id="tab-builder" class="tabPanel">
+        <div id="tab-builder" class="tabPanel" style="display:none">
           <div class="row" style="margin-bottom:12px;">
             <div><div class="sectionTitle">Deck Builder</div><div class="sectionSub">Quick start or customize. Saves as drafts anytime.</div></div>
           </div>
@@ -589,7 +588,7 @@ function getClientHtml() {
               </div>
             </div>
           </div>
-        </section>
+        </div>
       </main>
     </div>
   </div>
@@ -665,11 +664,23 @@ function getClientHtml() {
 
   function switchTab(tab) {
     state.activeTab = tab;
-    $$('.tabPanel').forEach(el => { el.classList.remove('activeTab'); });
-    var target = $('#tab-' + tab);
-    if (target) target.classList.add('activeTab');
+    var names = ['play', 'decks', 'builder'];
+    var diag = [];
+    for (var i = 0; i < names.length; i++) {
+      var el = document.getElementById('tab-' + names[i]);
+      if (!el) { diag.push(names[i] + ':MISSING'); continue; }
+      if (names[i] === tab) {
+        el.style.display = '';
+        el.removeAttribute('hidden');
+        diag.push(names[i] + ':show(' + el.tagName + ')');
+      } else {
+        el.style.display = 'none';
+        diag.push(names[i] + ':hide');
+      }
+    }
     $$('.tabBtn').forEach(btn => { btn.classList.toggle('active', btn.dataset.tab === tab); });
     var c = document.querySelector('.content'); if (c) c.scrollTop = 0;
+    setStatus('[tab] ' + diag.join(' | '));
   }
 
   function enterMatchMode() {
