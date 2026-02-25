@@ -3790,6 +3790,12 @@ function api_matchAction(event) {
     if (!match) return { ok: false, error: "match not found" };
     const res = engineApplyAction(match, sup.user, action);
     if (!res.ok) return res;
+    // Safety net: always check for lethal damage before saving — catches any damage
+    // that accumulated across actions but wasn't caught by the specific action handler
+    if (res.match.phase === "playing" && res.match.game?.status !== "finished") {
+        engineCheckLethalDamage(res.match);
+        engineCheckGameOver(res.match);
+    }
     sup.chat.set(key, res.match);
     return { ok: true };
 }
@@ -4319,6 +4325,9 @@ function engineApplyAction(match, user, action) {
         var abResult = engineActivateAbility(match, seat, cardId, abOracle);
         if (!abResult.ok) return abResult;
         match.log.push({ t: Date.now(), type: "ACTIVATE", by: user.username, seat: seat, cardId: cardId, ability: abResult.ability });
+        // Safety: check lethal damage after any ability activation (abilities may deal damage)
+        engineCheckLethalDamage(match);
+        engineCheckGameOver(match);
         return { ok: true, match };
     }
 
@@ -4982,32 +4991,26 @@ function engineCheckLethalDamage(match) {
             if (!cs) continue;
             var dmg = Number(cs.damage) || 0;
             var tough = engineGetCreatureToughness(match, seat, cid);
+            var shouldDie = false;
             // State-based: creature with 0 or less toughness dies (e.g. from -N/-N debuff)
             if (tough <= 0) {
-                if (engineHasKeyword(match, seat, cid, "Indestructible")) continue;
-                engineMoveCard(match, seat, "battlefield", "graveyard", cid);
-                if (!match.game.stats) match.game.stats = {};
-                var otherSeats0 = engineSeatOrder(match);
-                for (var ki0 = 0; ki0 < otherSeats0.length; ki0++) {
-                    if (otherSeats0[ki0] !== seat) {
-                        if (!match.game.stats[otherSeats0[ki0]]) match.game.stats[otherSeats0[ki0]] = { damageDealt: 0, creaturesKilled: 0 };
-                        match.game.stats[otherSeats0[ki0]].creaturesKilled = (match.game.stats[otherSeats0[ki0]].creaturesKilled || 0) + 1;
+                shouldDie = true;
+            } else {
+                // Lethal damage check
+                var isLethal = dmg >= tough;
+                // Deathtouch: any damage from a Deathtouch source is lethal
+                if (!isLethal && dmg > 0 && Array.isArray(cs.damageSourceIds)) {
+                    for (var di = 0; di < cs.damageSourceIds.length; di++) {
+                        if (engineHasKeywordAnySeat(match, cs.damageSourceIds[di], "Deathtouch")) { isLethal = true; break; }
                     }
                 }
-                match.log.push({ t: Date.now(), type: "CREATURE_DIED", seat: seat, cardId: cid, damage: dmg, toughness: tough });
-                continue;
+                if (isLethal) shouldDie = true;
             }
-            var isLethal = dmg >= tough && tough > 0;
-            // Deathtouch: any damage from a Deathtouch source is lethal
-            if (!isLethal && dmg > 0 && Array.isArray(cs.damageSourceIds)) {
-                for (var di = 0; di < cs.damageSourceIds.length; di++) {
-                    if (engineHasKeywordAnySeat(match, cs.damageSourceIds[di], "Deathtouch")) { isLethal = true; break; }
-                }
-            }
-            if (isLethal) {
-                // Indestructible: survives lethal damage
+            if (shouldDie) {
+                // Indestructible: survives lethal damage and 0 toughness from damage
                 if (engineHasKeyword(match, seat, cid, "Indestructible")) continue;
-                engineMoveCard(match, seat, "battlefield", "graveyard", cid);
+                var moveResult = engineMoveCard(match, seat, "battlefield", "graveyard", cid);
+                if (!moveResult.ok) continue; // Move failed — don't log death
                 // Track kills for opposing seats
                 if (!match.game.stats) match.game.stats = {};
                 var otherSeats = engineSeatOrder(match);
