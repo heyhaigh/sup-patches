@@ -127,6 +127,62 @@ The lobby panel (`#lobbyPanel.card`) needed to stay visible during mulligan phas
 4. **Prefer JS-controlled visibility** for panels with phase-dependent behavior; use CSS only for static layout concerns.
 5. **Avoid `:last-child` / `:first-child` selectors** for hiding specific elements — use explicit IDs or classes instead.
 
+## Scryfall Cache Performance (sup.global)
+
+### The Problem
+
+`sup.global.get/set` serializes/deserializes the **entire** stored object on every call. The Scryfall cache (`mtg.scryfallCache`) stores full raw Scryfall JSON per card (50+ fields each) plus full search result pages. With no size cap, it grew unbounded — after many matches and searches, serialization overhead caused **20-30 second delays** on match creation.
+
+### Why It's Expensive
+
+The match creation flow hits the cache multiple times:
+```
+validateAndCreateMatch() → refreshMatch() → hydrateCardIndexForMatch()
+  → api_getCardsBulk → scryfallGetCardsByIdsCached()
+  → (also scryfallSearchAll during deck building stores full page responses)
+```
+
+Each `sup.global.get()` and `sup.global.set()` round-trips the ENTIRE cache object through JSON serialization. As the cache grows to hundreds or thousands of entries, this becomes the bottleneck — not network calls.
+
+### Fix Applied (v2 cache)
+
+1. **LRU eviction**: Cap at 400 entries. On every write, if over limit, sort by timestamp and evict oldest.
+2. **Expired entry cleanup**: `scryfallCacheGet` deletes entries older than 7 days on access (previously left them in place).
+3. **Cache key bump**: `v1` → `v2` to start fresh (orphans the bloated v1 cache).
+
+```javascript
+var SCRYFALL_CACHE_MAX = 400;
+
+function scryfallCacheGet(cache, url) {
+    const hit = cache[url];
+    if (hit && hit.at && Date.now() - hit.at < 1000 * 60 * 60 * 24 * 7) return hit.json;
+    if (hit) delete cache[url];  // Clean expired
+    return null;
+}
+
+function scryfallCacheSet(cache, url, json) {
+    cache[url] = { at: Date.now(), json };
+    var keys = Object.keys(cache);
+    if (keys.length > SCRYFALL_CACHE_MAX) {
+        keys.sort(function(a, b) { return (cache[a].at || 0) - (cache[b].at || 0); });
+        var toRemove = keys.length - SCRYFALL_CACHE_MAX;
+        for (var i = 0; i < toRemove; i++) delete cache[keys[i]];
+    }
+}
+```
+
+### Future Scaling Considerations
+
+When multiple concurrent users share the same `sup.global` cache:
+- **400 entries may be tight** — each unique deck search or card collection lookup is a cache entry. With N concurrent users building decks, cache churn increases.
+- **Potential improvements**:
+  - Store only the fields we actually use (name, image, mana cost, type, oracle text, power/toughness, legalities) instead of full Scryfall JSON — could reduce per-entry size by 60-70%.
+  - Split into separate cache keys by purpose: `mtg.scryfallCards.v1` (individual card lookups) vs `mtg.scryfallSearch.v1` (search results) — so heavy search results don't evict frequently-needed card data.
+  - Increase `SCRYFALL_CACHE_MAX` if trimmed fields make entries smaller.
+  - Consider per-user deck card caching in `sup.user` to avoid global cache contention.
+- **Monitoring**: If match creation slows down again, check `Object.keys(sup.global.get("mtg.scryfallCache.v2") || {}).length` in the browser console to see if the cache is consistently hitting the 400 cap.
+- **Orphaned v1 cache**: The old `mtg.scryfallCache.v1` key still exists in `sup.global`. It will persist until manually cleaned up or the platform garbage-collects it. Not harmful but wastes storage.
+
 ## Workflow: Always Commit & Push After Plan Completion
 
 Every completed phase/plan improvement must be committed and pushed to git before considering it done. Don't wait for the user to ask — commit and push immediately after verifying the changes (syntax check, etc.).

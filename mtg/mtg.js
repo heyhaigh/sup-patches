@@ -8,7 +8,7 @@ const SCRYFALL = {
 };
 
 const USER_DECKS_KEY = "mtg.decks.v1";
-const GLOBAL_SCRYFALL_CACHE_KEY = "mtg.scryfallCache.v1";
+const GLOBAL_SCRYFALL_CACHE_KEY = "mtg.scryfallCache.v2";
 const BASIC_LAND_ID_CACHE_KEY = "mtg.basicLandIds.v1";
 
 function init() {
@@ -5888,13 +5888,24 @@ function getMatchViewForUser(match, userId) {
 
 // --- Scryfall caching ---
 
+var SCRYFALL_CACHE_MAX = 400;
+
 function scryfallCacheGet(cache, url) {
     const hit = cache[url];
     if (hit && hit.at && Date.now() - hit.at < 1000 * 60 * 60 * 24 * 7) return hit.json;
+    if (hit) delete cache[url];
     return null;
 }
 
-function scryfallCacheSet(cache, url, json) { cache[url] = { at: Date.now(), json }; }
+function scryfallCacheSet(cache, url, json) {
+    cache[url] = { at: Date.now(), json };
+    var keys = Object.keys(cache);
+    if (keys.length > SCRYFALL_CACHE_MAX) {
+        keys.sort(function(a, b) { return (cache[a].at || 0) - (cache[b].at || 0); });
+        var toRemove = keys.length - SCRYFALL_CACHE_MAX;
+        for (var i = 0; i < toRemove; i++) delete cache[keys[i]];
+    }
+}
 
 function scryfallFetchJsonCached(url) {
     const cache = sup.global.get(GLOBAL_SCRYFALL_CACHE_KEY) || {};
