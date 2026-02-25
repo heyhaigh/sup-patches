@@ -165,64 +165,49 @@ END TURN → damage clears, pass to next player
 
 ---
 
-## Phase 2: The Game Is Strategic (Keywords + Auras + Targeting)
+## ~~Phase 2: The Game Is Strategic (Keywords + Auras + Targeting)~~ ✅ COMPLETE
 
 **Goal:** Cards feel different from each other. A Lightning Bolt is not the same as Llanowar Elves.
 
 ### ~~2A. Keyword Abilities (13 Keywords)~~ ✅ COMPLETE
 
-All detected from Scryfall's `keywords` array — no oracle text parsing needed:
-
-| Keyword | Implementation | Icon |
-|---------|---------------|------|
-| **Flying** | Only blocked by flying/reach | Wing (top-right) |
-| **Reach** | Can block flying | Net/arrow (top-right) |
-| **First Strike** | Deals damage first; if it kills, no return damage | Lightning bolt (top-right) |
-| **Double Strike** | First strike + normal damage (two combat steps) | Double lightning (top-right) |
-| **Trample** | Excess damage over blocker toughness hits player | Boot (bottom-left) |
-| **Deathtouch** | Any damage kills creature | Skull (bottom-left) |
-| **Lifelink** | Controller gains life = damage dealt | Heart (bottom-left) |
-| **Haste** | No summoning sickness | Flame (top-left) |
-| **Vigilance** | Doesn't tap when attacking | Eye (top-left) |
-| **Defender** | Cannot attack | Shield (top-left) |
-| **Menace** | Must be blocked by 2+ creatures | Double-fang (top-right) |
-| **Indestructible** | Cannot be destroyed by damage or "destroy" effects | Diamond (top-left) |
-| **Hexproof** | Cannot be targeted by opponents' spells | Hexagon shield (top-left) |
-
-**Visual:** Simple SVG icons, 16x16px, semi-transparent dark background circle for readability against any card art.
-
-**Unsupported ability indicator:** Yellow warning triangle with "i" on cards with oracle text the engine can't process. Inspect modal shows: "Some abilities on this card are not implemented. This card functions as a [power]/[toughness] creature with [supported keywords]."
+All detected from Scryfall's `keywords` array — no oracle text parsing needed.
 
 ### ~~2B. Aura/Enchantment Attachment~~ ✅ COMPLETE
 
-- ~~When playing an Aura (type_line contains "Enchantment — Aura"):~~
-  1. ~~Enter targeting mode — valid targets glow~~ ✅
-  2. ~~Click/tap target creature~~ ✅
-  3. ~~Aura visually attaches as smaller card overlapping the creature, or as buff indicator~~ ✅ (aura badge + green P/T)
-  4. ~~Parse stat modifications via regex (`+N/+N` patterns in oracle text)~~ ✅
-  5. ~~When enchanted creature dies, aura goes to graveyard too~~ ✅
-
 ### ~~2C. Basic Targeting System~~ ✅ COMPLETE
 
-- ~~When a spell requires a target, board enters "targeting mode"~~ ✅
-- ~~Valid targets glow, invalid targets dimmed~~ ✅ (purple glow for valid, dimmed for ineligible)
-- ~~Click/tap valid target to select~~ ✅
-- ~~"Cancel" option always visible to back out~~ ✅
-- ~~Only support basic target patterns initially: "target creature"~~ ✅ (Hexproof enforcement included)
+### ~~2D. Bot AI Improvements~~ ✅ COMPLETE
 
-### ~~2D. Bot AI Improvements~~ ✅ (Partial — keyword combat awareness complete)
-
-- ~~Bot evaluates combat math with keywords (don't attack 2/2 into a deathtouch 1/1)~~ ✅
-- Bot plays removal/damage spells on biggest threat
+- ~~Bot evaluates combat math with keywords~~ ✅
+- ~~Bot plays removal/damage spells on biggest threat~~ ✅ (botPickSpellTarget targets strongest opponent creature for damage/destroy, own strongest for buffs/keywords)
 - ~~Bot respects flying/reach blocking rules~~ ✅
 
 ### ~~2E. Visual Polish~~ ✅
 
-- ~~Damage numbers floating from combat (red for damage, green for lifelink healing)~~ ✅
-- ~~Death animations (red flash → skull → animate to graveyard)~~ ✅
-- ~~Spell cast overlay (instant/sorcery card art center-screen for 1-2s)~~ ✅ (pre-existing)
-- Mana crystal depletion animation
-- ~~Card slide animations between zones (hand → battlefield, battlefield → graveyard)~~ ✅
+### ~~2F. Spell Effect System~~ ✅ COMPLETE (2026-02-25)
+
+**Oracle text regex parsing** for both engine (server) and client (double-escaped for template literal):
+- ~~`deals N damage to target creature/player/any target/each opponent`~~ ✅
+- ~~`destroy target creature/permanent`~~ ✅
+- ~~`draw N cards`~~ ✅
+- ~~`gain N life`~~ ✅
+- ~~`target creature gets +N/+N ... until end of turn`~~ ✅ (fixed regex to allow arbitrary text between P/T and "until end of turn")
+- ~~`gains [keyword] until end of turn`~~ ✅ (tempKeyword effect — stored in `match.game.tempKeywords`, clears at EOT, checked by `engineHasKeyword`)
+- ~~P/T badge shows temp spell buffs (green numbers)~~ ✅
+- ~~Keyword icons show temp keywords from spells~~ ✅
+
+### ~~2G. Token Creation System~~ ✅ COMPLETE (2026-02-25)
+
+- ~~`engineCreateToken(match, seat, tokenDef)`~~ ✅ — creates token with metadata in `match.decks[seat].cardMeta[tokenId]` with `isToken: true`, so all existing engine functions work automatically
+- ~~Parse "Create a/N Treasure token(s)"~~ ✅
+- ~~Parse "Create a/N P/T [type] creature token(s)"~~ ✅
+- ~~Token lifecycle: tokens cease to exist when leaving battlefield~~ ✅ (handled in `engineMoveCard`)
+- ~~Treasure sacrifice-for-mana activation~~ ✅ (`engineActivateAbility`, `ACTIVATE_ABILITY` action handler, "Activate ability" button in inspector)
+- ~~Client-side token rendering~~ ✅ (amber gradient placeholder for artless tokens, "T" indicator on creature tokens, name badge on non-creature tokens)
+- ~~Token hydration in `hydrateCardIndexForMatch`~~ ✅
+
+**Bug fixed (2026-02-25):** `renderCardImg` crashed (ReferenceError on undefined `isCreature` variable) when rendering non-creature tokens, blanking the player's battlefield. Fixed to use `clientCardType(id) !== 'creature'`.
 
 ---
 
@@ -230,19 +215,14 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 
 **Goal:** The game feels good enough to share. Smooth, responsive, clear.
 
+### ~~3B. Simple Parseable Effects~~ ✅ COMPLETE (moved to Phase 2F/2G above)
+
+All regex patterns implemented in Phase 2F + token creation in Phase 2G.
+
 ### 3A. Remaining Combat Depth
 - Multiple blockers on one attacker (with even damage split)
 - Commander damage tracking (21+ from one commander = loss)
-- Damage vs. toughness distinction (damage marked on creature, separate from toughness, clears end of turn)
-
-### 3B. Simple Parseable Effects (Stretch)
-- Regex whitelist for common oracle text patterns:
-  - `deals (\d+) damage to (any target|target creature|target player)`
-  - `destroy target (creature|permanent)`
-  - `draw (\d+) cards?`
-  - `gains? (\d+) life`
-  - `target creature gets [+-](\d+)/[+-](\d+) until end of turn`
-- Mark everything else as "abilities not implemented" — card still playable for stats
+- ~~Damage vs. toughness distinction (damage marked on creature, separate from toughness, clears end of turn)~~ ✅ (already works — `cardState.damage` tracked separately, clears at EOT)
 
 ### 3C. UX Polish
 - Mobile: long-press for floating inspector (no hover), swipe up from hand to play
@@ -256,6 +236,32 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 - Victory/defeat screen with stats
 - Play Again / Change Decks / Main Menu buttons
 - Multiplayer elimination (Commander): removed player's permanents leave, game continues
+
+### 3E. Spell & Token Polish (NEW — follow-up from 2F/2G)
+
+These are remaining edge cases and polish items discovered during the Phase 2F/2G implementation:
+
+#### Testing needed (from 2026-02-25 session)
+- **Ancestors' Aid full flow**: Cast → target creature → creature gets +2/+0 and First Strike icon → Treasure token appears on battlefield → P/T badge shows green buffed values
+- **Treasure activation**: Click Treasure on battlefield → inspector shows "Activate ability" button → clicking sacrifices Treasure and adds 1 mana to pool
+- **End of turn cleanup**: Temp buffs and keywords clear when turn ends (creature reverts to base P/T, keyword icons disappear)
+- **Token lifecycle**: When a creature token dies in combat, it should NOT appear in graveyard
+- **Multi-effect spells**: Spells with both targeted effects (tempBuff) and non-targeted effects (createToken) should process all effects — the targeted ones use the selected target, non-targeted ones just fire
+
+#### Potential edge cases to watch for
+- Token rendering when `cardMeta` hasn't hydrated yet (race condition on fast plays?)
+- Treasure token stacking — multiple Treasures on battlefield should each be individually activatable
+- `clientCardType` for tokens — a Treasure is an Artifact, not a creature. Verify it doesn't end up in the creature wrap path
+- Creature tokens with keywords (e.g., "Create a 1/1 white Soldier creature token with vigilance") — `tokenDef.keywords` array is wired up but no regex pattern captures keyword tokens yet
+- Token count display if a player has many tokens (battlefield could overflow)
+
+#### Future spell patterns to consider
+- `exile target creature/permanent` — similar to destroy but different zone
+- `return target creature to its owner's hand` (bounce)
+- `each player draws/discards N cards`
+- `target creature gets -N/-N until end of turn` (debuff — currently only +N/+N captured)
+- `put N +1/+1 counters on target creature` (requires counter system)
+- `sacrifice a creature` (requires sacrifice selection UI)
 
 ---
 
@@ -276,8 +282,8 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed:
 | **Adventures / Split cards** | Two-mode cards = choice UI + dual-state |
 | **Madness / Flashback / Escape** | Playing from non-hand zones |
 | **Phasing / Banding / Protection** | Deprecated, incomprehensible, or too niche |
-| **Token generation** | No token system. Cards that create tokens just don't do that part. |
-| **Activated abilities** | Tap/pay abilities require new interaction paradigm |
+| ~~**Token generation**~~ | ~~No token system.~~ ✅ Implemented 2026-02-25 (Treasure + creature tokens) |
+| ~~**Activated abilities**~~ | ~~Tap/pay abilities.~~ ✅ Partially implemented 2026-02-25 (Treasure sacrifice-for-mana). Other activated abilities still skipped. |
 | **Triggered abilities** | ETB/death triggers require event system (stretch goal for a few patterns) |
 | **Network multiplayer (real-time)** | Entirely different project |
 
