@@ -2556,8 +2556,7 @@ function getClientHtml() {
     if (!state.activeMatchId) return;
     var attackerCount = Object.keys(state.pendingAttackers).length;
     if (!attackerCount) {
-      // No attackers selected — skip combat instead
-      await skipCombat();
+      toast('No attackers selected — tap creatures to attack, or use Skip Combat', { type: 'warning' });
       return;
     }
     var hasBot = (state.lastMatch?.players || []).some(function(p) { return p.isBot; });
