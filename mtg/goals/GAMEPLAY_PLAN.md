@@ -225,13 +225,13 @@ All regex patterns implemented in Phase 2F + token creation in Phase 2G.
 - ~~Damage vs. toughness distinction (damage marked on creature, separate from toughness, clears end of turn)~~ ✅ (already works — `cardState.damage` tracked separately, clears at EOT)
 - ~~SVG combat lines connecting blockers to attackers during blocking phase~~ ✅ (blue dashed lines with endpoint dots, `renderCombatLines()`)
 
-### 3C. UX Polish (PARTIAL)
+### 3C. UX Polish (MOSTLY COMPLETE)
 - Mobile: long-press for floating inspector (no hover), swipe up from hand to play
-- Touch targets: minimum 44px (Apple HIG)
-- Undo: deselect attackers/blockers before confirming, deselect card from hand before playing
+- ~~Touch targets: minimum 44px (Apple HIG)~~ ✅ (2026-02-25) — buttons, zone badges, event log toggle all 44px+ on mobile
+- ~~Undo: deselect attackers/blockers before confirming, deselect card from hand before playing~~ ✅ (2026-02-25) — clicking a selected card again deselects it; toggleAttacker/blocker already toggled
 - Right-click context menu for "Send to Graveyard" (prevents accidental moves)
 - ~~Graveyard/exile zone inspection (click to see all cards)~~ ✅ (already implemented)
-- Reconnection handling (polling failure → "Reconnecting..." → resume)
+- ~~Reconnection handling (polling failure → "Reconnecting..." → resume)~~ ✅ (2026-02-25) — `refreshMatch()` catches errors, shows banner, retries with exponential backoff
 - ~~Game event log~~ ✅ (2026-02-25) — collapsible panel at bottom-left showing last 25 events (plays, spells, combat, deaths, damage, tokens, game over). `renderEventLog(match)` called from `renderGame()`.
 
 ### ~~3D. Game Over Experience~~ ✅ COMPLETE (2026-02-25)
