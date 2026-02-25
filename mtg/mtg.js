@@ -190,6 +190,13 @@ function getClientHtml() {
     .manaGem.full { background:radial-gradient(circle at 35% 35%, #c084fc, #7c3aed 60%, #5b21b6); border-color:rgba(124,58,237,0.5); box-shadow:0 0 6px rgba(124,58,237,0.3); }
     .manaGem.empty { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); transform:scale(0.85); opacity:0.5; }
     .manaText { font-size:12px; font-weight:700; color:rgba(255,255,255,0.7); margin-left:4px; }
+    .manaLabel { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:rgba(255,255,255,0.45); margin-right:4px; }
+    .handMana { display:flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; margin-top:4px; flex:0 0 auto; }
+    .handMana .hmLabel { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:rgba(192,132,252,0.85); margin-right:2px; }
+    .handMana .hmGem { width:24px; height:24px; border-radius:50%; border:2px solid rgba(255,255,255,0.2); transition:all 200ms ease; }
+    .handMana .hmGem.full { background:radial-gradient(circle at 35% 35%, #c084fc, #7c3aed 60%, #5b21b6); border-color:rgba(124,58,237,0.6); box-shadow:0 0 10px rgba(124,58,237,0.4); }
+    .handMana .hmGem.empty { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); transform:scale(0.85); opacity:0.5; }
+    .handMana .hmText { font-size:14px; font-weight:800; color:rgba(255,255,255,0.8); margin-left:4px; }
     .cardImg.unplayable { opacity:0.45; filter:saturate(0.3); }
     .cardImg.unplayable:hover { opacity:0.6; filter:saturate(0.5); }
     .botThinking { display:flex; align-items:center; gap:8px; padding:8px 16px; background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.25); border-radius:10px; color:rgba(255,255,255,0.85); font-size:13px; font-weight:600; }
@@ -261,6 +268,8 @@ function getClientHtml() {
     @keyframes lifePulse { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 12px rgba(239,68,68,0.4)} }
     .lifeBadge.flash { animation:lifeFlash 0.4s ease; }
     @keyframes lifeFlash { 0%{background:rgba(239,68,68,0.5)} 100%{background:rgba(255,255,255,0.12)} }
+    @keyframes manaEntrance { 0%{opacity:0;transform:translateY(8px) scale(0.9)} 100%{opacity:1;transform:translateY(0) scale(1)} }
+    .handMana.manaEnter { animation:manaEntrance 0.5s ease forwards; animation-delay:0.8s; opacity:0; }
     .botThinking .spinner { width:14px; height:14px; border:2px solid rgba(251,191,36,0.3); border-top-color:#fbbf24; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
     .turnOrder { display:flex; gap:4px; align-items:center; }
     .turnDot { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); transition:all 200ms ease; }
@@ -316,6 +325,8 @@ function getClientHtml() {
       .oppSide.multi .bfArea .cardImg { width:48px; height:66px; }
       .zoneBrowserContent { max-width:95vw; }
       .zoneBrowserGrid { grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:6px; }
+      .handMana .hmGem { width:20px; height:20px; }
+      .handMana .hmText { font-size:12px; }
     }
   </style>
 
@@ -689,6 +700,7 @@ function getClientHtml() {
 
   function enterMatchMode() {
     document.querySelector('.appRoot').classList.add('matchActive');
+    state.gameEntranceAnimated = false;
     switchTab('play');
     updateMatchBar();
   }
@@ -699,6 +711,7 @@ function getClientHtml() {
     state.lastMatch = null;
     state.prevLifeBySeat = {};
     state.lastLogIndex = 0;
+    state.gameEntranceAnimated = false;
     renderLobby(null);
     $('#gamePanel').style.display = 'none';
     $('#createResult').textContent = '';
@@ -1924,7 +1937,7 @@ function getClientHtml() {
     if (bar.dataset.cacheKey === cacheKey) return;
     bar.dataset.cacheKey = cacheKey;
 
-    var manaHtml = '<div class="manaBar">';
+    var manaHtml = '<div class="manaBar"><span class="manaLabel">Mana</span>';
     for (var mi = 0; mi < mana.max; mi++) {
       manaHtml += '<div class="manaGem ' + (mi < mana.current ? 'full' : 'empty') + '"></div>';
     }
@@ -2054,6 +2067,22 @@ function getClientHtml() {
 
     const myEl = $('#mySide'); myEl.innerHTML = '';
     myEl.appendChild(renderBoardSeat(match, mySeat, true));
+
+    // Hand-adjacent mana display
+    var handMana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
+    var handManaEl = document.createElement('div');
+    handManaEl.className = 'handMana';
+    var hmInner = '<span class="hmLabel">Mana</span>';
+    for (var hmi = 0; hmi < handMana.max; hmi++) {
+      hmInner += '<div class="hmGem ' + (hmi < handMana.current ? 'full' : 'empty') + '"></div>';
+    }
+    hmInner += '<span class="hmText">' + handMana.current + '/' + handMana.max + '</span>';
+    handManaEl.innerHTML = hmInner;
+    if (!state.gameEntranceAnimated) {
+      handManaEl.classList.add('manaEnter');
+      state.gameEntranceAnimated = true;
+    }
+    myEl.appendChild(handManaEl);
 
     const zones = match?.game?.zones?.[mySeat];
     const hand = Array.isArray(zones?.hand) ? zones.hand : [];
@@ -4372,7 +4401,7 @@ function engineBotTakeTurn(match, botPlayer) {
     const getCmc = (id) => Number(engineBotCardMeta(match, seat, id).cmc) || 0;
     const affordable = hand.filter(id => getCmc(id) <= mana.current);
 
-    if (!affordable.length || (diff === "easy" && sup.random.integer(0, 4) < 2)) {
+    if (!affordable.length || (diff === "easy" && sup.random.integer(0, 6) < 1)) {
         match.log.push({ t: Date.now(), type: "BOT_PASS", by: "bot", seat, difficulty: diff });
         engineAdvanceTurn(match, { by: "bot" });
         return;
@@ -4481,14 +4510,20 @@ function engineBotTakeTurn(match, botPlayer) {
     var botIsLand = function(id) { return engineCardType(match, seat, id) === "land"; };
 
     if (diff === "easy") {
-        // Easy: play 1 random affordable card
-        const idx = sup.random.integer(0, affordable.length - 1);
-        const cardId = affordable[idx];
-        if (botIsLand(cardId) && (match.game.landsPlayedThisTurn || 0) >= 1) { /* skip */ }
-        else if (botPlayCard(cardId)) {
-            if (botIsLand(cardId)) match.game.landsPlayedThisTurn = (match.game.landsPlayedThisTurn || 0) + 1;
-            mana.current = Math.max(0, mana.current - getCmc(cardId));
-            played.push(cardId);
+        // Easy: shuffle hand, try to play 1-2 cards (retry on failure instead of giving up)
+        var easyShuffled = affordable.slice().sort(function() { return sup.random.integer(0, 1) ? 1 : -1; });
+        var easyPlayed = 0;
+        var easyMax = sup.random.integer(1, 2);
+        for (var ei = 0; ei < easyShuffled.length && easyPlayed < easyMax; ei++) {
+            var easyCard = easyShuffled[ei];
+            if (getCmc(easyCard) > mana.current) continue;
+            if (botIsLand(easyCard) && (match.game.landsPlayedThisTurn || 0) >= 1) continue;
+            if (botPlayCard(easyCard)) {
+                if (botIsLand(easyCard)) match.game.landsPlayedThisTurn = (match.game.landsPlayedThisTurn || 0) + 1;
+                mana.current = Math.max(0, mana.current - getCmc(easyCard));
+                played.push(easyCard);
+                easyPlayed++;
+            }
         }
     } else if (diff === "medium") {
         // Medium: sort affordable by CMC ascending, play greedily (cheapest first)
