@@ -91,6 +91,42 @@ Never redeclare `const $` — it's a `SyntaxError: Identifier '$' has already be
 
 SupChat's preview mode often doesn't have the `sup` context available until the user clicks "Share with chat" or refreshes. The `supExec()` wrapper retries on context errors with exponential backoff.
 
+## CSS Specificity vs JS Visibility (The matchActive Trap)
+
+When hiding/showing UI panels, beware of **CSS rules that silently override JS `style.display` changes**.
+
+### What happened
+
+The lobby panel (`#lobbyPanel.card`) needed to stay visible during mulligan phase but hide during gameplay. We tried:
+
+1. **CSS approach** (`.appRoot.matchActive #lobbyPanel { display:none !important }`) — broke lobby completely because `matchActive` is added on match **create/join** (lobby phase), not game start.
+
+2. **JS approach** (`renderLobby` hides panel when `phase === 'playing'`) — still blank during mulligan because a pre-existing CSS rule `.appRoot.matchActive #tab-play > .card:last-child { display:none }` was targeting `#lobbyPanel` (it's the last `.card` child of `#tab-play`). The CSS rule silently overrode the JS `display:''`.
+
+### Root causes
+
+- **`matchActive` doesn't mean "game is playing"** — it's set during lobby creation to hide the topbar/sidebar/create-join UI. The mulligan panel is nested inside the lobby panel, so hiding lobby = hiding mulligan.
+- **CSS `:last-child` selectors are fragile** — they match based on DOM position, not intent. Adding/removing elements changes what they target.
+- **CSS `display:none` beats JS `el.style.display = ''`** — unless the JS uses `!important` or the CSS rule is removed/narrowed.
+
+### Fix applied
+
+```css
+/* BAD — catches #lobbyPanel since it's the last .card child */
+.appRoot.matchActive #tab-play > .card:last-child { display:none; }
+
+/* GOOD — exclude lobbyPanel, let renderLobby() control its visibility */
+.appRoot.matchActive #tab-play > .card:last-child:not(#lobbyPanel) { display:none; }
+```
+
+### Rules to follow
+
+1. **Always check when `matchActive` is toggled** before using it in CSS — it's set on create/join, NOT game start.
+2. **Before hiding an element with CSS**, check what's nested inside it (mulligan UI was inside lobby).
+3. **Audit existing CSS rules** when adding JS visibility logic — use browser DevTools "Computed" tab to spot conflicting rules.
+4. **Prefer JS-controlled visibility** for panels with phase-dependent behavior; use CSS only for static layout concerns.
+5. **Avoid `:last-child` / `:first-child` selectors** for hiding specific elements — use explicit IDs or classes instead.
+
 ## Workflow: Always Commit & Push After Plan Completion
 
 Every completed phase/plan improvement must be committed and pushed to git before considering it done. Don't wait for the user to ask — commit and push immediately after verifying the changes (syntax check, etc.).
