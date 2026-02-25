@@ -4008,6 +4008,7 @@ function engineApplyAction(match, user, action) {
             }
             engineResolveCombatDamage(match);
             match.game.step = "main2";
+            match.game.prioritySeat = match.game.activePlayerSeat;
         } else {
             // Human defender — wait for blocks
             match.game.step = "combat_blockers";
