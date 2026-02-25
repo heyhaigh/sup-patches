@@ -631,6 +631,7 @@ function getClientHtml() {
     combatMode: null, pendingAttackers: {}, pendingBlockers: {}, selectedBlocker: null,
     targetingMode: null,
     lastLogIndex: 0,
+    _suppressTurnOverlay: false,
   };
 
   /* Tab buttons work immediately via event delegation — no boot() needed */
@@ -2220,30 +2221,84 @@ function getClientHtml() {
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'END_TURN' } });
     if (!res.ok) { toast('End turn failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     if (hasBot) {
-      const bar = $('#turnBar');
+      // Suppress TURN_START overlays — we'll trigger them manually for proper sequencing
+      state._suppressTurnOverlay = true;
+
+      // 1. Show bot's turn overlay
+      var botPlayer = (state.lastMatch?.players || []).find(function(p) { return p.isBot; });
+      var botName = botPlayer ? botPlayer.username : 'Bot';
+      showTurnOverlay(botName, false);
+
+      // 2. Show "Bot is thinking..." in turn bar
+      var bar = $('#turnBar');
       if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> Bot is thinking\u2026</div>';
-      await new Promise(r => setTimeout(r, 1200 + Math.floor(Math.random() * 800)));
-    }
-    await refreshMatch();
-    if (hasBot) {
+
+      // 3. Wait for overlay to hold (1.6s overlay + a bit of thinking time)
+      await new Promise(function(r) { setTimeout(r, 2000); });
+
+      // 4. Refresh to get the bot's plays — board updates here
+      await refreshMatch();
+
+      // 5. Stagger bot play toasts so user can read each one
       var log = state.lastMatch?.log || [];
       var botPlays = log.filter(function(e) {
-        return (e.type === 'BOT_PLAY' || e.type === 'BOT_CAST_SPELL') && e.t > Date.now() - 5000;
+        return (e.type === 'BOT_PLAY' || e.type === 'BOT_CAST_SPELL') && e.t > Date.now() - 10000;
       });
+      var botAttacked = log.find(function(e) {
+        return e.type === 'ATTACKERS_DECLARED' && e.by === 'bot' && e.count > 0 && e.t > Date.now() - 10000;
+      });
+      var botDamage = log.filter(function(e) {
+        return (e.type === 'PLAYER_DAMAGE' || e.type === 'TRAMPLE_DAMAGE') && e.t > Date.now() - 10000;
+      });
+      var toastDuration = 3500;
+      var toastGap = 1000;
+      var totalWait = 0;
+      var toastIdx = 0;
+
       if (botPlays.length) {
         for (var bpi = 0; bpi < botPlays.length; bpi++) {
           (function(entry, delay) {
             setTimeout(function() {
               var cName = cardMeta(entry.cardId)?.name || 'a card';
               var verb = entry.type === 'BOT_CAST_SPELL' ? 'cast' : 'played';
-              toast('Bot ' + verb + ' ' + cName + '.', { type: 'info', ms: 2000 });
+              toast('Bot ' + verb + ' ' + cName + '.', { type: 'info', ms: toastDuration });
             }, delay);
-          })(botPlays[bpi], bpi * 600);
+          })(botPlays[bpi], bpi * toastGap);
         }
+        toastIdx = botPlays.length;
+        totalWait = (botPlays.length - 1) * toastGap + toastDuration;
       } else {
-        var botPass = log.find(function(e) { return e.type === 'BOT_PASS' && e.t > Date.now() - 5000; });
-        if (botPass) toast('Bot passed.', { type: 'info', ms: 1500 });
+        var botPass = log.find(function(e) { return e.type === 'BOT_PASS' && e.t > Date.now() - 10000; });
+        if (botPass) {
+          toast('Bot passed.', { type: 'info', ms: 2500 });
+          totalWait = 2500;
+          toastIdx = 1;
+        } else {
+          totalWait = 1000;
+        }
       }
+
+      if (botAttacked) {
+        var atkDelay = toastIdx * toastGap;
+        var totalDmg = 0;
+        for (var di = 0; di < botDamage.length; di++) totalDmg += (botDamage[di].damage || 0);
+        (function(delay, dmg) {
+          setTimeout(function() {
+            var dmgStr = dmg > 0 ? ' for ' + dmg + ' damage!' : '!';
+            toast('Bot attacked' + dmgStr, { type: 'info', ms: toastDuration });
+          }, delay);
+        })(atkDelay, totalDmg);
+        totalWait = Math.max(totalWait, atkDelay + toastDuration);
+      }
+
+      // 6. Wait for toasts to play out, then show "YOUR TURN" if game isn't over
+      await new Promise(function(r) { setTimeout(r, totalWait + 400); });
+      state._suppressTurnOverlay = false;
+      if (state.lastMatch?.game?.status !== 'finished') {
+        showTurnOverlay('', true);
+      }
+    } else {
+      await refreshMatch();
     }
   }
 
@@ -2542,7 +2597,7 @@ function getClientHtml() {
       if (entry.type === 'CREATURE_DIED') {
         showDeathOverlay(entry.cardId);
       }
-      if (entry.type === 'TURN_START') {
+      if (entry.type === 'TURN_START' && !state._suppressTurnOverlay) {
         var turnSeat = entry.seat;
         var isMyTurn = turnSeat === newMatch.viewerSeat;
         var turnPlayer = (newMatch.players || []).find(function(p) { return p.seat === turnSeat; });
