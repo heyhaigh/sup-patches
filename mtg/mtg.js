@@ -1348,9 +1348,9 @@ function getClientHtml() {
     title.textContent = c.name || state.selected.id;
     const cmcStr = c.cmc != null ? ' \u2022 ' + c.cmc + ' mana' : '';
     sub.textContent = (c.typeLine || '') + cmcStr + (state.selected.zone ? ' \u2022 ' + state.selected.zone : '');
-    const canAfford = (Number(c?.cmc) || 0) <= (state.lastMatch?.game?.manaBySeat?.[state.lastMatch.viewerSeat]?.current || 0);
     var playBtn = $('#btnPlaySelected');
-    playBtn.disabled = !(state.selected.zone === 'hand' && state.selected.seat === state.lastMatch?.viewerSeat && canAfford);
+    var canPlay = state.selected.zone === 'hand' && state.selected.seat === state.lastMatch?.viewerSeat && clientCanPlay(state.selected.id, state.lastMatch);
+    playBtn.disabled = !canPlay;
     if (state.selected.zone === 'hand') {
       var ct = clientCardType(state.selected.id);
       playBtn.textContent = (ct === 'instant' || ct === 'sorcery') ? 'Cast spell' : 'Play to battlefield';
@@ -1440,6 +1440,20 @@ function getClientHtml() {
     if (tl.includes('artifact')) return 'artifact';
     if (tl.includes('land')) return 'land';
     return 'unknown';
+  }
+
+  function clientCanPlay(id, match) {
+    if (!match || match.game?.status === 'finished') return false;
+    var mySeat = match.viewerSeat;
+    if (match.game?.activePlayerSeat !== mySeat) return false;
+    var step = match.game?.step || '';
+    if (step !== 'main1' && step !== 'main2') return false;
+    var mana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
+    var cmc = Number(cardMeta(id)?.cmc) || 0;
+    if (clientCardType(id) === 'land') {
+      return (match.game?.landsPlayedThisTurn || 0) < 1;
+    }
+    return cmc <= mana.current;
   }
 
   var CLIENT_SUPPORTED_KEYWORDS = ['Flying','Reach','First Strike','Double Strike','Trample','Deathtouch','Lifelink','Haste','Vigilance','Defender','Menace','Indestructible','Hexproof'];
@@ -2036,15 +2050,15 @@ function getClientHtml() {
     if (!hand.length) {
       handTray.innerHTML = '<div class="emptyZone">No cards in hand</div>';
     } else {
-      const myMana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
       for (const id of hand) {
         const img = renderCardImg(id, {
           zone: 'hand', seat: mySeat, w: 90, h: 126,
-          onDblClick: async () => { setSelected({ id, zone: 'hand', seat: mySeat }); await playSelectedToBattlefield(); }
+          onDblClick: async () => {
+            if (!clientCanPlay(id, match)) { setSelected({ id, zone: 'hand', seat: mySeat }); return; }
+            setSelected({ id, zone: 'hand', seat: mySeat }); await playSelectedToBattlefield();
+          }
         });
-        const cmc = Number(cardMeta(id)?.cmc) || 0;
-        if (cmc > myMana.current) img.classList.add('unplayable');
-        if (clientCardType(id) === 'land' && (match.game?.landsPlayedThisTurn || 0) >= 1) img.classList.add('unplayable');
+        if (!clientCanPlay(id, match)) img.classList.add('unplayable');
         handTray.appendChild(img);
       }
     }
@@ -2632,7 +2646,7 @@ function getClientHtml() {
   async function playSelectedToBattlefield() {
     const sel = state.selected; if (!state.activeMatchId || !sel?.id) return;
     if (!(sel.zone === 'hand' && sel.seat === state.lastMatch?.viewerSeat)) { toast('Select a card in your hand to play.', { type: 'warn' }); return; }
-    if (clientCardType(sel.id) === 'land' && (state.lastMatch?.game?.landsPlayedThisTurn || 0) >= 1) { toast('You can only play 1 land per turn.', { type: 'warn' }); return; }
+    if (!clientCanPlay(sel.id, state.lastMatch)) { toast('Cannot play this card right now.', { type: 'warn' }); return; }
     // Aura: enter targeting mode instead of playing directly
     if (clientIsAura(sel.id)) {
       enterTargetingMode(sel.id);
