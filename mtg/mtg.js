@@ -47,6 +47,8 @@ function getClientHtml() {
       --danger: #ef4444; --dangerHover: #dc2626;
       --success: #16a34a; --warning: #f59e0b;
       --sidebarBg: rgba(255,255,255,0.85); --sidebarBlur: blur(10px);
+      --w06:rgba(255,255,255,0.06); --w08:rgba(255,255,255,0.08); --w1:rgba(255,255,255,0.1);
+      --w15:rgba(255,255,255,0.15); --w45:rgba(255,255,255,0.45); --b5:rgba(0,0,0,0.5);
     }
     .appRoot { width:100%; height:100%; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"; overflow:clip; overflow-clip-margin:0; }
     .layout { height:100%; display:grid; grid-template-rows:auto 1fr; }
@@ -122,8 +124,6 @@ function getClientHtml() {
     .mulliganHand { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; padding:16px 12px; border-radius:14px; background:rgba(18,21,26,0.04); border:1px solid var(--border); margin:12px 0; }
     .mulliganHand .cardImg { width:100px; height:140px; border-radius:12px; flex:0 0 auto; transition:transform 160ms ease,box-shadow 160ms ease; }
     .mulliganHand .cardImg:hover { transform:translateY(-6px) scale(1.04); box-shadow:0 12px 24px rgba(0,0,0,0.15); }
-    .zonePills { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
-    .zonePill { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid var(--border); background:rgba(255,255,255,0.75); border-radius:999px; font-size:12px; color:var(--muted); font-weight:650; }
     .inspectorImg { width:100%; border-radius:14px; border:1px solid var(--border); background:rgba(18,21,26,0.06); aspect-ratio:63/88; object-fit:cover; }
     .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(18,21,26,0.15); border-top-color:var(--primary); border-radius:50%; animation:spin 0.6s linear infinite; vertical-align:middle; margin-right:6px; }
     @keyframes spin { to { transform:rotate(360deg); } }
@@ -172,31 +172,25 @@ function getClientHtml() {
     @keyframes lowHealthPulse { 0%,100% { background:rgba(220,38,38,0.04); } 50% { background:rgba(220,38,38,0.14); } }
     .seatBar { display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative; z-index:1; }
     .seatName { font-weight:800; font-size:14px; color:rgba(255,255,255,0.85); }
-    .lifeBadge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,0.12); color:#fff; font-size:13px; font-weight:700; border:1px solid rgba(255,255,255,0.15); }
+    .lifeBadge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,0.12); color:#fff; font-size:13px; font-weight:700; border:1px solid var(--w15); }
     .lifeIcon { font-size:16px; }
     .zoneRow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; position:relative; z-index:1; }
-    .zoneBadge { padding:4px 8px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.6); font-size:11px; font-weight:600; border:1px solid rgba(255,255,255,0.08); }
+    .zoneBadge { padding:4px 8px; border-radius:8px; background:var(--w08); color:rgba(255,255,255,0.6); font-size:11px; font-weight:600; border:1px solid var(--w08); }
     .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:10px; min-height:60px; overflow-y:auto; }
-    .bfArea .cardImg { width:72px; height:100px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; }
+    .bfArea .cardImg { width:72px; height:100px; border:1px solid var(--w15); border-radius:10px; }
     .bfArea .cardImg:hover { transform:translateY(-4px) scale(1.05); box-shadow:0 8px 20px rgba(0,0,0,0.3); }
-    .turnBar { display:flex; align-items:center; justify-content:center; gap:16px; padding:8px 16px; background:rgba(255,255,255,0.06); border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08); flex:0 0 auto; }
+    .turnBar { display:flex; align-items:center; justify-content:center; gap:16px; padding:8px 16px; background:var(--w06); border-top:1px solid var(--w08); border-bottom:1px solid var(--w08); flex:0 0 auto; }
     .turnInfo { font-size:13px; color:rgba(255,255,255,0.75); font-weight:600; }
     .turnHighlight { color:#fbbf24; font-weight:800; }
-    .turnBar .btn { font-size:12px; padding:6px 14px; background:rgba(255,255,255,0.10); color:#fff; border-color:rgba(255,255,255,0.15); }
+    .turnBar .btn { font-size:12px; padding:6px 14px; background:rgba(255,255,255,0.10); color:#fff; border-color:var(--w15); }
     .turnBar .btn:hover { background:rgba(255,255,255,0.18); }
     .turnBar .btnPrimary { background:rgba(11,116,255,0.7); border-color:rgba(11,116,255,0.5); }
     .turnBar .btnPrimary:hover { background:rgba(11,116,255,0.85); }
-    .manaBar { display:flex; gap:3px; align-items:center; }
-    .manaGem { width:18px; height:18px; border-radius:50%; border:1.5px solid rgba(255,255,255,0.2); transition:all 200ms ease; }
-    .manaGem.full { background:radial-gradient(circle at 35% 35%, #c084fc, #7c3aed 60%, #5b21b6); border-color:rgba(124,58,237,0.5); box-shadow:0 0 6px rgba(124,58,237,0.3); }
-    .manaGem.empty { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); transform:scale(0.85); opacity:0.5; }
-    .manaText { font-size:12px; font-weight:700; color:rgba(255,255,255,0.7); margin-left:4px; }
-    .manaLabel { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:rgba(255,255,255,0.45); margin-right:4px; }
-    .handMana { display:flex; align-items:center; gap:6px; padding:4px 10px; flex:0 0 auto; border-right:1px solid rgba(255,255,255,0.1); margin-right:2px; }
+    .handMana { display:flex; align-items:center; gap:6px; padding:4px 10px; flex:0 0 auto; border-right:1px solid var(--w1); margin-right:2px; }
     .handMana .hmLabel { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:rgba(192,132,252,0.85); margin-right:2px; }
     .handMana .hmGem { width:24px; height:24px; border-radius:50%; border:2px solid rgba(255,255,255,0.2); transition:all 200ms ease; }
     .handMana .hmGem.full { background:radial-gradient(circle at 35% 35%, #c084fc, #7c3aed 60%, #5b21b6); border-color:rgba(124,58,237,0.6); box-shadow:0 0 10px rgba(124,58,237,0.4); }
-    .handMana .hmGem.empty { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); transform:scale(0.85); opacity:0.5; }
+    .handMana .hmGem.empty { background:var(--w06); border-color:var(--w1); transform:scale(0.85); opacity:0.5; }
     .handMana .hmText { font-size:14px; font-weight:800; color:rgba(255,255,255,0.8); margin-left:4px; }
     .cardImg.unplayable { opacity:0.45; filter:saturate(0.3); }
     .cardImg.unplayable:hover { opacity:0.6; filter:saturate(0.5); }
@@ -207,8 +201,8 @@ function getClientHtml() {
     .ptBadge { position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.82); color:#fff; font-size:10px; font-weight:800; padding:2px 5px; border-radius:5px; line-height:1; pointer-events:none; border:1px solid rgba(255,255,255,0.2); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; z-index:2; }
     .ptBadge .ptDamaged { color:#ef4444; }
     .cardWrap.summonSick .cardImg { opacity:0.55; filter:saturate(0.4); }
-    .summonSickIcon { position:absolute; top:4px; right:4px; width:18px; height:18px; background:rgba(0,0,0,0.7); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; pointer-events:none; z-index:2; border:1px solid rgba(255,255,255,0.15); }
-    .spellOverlay { position:fixed; top:0; left:0; width:100%; height:100%; z-index:100; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.5); pointer-events:none; }
+    .summonSickIcon { position:absolute; top:4px; right:4px; width:18px; height:18px; background:rgba(0,0,0,0.7); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; pointer-events:none; z-index:2; border:1px solid var(--w15); }
+    .spellOverlay { position:fixed; top:0; left:0; width:100%; height:100%; z-index:100; display:flex; align-items:center; justify-content:center; background:var(--b5); pointer-events:none; }
     .spellOverlay img { width:240px; height:336px; border-radius:16px; box-shadow:0 0 60px rgba(124,58,237,0.5),0 20px 60px rgba(0,0,0,0.4); animation:spellCast 1.6s ease-out forwards; }
     @keyframes spellCast { 0%{transform:scale(0.3) rotate(-8deg);opacity:0} 15%{transform:scale(1.05) rotate(0deg);opacity:1} 70%{transform:scale(1) rotate(0deg);opacity:1} 100%{transform:scale(0.4) translateY(60vh) rotate(12deg);opacity:0} }
     .cardWrap.tapped .cardImg { transform:rotate(90deg); }
@@ -228,9 +222,9 @@ function getClientHtml() {
     .kwIcons-tl { top:3px; left:3px; flex-direction:column; }
     .kwIcons-tr { top:3px; right:3px; flex-direction:column; align-items:flex-end; }
     .kwIcons-bl { bottom:20px; left:3px; flex-direction:column; }
-    .kwIcon { width:16px; height:16px; background:rgba(0,0,0,0.72); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; line-height:1; border:1px solid rgba(255,255,255,0.15); color:#fff; }
+    .kwIcon { width:16px; height:16px; background:rgba(0,0,0,0.72); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9px; line-height:1; border:1px solid var(--w15); color:#fff; }
     .kwPill { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700; background:rgba(59,130,246,0.12); color:#3b82f6; border:1px solid rgba(59,130,246,0.25); }
-    .kwPillUnsupported { background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.45); border-color:rgba(255,255,255,0.1); }
+    .kwPillUnsupported { background:var(--w06); color:var(--w45); border-color:var(--w1); }
     .cardModalKeywords { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
     .cardModalWarn { margin-top:10px; padding:8px 12px; border-radius:8px; font-size:12px; color:#f59e0b; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); }
     .cardModalAuras { margin-top:10px; font-size:12px; color:var(--muted); }
@@ -242,19 +236,19 @@ function getClientHtml() {
     .auraBadge { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(168,85,247,0.85); color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.2); }
     .ptBuffed { color:#22c55e; }
     .phaseBar { display:flex; gap:4px; align-items:center; }
-    .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.06); }
+    .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:var(--w06); color:rgba(255,255,255,0.35); border:1px solid var(--w06); }
     .phasePill.active { background:rgba(251,191,36,0.18); color:#fbbf24; border-color:rgba(251,191,36,0.35); animation:phaseActivate 0.3s ease; }
-    @keyframes phaseActivate { 0%{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.35);border-color:rgba(255,255,255,0.06)} 100%{background:rgba(251,191,36,0.18);color:#fbbf24;border-color:rgba(251,191,36,0.35)} }
-    .dmgFloat { position:absolute; font-size:24px; font-weight:900; color:#ef4444; text-shadow:0 2px 8px rgba(0,0,0,0.5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
+    @keyframes phaseActivate { 0%{background:var(--w06);color:rgba(255,255,255,0.35);border-color:var(--w06)} 100%{background:rgba(251,191,36,0.18);color:#fbbf24;border-color:rgba(251,191,36,0.35)} }
+    .dmgFloat { position:absolute; font-size:24px; font-weight:900; color:#ef4444; text-shadow:0 2px 8px var(--b5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
     @keyframes dmgFloatUp { 0%{opacity:1;transform:translateY(0) scale(1.2)} 60%{opacity:1;transform:translateY(-30px) scale(1)} 100%{opacity:0;transform:translateY(-50px) scale(0.8)} }
-    .dmgFloatHeal { position:absolute; font-size:24px; font-weight:900; color:#22c55e; text-shadow:0 2px 8px rgba(0,0,0,0.5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
+    .dmgFloatHeal { position:absolute; font-size:24px; font-weight:900; color:#22c55e; text-shadow:0 2px 8px var(--b5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
     .deathOverlay { position:absolute; z-index:25; border-radius:10px; pointer-events:none; display:flex; align-items:center; justify-content:center; font-size:32px; animation:deathFade 0.8s ease-out forwards; }
     @keyframes deathFade { 0%{background:rgba(239,68,68,0.4);opacity:1} 30%{background:rgba(239,68,68,0.2);opacity:1} 100%{background:transparent;opacity:0} }
     .combatBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; animation:combatBannerIn 0.3s ease; }
     @keyframes combatBannerIn { 0%{opacity:0;transform:scaleX(0.8)} 100%{opacity:1;transform:scaleX(1)} }
     .gameOverOverlay { position:absolute; inset:0; z-index:40; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; animation:gameOverIn 0.4s ease; }
     @keyframes gameOverIn { from{opacity:0} to{opacity:1} }
-    .gameOverTitle { font-size:48px; font-weight:900; letter-spacing:-0.03em; text-shadow:0 4px 20px rgba(0,0,0,0.5); animation:gameOverPop 0.5s ease; }
+    .gameOverTitle { font-size:48px; font-weight:900; letter-spacing:-0.03em; text-shadow:0 4px 20px var(--b5); animation:gameOverPop 0.5s ease; }
     @keyframes gameOverPop { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
     .turnOverlay { position:absolute; inset:0; z-index:45; background:rgba(0,0,0,0.70); display:flex; align-items:center; justify-content:center; pointer-events:none; animation:turnOverlayIn 0.3s ease forwards; }
     .turnOverlay.fadeOut { animation:turnOverlayOut 0.4s ease forwards; }
@@ -266,12 +260,12 @@ function getClientHtml() {
     .gameOverTitle.victory { color:#22c55e; }
     .gameOverTitle.defeat { color:#ef4444; }
     .gameOverStats { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
-    .gameOverStat { padding:8px 14px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); border-radius:10px; text-align:center; }
+    .gameOverStat { padding:8px 14px; background:var(--w1); border:1px solid var(--w15); border-radius:10px; text-align:center; }
     .gameOverStatVal { font-size:20px; font-weight:800; color:#fff; }
     .gameOverStatLabel { font-size:11px; color:rgba(255,255,255,0.6); margin-top:2px; }
     .gameOverBtns { display:flex; gap:10px; margin-top:8px; }
     .gameOverReason { font-size:14px; color:rgba(255,255,255,0.6); margin-top:-8px; }
-    .gameOverSection { font-size:12px; color:rgba(255,255,255,0.45); text-transform:uppercase; letter-spacing:0.05em; margin-top:8px; }
+    .gameOverSection { font-size:12px; color:var(--w45); text-transform:uppercase; letter-spacing:0.05em; margin-top:8px; }
     .lifeBadge.critical { background:rgba(239,68,68,0.25); border-color:rgba(239,68,68,0.4); animation:lifePulse 1s ease infinite; }
     @keyframes lifePulse { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 12px rgba(239,68,68,0.4)} }
     .lifeBadge.flash { animation:lifeFlash 0.4s ease; }
@@ -280,7 +274,7 @@ function getClientHtml() {
     .handMana.manaEnter { animation:manaEntrance 0.5s ease forwards; animation-delay:0.8s; opacity:0; }
     .botThinking .spinner { width:14px; height:14px; border:2px solid rgba(251,191,36,0.3); border-top-color:#fbbf24; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
     .turnOrder { display:flex; gap:4px; align-items:center; }
-    .turnDot { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); transition:all 200ms ease; }
+    .turnDot { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:rgba(255,255,255,0.5); background:var(--w08); border:1px solid var(--w1); transition:all 200ms ease; }
     .turnDot.now { color:#fbbf24; background:rgba(251,191,36,0.18); border-color:rgba(251,191,36,0.4); }
     .turnDot.done { opacity:0.4; }
     .lobbyTurnOrder { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:8px; padding:8px 10px; border-radius:10px; background:rgba(0,0,0,0.03); border:1px solid var(--border); }
@@ -289,7 +283,7 @@ function getClientHtml() {
     .lobbyTurnOrder .seatChip.me { border-color:rgba(11,116,255,0.3); background:rgba(11,116,255,0.08); color:#0a4db3; }
     .mySide { flex:1; display:flex; flex-direction:column; padding:0 16px 12px; min-height:0; gap:0; }
     .mySide .bfArea { align-items:flex-start; }
-    .handTray { display:flex; gap:10px; overflow-x:auto; padding:10px 8px; justify-content:center; background:rgba(255,255,255,0.06); border-radius:14px; border:1px solid rgba(255,255,255,0.08); margin-top:auto; flex:0 0 auto; }
+    .handTray { display:flex; gap:10px; overflow-x:auto; padding:10px 8px; justify-content:center; background:var(--w06); border-radius:14px; border:1px solid var(--w08); margin-top:auto; flex:0 0 auto; }
     .handTray .cardImg { width:90px; height:126px; flex:0 0 auto; border:1px solid rgba(255,255,255,0.18); border-radius:10px; }
     .handTray .cardImg:hover { transform:translateY(-8px) scale(1.06); box-shadow:0 12px 28px rgba(0,0,0,0.35); }
     .handTray .cardImg.selected { box-shadow:0 0 0 3px rgba(251,191,36,0.6),0 8px 20px rgba(0,0,0,0.3); border-color:rgba(251,191,36,0.5); }
@@ -300,7 +294,7 @@ function getClientHtml() {
     .inspectFloat .inspectorTitle { font-weight:800; font-size:13px; color:#fff; margin-top:8px; }
     .inspectFloat .inspectorSub { font-size:11px; color:rgba(255,255,255,0.55); margin-top:4px; }
     .inspectFloat .btn { width:100%; margin-top:6px; font-size:11px; padding:6px 10px; }
-    .inspectFloatClose { position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:999px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; transition:background 120ms ease; padding:0; line-height:1; }
+    .inspectFloatClose { position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:999px; border:1px solid var(--w15); background:var(--w1); color:rgba(255,255,255,0.7); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; transition:background 120ms ease; padding:0; line-height:1; }
     .tokenBadge { position:absolute; bottom:2px; left:50%; transform:translateX(-50%); background:rgba(245,158,11,0.9); color:#000; font-size:9px; font-weight:700; padding:2px 6px; border-radius:6px; white-space:nowrap; pointer-events:none; }
     .tokenWrap { position:relative; display:inline-block; }
     .tokenIndicator { position:absolute; top:2px; left:2px; background:rgba(245,158,11,0.85); color:#000; font-size:8px; font-weight:800; width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; pointer-events:none; }
@@ -312,12 +306,11 @@ function getClientHtml() {
     .zoneBrowserGrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:10px; }
     .zoneBrowserGrid .cardImg { width:100%; height:auto; aspect-ratio:5/7; border-radius:8px; cursor:pointer; transition:transform 120ms ease; border:1px solid var(--border); }
     .zoneBrowserGrid .cardImg:hover { transform:scale(1.05); }
-    .zoneBrowserEmpty { color:var(--muted); font-size:13px; font-style:italic; text-align:center; padding:20px 0; }
-    .cardContextMenu { position:fixed; z-index:100; background:rgba(15,15,25,0.95); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.15); border-radius:8px; padding:4px 0; min-width:160px; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
+    .cardContextMenu { position:fixed; z-index:100; background:rgba(15,15,25,0.95); backdrop-filter:blur(8px); border:1px solid var(--w15); border-radius:8px; padding:4px 0; min-width:160px; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
     .cardContextMenu .ctxItem { padding:8px 14px; color:rgba(255,255,255,0.8); font-size:12px; cursor:pointer; display:flex; align-items:center; gap:8px; }
-    .cardContextMenu .ctxItem:hover { background:rgba(255,255,255,0.08); }
-    .cardContextMenu .ctxDivider { height:1px; background:rgba(255,255,255,0.08); margin:4px 0; }
-    .eventLog { position:absolute; bottom:0; left:0; width:200px; max-height:180px; overflow-y:auto; z-index:18; background:rgba(10,10,20,0.85); backdrop-filter:blur(4px); border-top-right-radius:10px; border:1px solid rgba(255,255,255,0.1); padding:6px 8px; font-size:11px; }
+    .cardContextMenu .ctxItem:hover { background:var(--w08); }
+    .cardContextMenu .ctxDivider { height:1px; background:var(--w08); margin:4px 0; }
+    .eventLog { position:absolute; bottom:0; left:0; width:200px; max-height:180px; overflow-y:auto; z-index:18; background:rgba(10,10,20,0.85); backdrop-filter:blur(4px); border-top-right-radius:10px; border:1px solid var(--w1); padding:6px 8px; font-size:11px; }
     .eventLog.collapsed { max-height:26px; overflow:hidden; cursor:pointer; }
     .eventLogToggle { position:absolute; top:3px; right:6px; background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; font-size:11px; padding:2px 4px; }
     .eventLogTitle { font-size:10px; font-weight:700; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:0.05em; margin:0 0 4px 0; }
@@ -666,6 +659,11 @@ function getClientHtml() {
     'Muldrotha, the Gravetide',
     'Isshin, Two Heavens as One'
   ];
+
+  var GC = { HAND_SIZE: 7, STANDARD_LIFE: 20, COMMANDER_LIFE: 40, MAX_MANA: 10, MULLIGAN_LIMIT: 6, COMMANDER_DAMAGE_LETHAL: 21, LIFE_CRIT_STD: 5, LIFE_CRIT_CMD: 10 };
+  var KW_TL = new Set(['Haste','Vigilance','Defender','Indestructible','Hexproof']);
+  var KW_TR = new Set(['Flying','Reach','First Strike','Double Strike','Menace']);
+  var KW_BL = new Set(['Trample','Deathtouch','Lifelink']);
 
   const state = {
     user: null, decks: [], activeTab: 'play', activeDeckId: null, activeDeck: null,
@@ -1784,7 +1782,7 @@ function getClientHtml() {
 
   function renderCardImg(id, opts) {
     const options = opts || {};
-    const c = cardMeta(id); const img = document.createElement('img');
+    const c = options.meta || cardMeta(id); const img = document.createElement('img');
     img.className = 'cardImg'; img.src = c?.imageSmall || c?.imageNormal || ''; img.alt = c?.name || id;
     var isTokenCard = c?.isToken || (typeof id === 'string' && id.indexOf('tok_') === 0);
     if (!img.src && isTokenCard) {
@@ -1816,7 +1814,8 @@ function getClientHtml() {
     // Right-click context menu
     img.oncontextmenu = function(ev) { showCardContextMenu(ev, id, options.zone || null, options.seat || null); };
     // Wrap battlefield creatures with P/T badge + summoning sickness + tapped + attacking
-    if (options.zone === 'battlefield' && clientCardType(id) === 'creature') {
+    var typeLine = String(c?.typeLine || '').toLowerCase();
+    if (options.zone === 'battlefield' && typeLine.includes('creature')) {
       var wrap = document.createElement('div');
       wrap.className = 'cardWrap';
       var cs = options.cardState;
@@ -1838,9 +1837,6 @@ function getClientHtml() {
       // Keyword icons
       var kwMap = { 'Haste':'\uD83D\uDD25','Vigilance':'\uD83D\uDC41','Defender':'\uD83D\uDEE1','Indestructible':'\uD83D\uDC8E','Hexproof':'\u2B21','Flying':'\uD83E\uDD85','Reach':'\uD83C\uDFF9','First Strike':'\u26A1','Double Strike':'\u26A1','Menace':'\uD83D\uDE08','Trample':'\uD83E\uDDB6','Deathtouch':'\u2620','Lifelink':'\uD83D\uDC9C' };
       var kwTL = []; var kwTR = []; var kwBL = [];
-      var kwTLNames = ['Haste','Vigilance','Defender','Indestructible','Hexproof'];
-      var kwTRNames = ['Flying','Reach','First Strike','Double Strike','Menace'];
-      var kwBLNames = ['Trample','Deathtouch','Lifelink'];
       var myKws = clientGetKeywords(id);
       var tempKwList = options.match?.game?.tempKeywords || [];
       for (var tki = 0; tki < tempKwList.length; tki++) {
@@ -1851,9 +1847,9 @@ function getClientHtml() {
       for (var ki = 0; ki < myKws.length; ki++) {
         var kw = myKws[ki];
         if (!kwMap[kw]) continue;
-        if (kwTLNames.indexOf(kw) >= 0) kwTL.push(kw);
-        else if (kwTRNames.indexOf(kw) >= 0) kwTR.push(kw);
-        else if (kwBLNames.indexOf(kw) >= 0) kwBL.push(kw);
+        if (KW_TL.has(kw)) kwTL.push(kw);
+        else if (KW_TR.has(kw)) kwTR.push(kw);
+        else if (KW_BL.has(kw)) kwBL.push(kw);
       }
       var totalIcons = kwTL.length + kwTR.length + kwBL.length;
       if (totalIcons > 0) {
@@ -1878,7 +1874,7 @@ function getClientHtml() {
         addIcons(kwBL, 'kwIcons-bl');
       }
       // Aura badge + green P/T
-      var auraBuffs = options.match ? clientGetAuraBuffs(id, options.match) : { power: 0, toughness: 0, count: 0 };
+      var auraBuffs = options.auraMap?.[id] || (options.match ? clientGetAuraBuffs(id, options.match) : { power: 0, toughness: 0, count: 0 });
       if (auraBuffs.count > 0) {
         var abadge = document.createElement('div');
         abadge.className = 'auraBadge';
@@ -1897,10 +1893,14 @@ function getClientHtml() {
       badge.className = 'ptBadge';
       var basePw = Number(c?.power) || 0;
       var baseTw = Number(c?.toughness) || 0;
-      var tempBuffs = options.match?.game?.tempBuffs || [];
+      var preBuffs = options.buffMap?.[id];
       var tbPw = 0; var tbTw = 0;
-      for (var tbi = 0; tbi < tempBuffs.length; tbi++) {
-        if (tempBuffs[tbi].cardId === id) { tbPw += tempBuffs[tbi].power; tbTw += tempBuffs[tbi].toughness; }
+      if (preBuffs) { tbPw = preBuffs.power; tbTw = preBuffs.toughness; }
+      else {
+        var tempBuffs = options.match?.game?.tempBuffs || [];
+        for (var tbi = 0; tbi < tempBuffs.length; tbi++) {
+          if (tempBuffs[tbi].cardId === id) { tbPw += tempBuffs[tbi].power; tbTw += tempBuffs[tbi].toughness; }
+        }
       }
       var buffedPw = basePw + auraBuffs.power + tbPw;
       var buffedTw = baseTw + auraBuffs.toughness + tbTw;
@@ -1923,7 +1923,7 @@ function getClientHtml() {
       wrap.dataset.cardId = id;
       return wrap;
     }
-    if (options.zone === 'battlefield' && c?.isToken && clientCardType(id) !== 'creature') {
+    if (options.zone === 'battlefield' && c?.isToken && !typeLine.includes('creature')) {
       var tWrap = document.createElement('div');
       tWrap.className = 'cardWrap tokenWrap';
       tWrap.dataset.cardId = id;
@@ -1945,7 +1945,7 @@ function getClientHtml() {
     const isActive = match?.game?.activePlayerSeat === seat;
 
     const el = document.createElement('div');
-    var critThresh = match.format === 'commander' ? 10 : 5;
+    var critThresh = match.format === 'commander' ? GC.LIFE_CRIT_CMD : GC.LIFE_CRIT_STD;
     var lifeCritical = life != null && life <= critThresh && life > 0;
     el.className = 'seatPanel' + (isActive ? ' active' : '') + (lifeCritical && !isViewer ? ' lowHealth' : '');
     el.dataset.seat = seat;
@@ -2001,12 +2001,22 @@ function getClientHtml() {
     // Filter out attached auras — they render as badges on their target creature
     var auraAttachments = match?.game?.auraAttachments || {};
     var visibleBf = bf.filter(function(id) { return !auraAttachments[id]; });
+    // Pre-compute buff and aura maps for this seat's cards
+    var buffMap = {}; var auraMap = {};
+    var rawBuffs = match?.game?.tempBuffs || [];
+    for (var rbi = 0; rbi < rawBuffs.length; rbi++) {
+      var rb = rawBuffs[rbi]; if (!buffMap[rb.cardId]) buffMap[rb.cardId] = { power: 0, toughness: 0 };
+      buffMap[rb.cardId].power += rb.power; buffMap[rb.cardId].toughness += rb.toughness;
+    }
+    for (var abi = 0; abi < visibleBf.length; abi++) {
+      auraMap[visibleBf[abi]] = clientGetAuraBuffs(visibleBf[abi], match);
+    }
     if (visibleBf.length) {
       for (var bfi = 0; bfi < visibleBf.length; bfi++) {
         var id = visibleBf[bfi];
         var cs = match?.game?.cardState?.[id] || null;
         var isAtk = !!combatAttackers[id] || !!state.pendingAttackers[id];
-        var cardEl = renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer, cardState: cs, isAttacking: isAtk, match: match });
+        var cardEl = renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer, cardState: cs, isAttacking: isAtk, match: match, meta: cardMeta(id), buffMap: buffMap, auraMap: auraMap });
         bfArea.appendChild(cardEl);
       }
     } else {
@@ -2175,6 +2185,48 @@ function getClientHtml() {
     if (concedeBtn) concedeBtn.onclick = concede;
   }
 
+  function buildSeatCacheKey(match, seat) {
+    var z = match?.game?.zones?.[seat];
+    var bf = z?.battlefield || [];
+    var cs = match?.game?.cardState || {};
+    var parts = [
+      seat,
+      match?.game?.lifeBySeat?.[seat],
+      bf.join(','),
+      match?.game?.activePlayerSeat,
+      (match?.game?.combat?.attackers ? Object.keys(match.game.combat.attackers).join(',') : ''),
+    ];
+    for (var i = 0; i < bf.length; i++) {
+      var s = cs[bf[i]];
+      if (s) parts.push(bf[i] + ':' + (s.tapped ? 't' : '') + (s.summoningSick ? 's' : '') + (s.damage || 0));
+    }
+    var tb = match?.game?.tempBuffs;
+    if (tb) for (var j = 0; j < tb.length; j++) { var b = tb[j]; parts.push('b' + b.cardId + b.power + b.toughness); }
+    var tk = match?.game?.tempKeywords;
+    if (tk) for (var k = 0; k < tk.length; k++) { parts.push('k' + tk[k].cardId + tk[k].keyword); }
+    var aa = match?.game?.auraAttachments;
+    if (aa) { for (var aid in aa) parts.push('a' + aid + aa[aid]); }
+    parts.push(state.combatMode || 'n');
+    parts.push(state.targetingMode ? state.targetingMode.cardId + (state.targetingMode.selectedTarget || '') : 'n');
+    parts.push(state.selected?.id || 'n');
+    var pa = state.pendingAttackers; for (var pk in pa) { if (pa[pk]) parts.push('pa' + pk); }
+    var pb = state.pendingBlockers; for (var bk in pb) { if (pb[bk]) parts.push('pb' + bk + (Array.isArray(pb[bk]) ? pb[bk].join('.') : pb[bk])); }
+    var lib = z?.library; var hand = z?.hand; var gy = z?.graveyard; var ex = z?.exile;
+    parts.push('l' + (Array.isArray(lib) ? lib.length : (lib?.count || 0)));
+    parts.push('h' + (Array.isArray(hand) ? hand.length : (hand?.count || 0)));
+    parts.push('g' + (Array.isArray(gy) ? gy.length : 0));
+    parts.push('e' + (Array.isArray(ex) ? ex.length : 0));
+    return parts.join('|');
+  }
+
+  function buildHandCacheKey(match, mySeat) {
+    var z = match?.game?.zones?.[mySeat];
+    var hand = z?.hand || [];
+    var mana = match?.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
+    var step = match?.game?.step || 'main1';
+    return hand.join(',') + ':' + mana.current + '/' + mana.max + ':' + step + ':' + (state.selected?.id || 'n') + ':' + (state.targetingMode ? 'tm' : 'n') + ':' + (match?.game?.activePlayerSeat || 0);
+  }
+
   function renderGame(match) {
     const show = !!match && (match.phase === 'playing' || match.phase === 'finished') && !!match.viewerSeat;
     $('#gamePanel').style.display = show ? '' : 'none';
@@ -2200,11 +2252,16 @@ function getClientHtml() {
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const oppSeats = seats.filter(s => s !== mySeat);
 
-    const oppEl = $('#oppSide'); oppEl.innerHTML = '';
-    const isMulti = oppSeats.length >= 2;
-    oppEl.classList.toggle('multi', isMulti);
-    for (const seat of oppSeats) {
-      oppEl.appendChild(renderBoardSeat(match, seat, false));
+    var oppCacheKey = oppSeats.map(function(s) { return buildSeatCacheKey(match, s); }).join('||');
+    const oppEl = $('#oppSide');
+    if (oppEl.dataset.cacheKey !== oppCacheKey) {
+      oppEl.innerHTML = '';
+      const isMulti = oppSeats.length >= 2;
+      oppEl.classList.toggle('multi', isMulti);
+      for (const seat of oppSeats) {
+        oppEl.appendChild(renderBoardSeat(match, seat, false));
+      }
+      oppEl.dataset.cacheKey = oppCacheKey;
     }
 
     renderTurnBar(match);
@@ -2229,85 +2286,79 @@ function getClientHtml() {
       }, 0);
     }
 
-    const myEl = $('#mySide'); myEl.innerHTML = '';
-    myEl.appendChild(renderBoardSeat(match, mySeat, true));
+    var mySeatCacheKey = buildSeatCacheKey(match, mySeat) + '||' + buildHandCacheKey(match, mySeat);
+    const myEl = $('#mySide');
+    if (myEl.dataset.cacheKey !== mySeatCacheKey) {
+      myEl.innerHTML = '';
+      myEl.appendChild(renderBoardSeat(match, mySeat, true));
 
-    const zones = match?.game?.zones?.[mySeat];
-    const hand = Array.isArray(zones?.hand) ? zones.hand : [];
-    const handTray = document.createElement('div');
-    handTray.className = 'handTray';
+      const zones = match?.game?.zones?.[mySeat];
+      const hand = Array.isArray(zones?.hand) ? zones.hand : [];
+      const handTray = document.createElement('div');
+      handTray.className = 'handTray';
 
-    // Mana display inside hand tray
-    var handMana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
-    var handManaEl = document.createElement('div');
-    handManaEl.className = 'handMana';
-    var hmInner = '<span class="hmLabel">Mana</span>';
-    for (var hmi = 0; hmi < handMana.max; hmi++) {
-      hmInner += '<div class="hmGem ' + (hmi < handMana.current ? 'full' : 'empty') + '"></div>';
-    }
-    hmInner += '<span class="hmText">' + handMana.current + '/' + handMana.max + '</span>';
-    handManaEl.innerHTML = hmInner;
-    if (!state.gameEntranceAnimated) {
-      handManaEl.classList.add('manaEnter');
-      state.gameEntranceAnimated = true;
-    }
-    handTray.appendChild(handManaEl);
-    if (!hand.length) {
-      handTray.innerHTML = '<div class="emptyZone">No cards in hand</div>';
-    } else {
-      for (const id of hand) {
-        const img = renderCardImg(id, {
-          zone: 'hand', seat: mySeat, w: 90, h: 126,
-          onDblClick: async () => {
-            if (!clientCanPlay(id, match)) { setSelected({ id, zone: 'hand', seat: mySeat }); return; }
-            setSelected({ id, zone: 'hand', seat: mySeat }); await playSelectedToBattlefield();
-          }
-        });
-        if (!clientCanPlay(id, match)) img.classList.add('unplayable');
-        handTray.appendChild(img);
+      // Mana display inside hand tray
+      var handMana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
+      var handManaEl = document.createElement('div');
+      handManaEl.className = 'handMana';
+      var hmInner = '<span class="hmLabel">Mana</span>';
+      for (var hmi = 0; hmi < handMana.max; hmi++) {
+        hmInner += '<div class="hmGem ' + (hmi < handMana.current ? 'full' : 'empty') + '"></div>';
       }
-    }
-    myEl.appendChild(handTray);
-
-    // Wire up combat clicks on battlefield cards
-    if (state.combatMode) {
-      var allWraps = document.querySelectorAll('#gameBoard .cardWrap[data-card-id]');
-      for (var wi = 0; wi < allWraps.length; wi++) {
-        (function(wrap) {
-          var cardId = wrap.dataset.cardId;
-          if (!cardId) return;
-          wrap.style.cursor = 'pointer';
-          wrap.onclick = function(e) {
-            e.stopPropagation();
-            // Show in inspector
-            var zone = 'battlefield';
-            var cardSeat = null;
-            // Find which seat this card belongs to
-            var allS = (match.players || []).map(function(p) { return p.seat; });
-            for (var si = 0; si < allS.length; si++) {
-              var sBf = match?.game?.zones?.[allS[si]]?.battlefield || [];
-              if (sBf.indexOf(cardId) >= 0) { cardSeat = allS[si]; break; }
-            }
-            setSelected({ id: cardId, zone: zone, seat: cardSeat });
-
-            if (state.combatMode === 'selecting_attackers' && cardSeat === mySeat) {
-              toggleAttacker(cardId);
-              setSelected(null);
-            } else if (state.combatMode === 'selecting_blockers') {
-              handleBlockerClick(cardId, cardSeat === mySeat);
-              setSelected(null);
-            }
-          };
-          // Also forward clicks on the img inside
-          var innerImg = wrap.querySelector('.cardImg');
-          if (innerImg) {
-            innerImg.onclick = function(e) {
-              e.stopPropagation();
-              wrap.onclick(e);
-            };
-          }
-        })(allWraps[wi]);
+      hmInner += '<span class="hmText">' + handMana.current + '/' + handMana.max + '</span>';
+      handManaEl.innerHTML = hmInner;
+      if (!state.gameEntranceAnimated) {
+        handManaEl.classList.add('manaEnter');
+        state.gameEntranceAnimated = true;
       }
+      handTray.appendChild(handManaEl);
+      if (!hand.length) {
+        handTray.innerHTML = '<div class="emptyZone">No cards in hand</div>';
+      } else {
+        for (const id of hand) {
+          const img = renderCardImg(id, {
+            zone: 'hand', seat: mySeat, w: 90, h: 126,
+            onDblClick: async () => {
+              if (!clientCanPlay(id, match)) { setSelected({ id, zone: 'hand', seat: mySeat }); return; }
+              setSelected({ id, zone: 'hand', seat: mySeat }); await playSelectedToBattlefield();
+            }
+          });
+          if (!clientCanPlay(id, match)) img.classList.add('unplayable');
+          handTray.appendChild(img);
+        }
+      }
+      myEl.appendChild(handTray);
+      myEl.dataset.cacheKey = mySeatCacheKey;
+    }
+
+    // Combat click delegation (single listener, replaces per-card handlers)
+    var gameBoard = document.getElementById('gameBoard');
+    if (gameBoard && !gameBoard._combatDelegated) {
+      gameBoard._combatDelegated = true;
+      gameBoard.addEventListener('click', function(e) {
+        if (!state.combatMode) return;
+        var wrap = e.target.closest('.cardWrap[data-card-id]');
+        if (!wrap) return;
+        var cardId = wrap.dataset.cardId;
+        if (!cardId) return;
+        e.stopPropagation();
+        var m = state.lastMatch;
+        if (!m) return;
+        var cardSeat = null;
+        var allS = (m.players || []).map(function(p) { return p.seat; });
+        for (var si = 0; si < allS.length; si++) {
+          var sBf = m?.game?.zones?.[allS[si]]?.battlefield || [];
+          if (sBf.indexOf(cardId) >= 0) { cardSeat = allS[si]; break; }
+        }
+        setSelected({ id: cardId, zone: 'battlefield', seat: cardSeat });
+        if (state.combatMode === 'selecting_attackers' && cardSeat === m.viewerSeat) {
+          toggleAttacker(cardId);
+          setSelected(null);
+        } else if (state.combatMode === 'selecting_blockers') {
+          handleBlockerClick(cardId, cardSeat === m.viewerSeat);
+          setSelected(null);
+        }
+      });
     }
 
     if (state.selected?.id) {
@@ -2428,16 +2479,19 @@ function getClientHtml() {
     svg.setAttribute('class', 'combatSvg');
     svg.setAttribute('width', br.width);
     svg.setAttribute('height', br.height);
+    var cardElMap = {};
+    var allWraps = board.querySelectorAll('.cardWrap[data-card-id]');
+    for (var wi = 0; wi < allWraps.length; wi++) { var wid = allWraps[wi].dataset.cardId; if (wid) cardElMap[wid] = allWraps[wi]; }
     for (var atkId in pbs) {
       var blockers = pbs[atkId];
       if (!blockers || !blockers.length) continue;
-      var atkEl = document.querySelector('.cardWrap[data-card-id="' + atkId + '"]');
+      var atkEl = cardElMap[atkId];
       if (!atkEl) continue;
       var atkRect = getGameBoardRelativeRect(atkEl);
       var ax = atkRect.left + atkRect.width / 2;
       var ay = atkRect.top + atkRect.height / 2;
       for (var bi = 0; bi < blockers.length; bi++) {
-        var blkEl = document.querySelector('.cardWrap[data-card-id="' + blockers[bi] + '"]');
+        var blkEl = cardElMap[blockers[bi]];
         if (!blkEl) continue;
         var blkRect = getGameBoardRelativeRect(blkEl);
         var bx = blkRect.left + blkRect.width / 2;
@@ -3717,6 +3771,34 @@ function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponent
     return match;
 }
 
+var GAME_CONST = {
+    HAND_SIZE: 7,
+    STANDARD_LIFE: 20,
+    COMMANDER_LIFE: 40,
+    MAX_MANA: 10,
+    MULLIGAN_LIMIT: 6,
+    COMMANDER_DAMAGE_LETHAL: 21,
+    LIFE_CRITICAL_STANDARD: 5,
+    LIFE_CRITICAL_COMMANDER: 10,
+};
+
+function engineRequirePlaying(match) {
+    if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+    return null;
+}
+function engineRequireTurn(match, seat) {
+    if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+    return null;
+}
+function engineRequireStep(match, step) {
+    if (match.game.step !== step) return { ok: false, error: "not in " + step + " step" };
+    return null;
+}
+function engineRequireMainPhase(match) {
+    if (match.game.step !== "main1" && match.game.step !== "main2") return { ok: false, error: "can only do this during a main phase" };
+    return null;
+}
+
 function engineApplyAction(match, user, action) {
     const player = match.players.find((p) => p.userId === user.id);
     if (!player) return { ok: false, error: "user not in match" };
@@ -3772,9 +3854,9 @@ function engineApplyAction(match, user, action) {
             const commanderId = match.format === "commander" ? deck.commander : null;
             const library = commanderId ? expanded.filter((id) => id !== commanderId) : expanded.slice();
             shuffleInPlace(library);
-            const hand = []; for (let i = 0; i < 7; i++) { const top = library.shift(); if (!top) break; hand.push(top); }
+            const hand = []; for (let i = 0; i < GAME_CONST.HAND_SIZE; i++) { const top = library.shift(); if (!top) break; hand.push(top); }
             match.game.zones[seat] = { library, hand, graveyard: [], exile: [], battlefield: [], command: commanderId ? [commanderId] : [] };
-            match.game.lifeBySeat[seat] = match.format === "commander" ? 40 : 20;
+            match.game.lifeBySeat[seat] = match.format === "commander" ? GAME_CONST.COMMANDER_LIFE : GAME_CONST.STANDARD_LIFE;
             if (!match.game.manaBySeat) match.game.manaBySeat = {};
             match.game.manaBySeat[seat] = { current: 0, max: 0 };
             if (!match.game.stats) match.game.stats = {};
@@ -3798,10 +3880,10 @@ function engineApplyAction(match, user, action) {
         if (!zones) return { ok: false, error: "zones not initialized" };
         if (match.game.keptBySeat?.[seat]) return { ok: false, error: "already kept" };
         const taken = Number(match.game.mulligansBySeat?.[seat] || 0);
-        const nextTaken = Math.min(6, taken + 1);
+        const nextTaken = Math.min(GAME_CONST.MULLIGAN_LIMIT, taken + 1);
         zones.library = zones.library.concat(zones.hand || []); zones.hand = [];
         shuffleInPlace(zones.library);
-        const drawN = Math.max(1, 7 - nextTaken);
+        const drawN = Math.max(1, GAME_CONST.HAND_SIZE - nextTaken);
         for (let i = 0; i < drawN; i++) { const top = zones.library.shift(); if (!top) break; zones.hand.push(top); }
         match.game.mulligansBySeat[seat] = nextTaken;
         match.log.push({ t: Date.now(), type: "MULLIGAN", by: user.username, seat, handSize: drawN });
@@ -3832,10 +3914,10 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "PLAY_FROM_HAND") {
-        if (match.phase !== "playing") return { ok: false, error: "can only play during playing phase" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
         const seat = player.seat;
-        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
-        if (match.game.step !== "main1" && match.game.step !== "main2") return { ok: false, error: "can only play cards during a main phase" };
+        if (_v = engineRequireTurn(match, seat)) return _v;
+        if (_v = engineRequireMainPhase(match)) return _v;
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
         const cmc = Number(engineCardMeta(match, seat, cardId)?.cmc) || 0;
         const mana = match.game.manaBySeat?.[seat] || { current: 0, max: 0 };
@@ -3890,10 +3972,10 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "MOVE_BATTLEFIELD_TO_GRAVEYARD") {
-        if (match.phase !== "playing") return { ok: false, error: "can only move during playing phase" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
         const seat = player.seat;
-        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
-        if (match.game.step !== "main1" && match.game.step !== "main2") return { ok: false, error: "can only move cards during a main phase" };
+        if (_v = engineRequireTurn(match, seat)) return _v;
+        if (_v = engineRequireMainPhase(match)) return _v;
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
         const ok = engineMoveCard(match, seat, "battlefield", "graveyard", cardId); if (!ok.ok) return ok;
         match.log.push({ t: Date.now(), type: "MOVE_TO_GY", by: user.username, seat, cardId });
@@ -3901,9 +3983,9 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "ACTIVATE_ABILITY") {
-        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
         var seat = player.seat;
-        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        if (_v = engineRequireTurn(match, seat)) return _v;
         var cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId required" };
         engineEnsureZones(match, seat);
         if (match.game.zones[seat].battlefield.indexOf(cardId) < 0) return { ok: false, error: "card not on battlefield" };
@@ -3916,9 +3998,9 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "END_TURN") {
-        if (match.phase !== "playing") return { ok: false, error: "can only end turn during playing phase" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
         const seat = player.seat;
-        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        if (_v = engineRequireTurn(match, seat)) return _v;
         // Allow ending turn from any step — auto-skip combat if needed
         if (match.game.step === "combat_attackers" || match.game.step === "combat_blockers") {
             match.game.combat = null;
@@ -3946,10 +4028,10 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "GO_TO_COMBAT") {
-        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
         var seat = player.seat;
-        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
-        if (match.game.step !== "main1") return { ok: false, error: "can only go to combat from main phase 1" };
+        if (_v = engineRequireTurn(match, seat)) return _v;
+        if (_v = engineRequireStep(match, "main1")) return _v;
         match.game.step = "combat_attackers";
         match.game.combat = { attackers: {}, blockers: {}, resolved: false };
         match.log.push({ t: Date.now(), type: "COMBAT_BEGIN", by: user.username, seat: seat });
@@ -3957,10 +4039,10 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "DECLARE_ATTACKERS") {
-        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
         var seat = player.seat;
-        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
-        if (match.game.step !== "combat_attackers") return { ok: false, error: "not in attacker declaration step" };
+        if (_v = engineRequireTurn(match, seat)) return _v;
+        if (_v = engineRequireStep(match, "combat_attackers")) return _v;
         var attackers = action.attackers || {};
         if (!match.game.combat) match.game.combat = { attackers: {}, blockers: {}, resolved: false };
         if (!match.game.cardState) match.game.cardState = {};
@@ -4018,10 +4100,10 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "SKIP_COMBAT") {
-        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
         var seat = player.seat;
-        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
-        if (match.game.step !== "combat_attackers") return { ok: false, error: "not in attacker declaration step" };
+        if (_v = engineRequireTurn(match, seat)) return _v;
+        if (_v = engineRequireStep(match, "combat_attackers")) return _v;
         match.game.step = "main2";
         match.game.combat = null;
         match.log.push({ t: Date.now(), type: "COMBAT_SKIPPED", by: user.username, seat: seat });
@@ -4029,8 +4111,8 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "DECLARE_BLOCKERS") {
-        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
-        if (match.game.step !== "combat_blockers") return { ok: false, error: "not in blocker declaration step" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
+        if (_v = engineRequireStep(match, "combat_blockers")) return _v;
         var seat = player.seat;
         if (match.game.prioritySeat != null && seat !== match.game.prioritySeat) return { ok: false, error: "not your priority to declare blockers" };
         if (!match.game.combat) return { ok: false, error: "no combat in progress" };
@@ -4094,8 +4176,8 @@ function engineApplyAction(match, user, action) {
     }
 
     if (action.type === "NO_BLOCKS") {
-        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
-        if (match.game.step !== "combat_blockers") return { ok: false, error: "not in blocker declaration step" };
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
+        if (_v = engineRequireStep(match, "combat_blockers")) return _v;
         var seat = player.seat;
         if (match.game.prioritySeat != null && seat !== match.game.prioritySeat) return { ok: false, error: "not your priority to declare blockers" };
         if (!match.game.combat) return { ok: false, error: "no combat in progress" };
@@ -4207,7 +4289,7 @@ function engineAdvanceTurn(match, opts) {
     match.game.step = "main1";
     if (!match.game.manaBySeat) match.game.manaBySeat = {};
     const mana = match.game.manaBySeat[next] || { current: 0, max: 0 };
-    mana.max = Math.min(10, mana.max + 1);
+    mana.max = Math.min(GAME_CONST.MAX_MANA, mana.max + 1);
     mana.current = mana.max;
     match.game.manaBySeat[next] = mana;
     match.game.landsPlayedThisTurn = 0;
@@ -4639,7 +4721,7 @@ function engineCheckGameOver(match) {
             if (match.game.losers.indexOf(cs) >= 0) continue;
             var cdMap = match.game.commanderDamage[cs] || {};
             for (var cmdId in cdMap) {
-                if (cdMap[cmdId] >= 21) {
+                if (cdMap[cmdId] >= GAME_CONST.COMMANDER_DAMAGE_LETHAL) {
                     match.game.losers.push(cs);
                     if (!match.game.loserReasons) match.game.loserReasons = {}; match.game.loserReasons[cs] = 'commander_damage';
                     var clp = (match.players || []).find(function(p) { return p.seat === cs; });
