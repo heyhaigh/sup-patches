@@ -68,6 +68,9 @@ function getClientHtml() {
     .navBtn.active .navDot { background:var(--primary); }
     .noteBox { margin-top:14px; padding:12px; border-radius:14px; background:rgba(255,255,255,0.8); border:1px solid var(--border); box-shadow:0 8px 20px rgba(0,0,0,0.04); }
     .noteBox ul { margin:8px 0 0 16px; padding:0; color:var(--muted); font-size:12px; line-height:1.35; }
+    .manaExplainer { font-size:13px; color:var(--text); line-height:1.45; margin-top:6px; }
+    .manaExplainerTip { font-size:12px; color:var(--muted); line-height:1.4; margin-top:8px; }
+    .noteDisclaimer { font-size:11px; color:var(--muted2); line-height:1.35; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
     .content { padding:16px; min-height:0; overflow:auto; }
     /* tab visibility controlled entirely via inline JS — no CSS display rules */
     .statusLine { font-size:12px; color:var(--muted); margin:0 0 12px 2px; min-height:16px; }
@@ -248,6 +251,17 @@ function getClientHtml() {
     @keyframes deathFade { 0%{background:rgba(239,68,68,0.4);opacity:1} 30%{background:rgba(239,68,68,0.2);opacity:1} 100%{background:transparent;opacity:0} }
     .combatBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; animation:combatBannerIn 0.3s ease; }
     @keyframes combatBannerIn { 0%{opacity:0;transform:scaleX(0.8)} 100%{opacity:1;transform:scaleX(1)} }
+    .mulliganOverlay { position:absolute; inset:0; z-index:42; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; animation:mulliganIn 0.4s ease; }
+    @keyframes mulliganIn { from{opacity:0} to{opacity:1} }
+    .mulliganTitle { font-size:28px; font-weight:900; color:#fff; letter-spacing:-0.02em; text-shadow:0 2px 12px rgba(0,0,0,0.4); }
+    .mulliganBanner { max-width:520px; padding:14px 18px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.3); border-radius:12px; color:rgba(255,255,255,0.88); font-size:13px; line-height:1.5; text-align:center; }
+    .mulliganHandDisplay { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; padding:8px 0; }
+    .mulliganHandDisplay .cardImg { width:120px; height:168px; border-radius:10px; border:1px solid rgba(255,255,255,0.18); transition:transform 180ms ease, box-shadow 180ms ease; cursor:default; }
+    .mulliganHandDisplay .cardImg:hover { transform:translateY(-10px) scale(1.04); box-shadow:0 14px 32px rgba(0,0,0,0.4); }
+    .mulliganControls { display:flex; align-items:center; gap:12px; }
+    .mulliganCountBadge { padding:5px 12px; border-radius:999px; font-size:12px; font-weight:700; background:var(--w1); border:1px solid var(--w15); color:rgba(255,255,255,0.7); }
+    .mulliganCountBadge.warning { background:rgba(245,158,11,0.15); border-color:rgba(245,158,11,0.35); color:#fbbf24; }
+    .mulliganStatusMsg { font-size:12px; color:rgba(255,255,255,0.5); min-height:16px; text-align:center; }
     .gameOverOverlay { position:absolute; inset:0; z-index:40; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; animation:gameOverIn 0.4s ease; }
     @keyframes gameOverIn { from{opacity:0} to{opacity:1} }
     .gameOverTitle { font-size:48px; font-weight:900; letter-spacing:-0.03em; text-shadow:0 4px 20px var(--b5); animation:gameOverPop 0.5s ease; }
@@ -402,14 +416,10 @@ function getClientHtml() {
         <button class="navBtn tabBtn" data-tab="decks"><span class="navDot"></span>Decks</button>
         <button class="navBtn tabBtn" data-tab="builder"><span class="navDot"></span>Deck Builder</button>
         <div class="noteBox">
-          <div class="navSectionTitle" style="margin:0 0 6px 0;">Notes</div>
-          <ul>
-            <li>Decks are saved per-user.</li>
-            <li>Standard legality + card data via Scryfall.</li>
-            <li>Commander v1: single commander only.</li>
-            <li>Rules engine: minimal (mulligans + draw/play debug).</li>
-            <li>Standard can be played vs another user OR vs a bot (easy/medium/hard).</li>
-          </ul>
+          <div class="navSectionTitle" style="margin:0 0 6px 0;">How Mana Works</div>
+          <div class="manaExplainer">This game uses <b>auto-mana</b> \u2014 no land cards. You gain <b>1 mana crystal</b> each turn, up to <b>10</b>. Focus on your card curve and synergy instead of land draws.</div>
+          <div class="manaExplainerTip">Tip: Low-cost cards let you play early. High-cost cards are stronger but come online later.</div>
+          <div class="noteDisclaimer">Decks saved per-user \u00b7 Card data via Scryfall \u00b7 Standard legality enforced</div>
         </div>
       </nav>
       <main class="content">
@@ -491,7 +501,7 @@ function getClientHtml() {
                 <select id="assignDeckSelect" class="select"></select>
                 <button id="btnAssignDeck" class="btn" style="width:100%;margin-top:10px;">Assign to my seat</button>
                 <button id="btnReady" class="btn btnPrimary" style="width:100%;margin-top:10px;">Ready</button>
-                <div id="mulliganPanel" style="margin-top:12px;display:none;">
+                <div id="mulliganPanel" style="display:none !important;">
                   <div style="font-weight:750;margin-bottom:8px;">Mulligan</div>
                   <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;">
                     <div class="pill" id="handCountPill">Cards in hand: <span class="kicker" id="handCountVal">?</span></div>
@@ -1311,7 +1321,7 @@ function getClientHtml() {
   function renderLobby(match) {
     const panel = $('#lobbyPanel');
     const has = !!match && !!state.activeMatchId;
-    const inGame = has && (match.phase === 'playing' || match.phase === 'finished');
+    const inGame = has && (match.phase === 'playing' || match.phase === 'finished' || match.phase === 'mulligan');
     panel.style.display = (has && !inGame) ? '' : 'none';
     if (!has || inGame) return;
     const botInfo = match?.botsBySeat ? Object.entries(match.botsBySeat).map(([seat, b]) => \`bot@\${seat}:\${b?.difficulty || 'easy'}\`).join(', ') : '';
@@ -1359,32 +1369,103 @@ function getClientHtml() {
     btnStart.disabled = !isHost || match.phase !== 'lobby';
     const me = (match.players || []).find(p => p.userId === state.user?.id);
     if (me && match.decks && match.decks[me.seat]) { const assigned = match.decks[me.seat].deckId; if (assigned) $('#assignDeckSelect').value = assigned; }
-    const showMulligan = match.phase === 'mulligan' && !!match.viewerSeat;
-    $('#mulliganPanel').style.display = showMulligan ? '' : 'none';
-    if (showMulligan) {
-      const seat = match.viewerSeat;
-      const handCount = getHandCountForMySeat(match);
-      const mulligansTaken = Number(match?.game?.mulligansBySeat?.[seat] || 0);
-      const kept = !!match?.game?.keptBySeat?.[seat];
-      $('#handCountVal').textContent = handCount == null ? '?' : String(handCount);
-      $('#mulliganCountVal').textContent = String(mulligansTaken);
-      const mcPill = $('#mulliganCountPill');
-      if (mcPill) mcPill.style.borderColor = mulligansTaken > 0 ? 'rgba(245,158,11,0.35)' : '';
-      $('#btnMulligan').disabled = kept;
-      $('#btnKeep').disabled = kept;
-      const allKept = !!match?.game?.keptBySeat && Object.values(match.game.keptBySeat).every(Boolean);
-      $('#mulliganMsg').textContent = allKept ? 'All players kept. Game advancing shortly.' : (kept ? 'Waiting for other players to keep\u2026' : '');
-      const mulliganHandEl = $('#mulliganHand');
-      mulliganHandEl.innerHTML = '';
-      const myZones = match?.game?.zones?.[seat];
-      const handCards = Array.isArray(myZones?.hand) ? myZones.hand : [];
+  }
+
+  function renderMulliganOverlay(match) {
+    var overlay = document.createElement('div');
+    overlay.className = 'mulliganOverlay';
+
+    var title = document.createElement('div');
+    title.className = 'mulliganTitle';
+    title.textContent = 'Your Opening Hand';
+    overlay.appendChild(title);
+
+    var banner = document.createElement('div');
+    banner.className = 'mulliganBanner';
+    banner.innerHTML = '<b>No lands?</b> That\\u2019s by design. Mana is <b>automatic</b> \\u2014 you gain <b>1 crystal</b> each turn (up to 10). Focus on your card curve and synergy.';
+    overlay.appendChild(banner);
+
+    var handDisplay = document.createElement('div');
+    handDisplay.className = 'mulliganHandDisplay';
+    handDisplay.id = 'mulliganOverlayHand';
+    overlay.appendChild(handDisplay);
+
+    var controls = document.createElement('div');
+    controls.className = 'mulliganControls';
+
+    var badge = document.createElement('div');
+    badge.className = 'mulliganCountBadge';
+    badge.id = 'mulliganOverlayBadge';
+    badge.textContent = 'First hand';
+    controls.appendChild(badge);
+
+    var keepBtn = document.createElement('button');
+    keepBtn.className = 'btn btnPrimary';
+    keepBtn.id = 'btnKeepOverlay';
+    keepBtn.textContent = 'Keep Hand';
+    keepBtn.onclick = function() { keepHand(); };
+    controls.appendChild(keepBtn);
+
+    var mullBtn = document.createElement('button');
+    mullBtn.className = 'btn';
+    mullBtn.id = 'btnMulliganOverlay';
+    mullBtn.textContent = 'Mulligan';
+    mullBtn.style.background = 'rgba(255,255,255,0.12)';
+    mullBtn.style.color = 'rgba(255,255,255,0.85)';
+    mullBtn.style.borderColor = 'rgba(255,255,255,0.2)';
+    mullBtn.onclick = function() { mulligan(); };
+    controls.appendChild(mullBtn);
+
+    overlay.appendChild(controls);
+
+    var status = document.createElement('div');
+    status.className = 'mulliganStatusMsg';
+    status.id = 'mulliganOverlayStatus';
+    overlay.appendChild(status);
+
+    return overlay;
+  }
+
+  function updateMulliganOverlay(match) {
+    var overlay = document.querySelector('#gameBoard .mulliganOverlay');
+    if (!overlay) return;
+    var seat = match.viewerSeat;
+    var mulligansTaken = Number(match?.game?.mulligansBySeat?.[seat] || 0);
+    var kept = !!match?.game?.keptBySeat?.[seat];
+
+    // Update hand cards
+    var handDisplay = overlay.querySelector('#mulliganOverlayHand');
+    if (handDisplay) {
+      handDisplay.innerHTML = '';
+      var myZones = match?.game?.zones?.[seat];
+      var handCards = Array.isArray(myZones?.hand) ? myZones.hand : [];
       if (handCards.length) {
-        for (const id of handCards) {
-          mulliganHandEl.appendChild(renderCardImg(id, { zone: 'hand', seat, w: 100, h: 140 }));
+        for (var i = 0; i < handCards.length; i++) {
+          handDisplay.appendChild(renderCardImg(handCards[i], { zone: 'hand', seat: seat, w: 120, h: 168 }));
         }
       } else {
-        mulliganHandEl.innerHTML = '<div class="small">No cards in hand.</div>';
+        handDisplay.innerHTML = '<div style="color:rgba(255,255,255,0.4);font-size:13px;">No cards in hand.</div>';
       }
+    }
+
+    // Update badge
+    var badge = overlay.querySelector('#mulliganOverlayBadge');
+    if (badge) {
+      badge.textContent = mulligansTaken === 0 ? 'First hand' : 'Mulligans: ' + mulligansTaken;
+      badge.className = 'mulliganCountBadge' + (mulligansTaken > 0 ? ' warning' : '');
+    }
+
+    // Update buttons
+    var keepBtn = overlay.querySelector('#btnKeepOverlay');
+    var mullBtn = overlay.querySelector('#btnMulliganOverlay');
+    if (keepBtn) keepBtn.disabled = kept;
+    if (mullBtn) mullBtn.disabled = kept;
+
+    // Update status
+    var statusEl = overlay.querySelector('#mulliganOverlayStatus');
+    if (statusEl) {
+      var allKept = !!match?.game?.keptBySeat && Object.values(match.game.keptBySeat).every(Boolean);
+      statusEl.textContent = allKept ? 'All players kept \\u2014 game starting\\u2026' : (kept ? 'Waiting for other players\\u2026' : '');
     }
   }
 
@@ -2357,7 +2438,7 @@ function getClientHtml() {
   }
 
   function renderGame(match) {
-    const show = !!match && (match.phase === 'playing' || match.phase === 'finished') && !!match.viewerSeat;
+    const show = !!match && (match.phase === 'playing' || match.phase === 'finished' || match.phase === 'mulligan') && !!match.viewerSeat;
     $('#gamePanel').style.display = show ? '' : 'none';
     if (!show) return;
 
@@ -2494,6 +2575,18 @@ function getClientHtml() {
       if (!collectVisibleCardIds(match).includes(state.selected.id)) setSelected(null);
       else setSelected(state.selected);
     } else { setSelected(null); }
+
+    // Mulligan overlay
+    var existingMulliganOverlay = document.querySelector('#gameBoard .mulliganOverlay');
+    if (match.phase === 'mulligan') {
+      if (!existingMulliganOverlay) {
+        var mulliganOverlay = renderMulliganOverlay(match);
+        document.getElementById('gameBoard').appendChild(mulliganOverlay);
+      }
+      updateMulliganOverlay(match);
+    } else if (existingMulliganOverlay) {
+      existingMulliganOverlay.remove();
+    }
 
     // Game over overlay
     var existingOverlay = document.querySelector('#gameBoard .gameOverOverlay');
@@ -3079,14 +3172,21 @@ function getClientHtml() {
 
   async function mulligan() {
     if (!state.activeMatchId) return;
-    $('#btnMulligan').disabled = true;
-    $('#btnKeep').disabled = true;
-    $('#mulliganMsg').innerHTML = '<span class="spinner"></span> Drawing new hand\u2026';
+    var b1 = $('#btnMulligan'); var b2 = $('#btnKeep');
+    var ob1 = document.getElementById('btnMulliganOverlay'); var ob2 = document.getElementById('btnKeepOverlay');
+    if (b1) b1.disabled = true; if (b2) b2.disabled = true;
+    if (ob1) ob1.disabled = true; if (ob2) ob2.disabled = true;
+    var statusEl = document.getElementById('mulliganOverlayStatus');
+    if (statusEl) statusEl.innerHTML = '<span class="spinner"></span> Drawing new hand\\u2026';
+    var oldMsg = $('#mulliganMsg'); if (oldMsg) oldMsg.innerHTML = '<span class="spinner"></span> Drawing new hand\\u2026';
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'MULLIGAN' } });
     if (!res.ok) {
-      $('#mulliganMsg').textContent = 'Failed: ' + (res.error || 'unknown');
+      var errMsg = 'Failed: ' + (res.error || 'unknown');
+      if (oldMsg) oldMsg.textContent = errMsg;
+      if (statusEl) statusEl.textContent = errMsg;
       toast('Mulligan failed: ' + (res.error || 'unknown'), { type: 'error' });
-      $('#btnMulligan').disabled = false; $('#btnKeep').disabled = false;
+      if (b1) b1.disabled = false; if (b2) b2.disabled = false;
+      if (ob1) ob1.disabled = false; if (ob2) ob2.disabled = false;
       return;
     }
     await refreshMatch();
@@ -3094,14 +3194,21 @@ function getClientHtml() {
 
   async function keepHand() {
     if (!state.activeMatchId) return;
-    $('#btnKeep').disabled = true;
-    $('#btnMulligan').disabled = true;
-    $('#mulliganMsg').innerHTML = '<span class="spinner"></span> Keeping\u2026';
+    var b1 = $('#btnKeep'); var b2 = $('#btnMulligan');
+    var ob1 = document.getElementById('btnKeepOverlay'); var ob2 = document.getElementById('btnMulliganOverlay');
+    if (b1) b1.disabled = true; if (b2) b2.disabled = true;
+    if (ob1) ob1.disabled = true; if (ob2) ob2.disabled = true;
+    var statusEl = document.getElementById('mulliganOverlayStatus');
+    if (statusEl) statusEl.innerHTML = '<span class="spinner"></span> Keeping\\u2026';
+    var oldMsg = $('#mulliganMsg'); if (oldMsg) oldMsg.innerHTML = '<span class="spinner"></span> Keeping\\u2026';
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'KEEP_HAND' } });
     if (!res.ok) {
-      $('#mulliganMsg').textContent = 'Failed: ' + (res.error || 'unknown');
+      var errMsg = 'Failed: ' + (res.error || 'unknown');
+      if (oldMsg) oldMsg.textContent = errMsg;
+      if (statusEl) statusEl.textContent = errMsg;
       toast('Keep failed: ' + (res.error || 'unknown'), { type: 'error' });
-      $('#btnKeep').disabled = false; $('#btnMulligan').disabled = false;
+      if (b1) b1.disabled = false; if (b2) b2.disabled = false;
+      if (ob1) ob1.disabled = false; if (ob2) ob2.disabled = false;
       return;
     }
     toast('Hand kept.', { type: 'success', ms: 1500 });
