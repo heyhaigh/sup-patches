@@ -158,7 +158,7 @@ function getClientHtml() {
     .appRoot.matchActive #devPanel { display:none !important; }
     .appRoot.matchActive #tab-play > .row:first-child { display:none; }
     .appRoot.matchActive #tab-play > .grid2 { display:none; }
-    .appRoot.matchActive #tab-play > .card:last-child { display:none; }
+    .appRoot.matchActive #tab-play > .card:last-child:not(#lobbyPanel) { display:none; }
     /* Game board - Arena-style vertical split */
     .gameBoard { display:flex; flex-direction:column; height:calc(100vh - 52px); min-height:480px; background:linear-gradient(180deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #1a1a2e 100%); border-radius:var(--radius); overflow:hidden; position:relative; contain:layout style; }
     .gameBoardInner { display:flex; flex-direction:column; flex:1; min-height:0; }
