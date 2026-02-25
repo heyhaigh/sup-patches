@@ -1245,7 +1245,7 @@ function getClientHtml() {
   function renderLobby(match) {
     const panel = $('#lobbyPanel');
     const has = !!match && !!state.activeMatchId;
-    const inGame = has && (match.phase === 'playing' || match.phase === 'mulligan' || match.phase === 'finished');
+    const inGame = has && (match.phase === 'playing' || match.phase === 'finished');
     panel.style.display = (has && !inGame) ? '' : 'none';
     if (!has || inGame) return;
     const botInfo = match?.botsBySeat ? Object.entries(match.botsBySeat).map(([seat, b]) => \`bot@\${seat}:\${b?.difficulty || 'easy'}\`).join(', ') : '';
