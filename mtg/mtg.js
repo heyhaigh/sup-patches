@@ -1809,7 +1809,7 @@ function getClientHtml() {
       wrap.dataset.cardId = id;
       return wrap;
     }
-    if (options.zone === 'battlefield' && c?.isToken && !isCreature) {
+    if (options.zone === 'battlefield' && c?.isToken && clientCardType(id) !== 'creature') {
       var tWrap = document.createElement('div');
       tWrap.className = 'cardWrap tokenWrap';
       tWrap.dataset.cardId = id;
