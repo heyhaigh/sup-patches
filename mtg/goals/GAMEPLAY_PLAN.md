@@ -225,11 +225,11 @@ All regex patterns implemented in Phase 2F + token creation in Phase 2G.
 - ~~Damage vs. toughness distinction (damage marked on creature, separate from toughness, clears end of turn)~~ ✅ (already works — `cardState.damage` tracked separately, clears at EOT)
 - ~~SVG combat lines connecting blockers to attackers during blocking phase~~ ✅ (blue dashed lines with endpoint dots, `renderCombatLines()`)
 
-### 3C. UX Polish (MOSTLY COMPLETE)
-- Mobile: long-press for floating inspector (no hover), swipe up from hand to play
+### 3C. UX Polish ✅ COMPLETE (2026-02-25)
+- ~~Mobile: long-press for floating inspector (no hover)~~ ✅ (2026-02-25) — 500ms long-press opens card modal
 - ~~Touch targets: minimum 44px (Apple HIG)~~ ✅ (2026-02-25) — buttons, zone badges, event log toggle all 44px+ on mobile
 - ~~Undo: deselect attackers/blockers before confirming, deselect card from hand before playing~~ ✅ (2026-02-25) — clicking a selected card again deselects it; toggleAttacker/blocker already toggled
-- Right-click context menu for "Send to Graveyard" (prevents accidental moves)
+- ~~Right-click context menu~~ ✅ (2026-02-25) — Inspect, Activate Ability (for Treasures etc.), Send to Graveyard. Context-aware based on zone/ownership.
 - ~~Graveyard/exile zone inspection (click to see all cards)~~ ✅ (already implemented)
 - ~~Reconnection handling (polling failure → "Reconnecting..." → resume)~~ ✅ (2026-02-25) — `refreshMatch()` catches errors, shows banner, retries with exponential backoff
 - ~~Game event log~~ ✅ (2026-02-25) — collapsible panel at bottom-left showing last 25 events (plays, spells, combat, deaths, damage, tokens, game over). `renderEventLog(match)` called from `renderGame()`.
@@ -262,11 +262,11 @@ These are remaining edge cases and polish items discovered during the Phase 2F/2
 - **0-toughness death**: Cast -2/-2 debuff on a 2/2 → creature dies immediately
 - **Event log**: Visible during gameplay, shows plays/spells/combat/deaths, collapse/expand works
 
-#### Potential edge cases to watch for
-- Token rendering when `cardMeta` hasn't hydrated yet (race condition on fast plays?)
-- Treasure token stacking — multiple Treasures on battlefield should each be individually activatable
-- `clientCardType` for tokens — a Treasure is an Artifact, not a creature. Verify it doesn't end up in the creature wrap path
-- Token count display if a player has many tokens (battlefield could overflow)
+#### ~~Potential edge cases~~ ✅ REVIEWED (2026-02-25)
+- ~~Token rendering when `cardMeta` hasn't hydrated yet~~ ✅ No race condition — token meta comes from `match.decks[seat].cardMeta` (synchronous), not from Scryfall API. Added `tok_` prefix fallback for gold gradient in edge cases.
+- ~~Treasure token stacking~~ ✅ Each token has unique `tok_XXXX` ID — individually selectable and activatable. Bot AI now also sacrifices Treasures for mana when needed.
+- ~~`clientCardType` for tokens~~ ✅ Treasure has `typeLine: 'Token Artifact — Treasure'` which correctly returns `'artifact'` from `clientCardType`, routing to `tokenWrap` path (not creature wrap).
+- ~~Token count / battlefield overflow~~ ✅ Added `overflow-y:auto` to `.bfArea` so many permanents scroll instead of clipping.
 
 #### Future spell patterns to consider
 - `each player draws/discards N cards`
