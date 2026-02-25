@@ -167,12 +167,14 @@ function getClientHtml() {
     .oppSide.multi .seatPanel { flex:1; min-width:140px; }
     .oppSide.multi .bfArea { min-height:40px; }
     .oppSide.multi .bfArea .cardImg { width:52px; height:72px; }
-    .seatPanel { display:flex; flex-direction:column; flex:1; min-height:0; border-radius:10px; padding:6px 8px; }
-    .seatBar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .seatPanel { display:flex; flex-direction:column; flex:1; min-height:0; border-radius:10px; padding:6px 8px; position:relative; overflow:hidden; }
+    .seatPanel.lowHealth::before { content:''; position:absolute; inset:0; border-radius:10px; background:rgba(220,38,38,0.08); animation:lowHealthPulse 2.5s ease-in-out infinite; pointer-events:none; z-index:0; }
+    @keyframes lowHealthPulse { 0%,100% { background:rgba(220,38,38,0.04); } 50% { background:rgba(220,38,38,0.14); } }
+    .seatBar { display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative; z-index:1; }
     .seatName { font-weight:800; font-size:14px; color:rgba(255,255,255,0.85); }
     .lifeBadge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,0.12); color:#fff; font-size:13px; font-weight:700; border:1px solid rgba(255,255,255,0.15); }
     .lifeIcon { font-size:16px; }
-    .zoneRow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+    .zoneRow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; position:relative; z-index:1; }
     .zoneBadge { padding:4px 8px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.6); font-size:11px; font-weight:600; border:1px solid rgba(255,255,255,0.08); }
     .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:10px; min-height:60px; }
     .bfArea .cardImg { width:72px; height:100px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; }
@@ -634,6 +636,14 @@ function getClientHtml() {
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function clientBaseCardId(id) {
+    if (typeof id !== 'string') return id;
+    var idx = id.lastIndexOf(':');
+    if (idx < 0) return id;
+    var suffix = id.substring(idx + 1);
+    if (/^\\d+$/.test(suffix)) return id.substring(0, idx);
+    return id;
+  }
 
   const popularCommanders = [
     "Atraxa, Praetors' Voice",
@@ -1351,7 +1361,7 @@ function getClientHtml() {
     }
   }
 
-  function cardMeta(id) { return state.cardIndex?.[id] || null; }
+  function cardMeta(id) { return state.cardIndex?.[id] || state.cardIndex?.[clientBaseCardId(id)] || null; }
   function uniq(arr) { const out = []; const set = new Set(); for (const x of (arr || [])) { if (!x || set.has(x)) continue; set.add(x); out.push(x); } return out; }
 
   function collectVisibleCardIds(match) {
@@ -1366,8 +1376,21 @@ function getClientHtml() {
   async function hydrateCardIndexForMatch(match) {
     const ids = collectVisibleCardIds(match); if (!ids.length) return;
     const missing = ids.filter(id => !state.cardIndex[id]); if (!missing.length) return;
-    const res = await supExec('api_getCardsBulk', { ids: missing });
-    state.cardIndex = { ...state.cardIndex, ...(res?.byId || {}) };
+    // Strip instance suffixes before sending to Scryfall (e.g. "abc:0" → "abc")
+    var baseIds = uniq(missing.map(clientBaseCardId));
+    var baseMissing = baseIds.filter(id => !state.cardIndex[id]);
+    if (baseMissing.length) {
+      const res = await supExec('api_getCardsBulk', { ids: baseMissing });
+      state.cardIndex = { ...state.cardIndex, ...(res?.byId || {}) };
+    }
+    // Populate instance IDs from base IDs
+    for (var mi = 0; mi < missing.length; mi++) {
+      var mid = missing[mi];
+      if (!state.cardIndex[mid]) {
+        var bid = clientBaseCardId(mid);
+        if (state.cardIndex[bid]) state.cardIndex[mid] = state.cardIndex[bid];
+      }
+    }
     // Tokens don't have Scryfall data — populate from match deck meta
     var allZones = match?.game?.zones || {};
     for (var hSeat in allZones) {
@@ -1841,13 +1864,13 @@ function getClientHtml() {
     const isActive = match?.game?.activePlayerSeat === seat;
 
     const el = document.createElement('div');
-    el.className = 'seatPanel' + (isActive ? ' active' : '');
+    var critThresh = match.format === 'commander' ? 10 : 5;
+    var lifeCritical = life != null && life <= critThresh && life > 0;
+    el.className = 'seatPanel' + (isActive ? ' active' : '') + (lifeCritical && !isViewer ? ' lowHealth' : '');
     el.dataset.seat = seat;
 
     const bar = document.createElement('div');
     bar.className = 'seatBar';
-    var critThresh = match.format === 'commander' ? 10 : 5;
-    var lifeCritical = life != null && life <= critThresh && life > 0;
     var lifeBadgeClass = 'lifeBadge' + (lifeCritical ? ' critical' : '');
     // Detect life change for flash
     if (!state.prevLifeBySeat) state.prevLifeBySeat = {};
@@ -3637,6 +3660,15 @@ function engineApplyAction(match, user, action) {
             const seat = p.seat; const deck = match.decks[seat];
             if (!deck) return { ok: false, error: `seat ${seat} missing deck` };
             const expanded = expandDeckToList(deck.cards);
+            // Populate cardMeta for instance IDs (e.g. "abc123:0" → same meta as "abc123")
+            if (!deck.cardMeta) deck.cardMeta = {};
+            for (var ei = 0; ei < expanded.length; ei++) {
+                var eid = expanded[ei];
+                var bid = baseCardId(eid);
+                if (bid !== eid && deck.cardMeta[bid] && !deck.cardMeta[eid]) {
+                    deck.cardMeta[eid] = deck.cardMeta[bid];
+                }
+            }
             const commanderId = match.format === "commander" ? deck.commander : null;
             const library = commanderId ? expanded.filter((id) => id !== commanderId) : expanded.slice();
             shuffleInPlace(library);
@@ -3705,8 +3737,7 @@ function engineApplyAction(match, user, action) {
         if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
         if (match.game.step !== "main1" && match.game.step !== "main2") return { ok: false, error: "can only play cards during a main phase" };
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
-        const deckMeta = match.decks?.[seat]?.cardMeta || {};
-        const cmc = Number(deckMeta[cardId]?.cmc) || 0;
+        const cmc = Number(engineCardMeta(match, seat, cardId)?.cmc) || 0;
         const mana = match.game.manaBySeat?.[seat] || { current: 0, max: 0 };
         if (cmc > mana.current) return { ok: false, error: "not enough mana (" + cmc + " needed, " + mana.current + " available)" };
         var isLand = engineCardType(match, seat, cardId) === "land";
@@ -3727,7 +3758,7 @@ function engineApplyAction(match, user, action) {
         }
         // Spell targeting validation
         if (isSpell && !engineIsAura(match, seat, cardId)) {
-            var spellEffects = engineParseSpellEffects(deckMeta[cardId]?.oracleText);
+            var spellEffects = engineParseSpellEffects(engineCardMeta(match, seat, cardId)?.oracleText);
             var needsTarget = engineEffectNeedsTarget(spellEffects);
             if (needsTarget && targetId) {
                 // Validate creature target
@@ -3776,7 +3807,7 @@ function engineApplyAction(match, user, action) {
         var cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId required" };
         engineEnsureZones(match, seat);
         if (match.game.zones[seat].battlefield.indexOf(cardId) < 0) return { ok: false, error: "card not on battlefield" };
-        var abMeta = (match.decks?.[seat]?.cardMeta || {})[cardId];
+        var abMeta = engineCardMeta(match, seat, cardId);
         var abOracle = String(abMeta?.oracleText || '');
         var abResult = engineActivateAbility(match, seat, cardId, abOracle);
         if (!abResult.ok) return abResult;
@@ -4126,7 +4157,7 @@ function engineRunBotsIfActive(match) {
 }
 
 function engineGetCreaturePower(match, seat, cardId) {
-    var base = Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.power) || 0;
+    var base = Number(engineCardMeta(match, seat, cardId)?.power) || 0;
     var auras = match.game?.auraAttachments || {};
     for (var auraId in auras) {
         if (auras[auraId] === cardId) {
@@ -4139,7 +4170,7 @@ function engineGetCreaturePower(match, seat, cardId) {
     return base;
 }
 function engineGetCreatureToughness(match, seat, cardId) {
-    var base = Number((match.decks?.[seat]?.cardMeta || {})[cardId]?.toughness) || 0;
+    var base = Number(engineCardMeta(match, seat, cardId)?.toughness) || 0;
     var auras = match.game?.auraAttachments || {};
     for (var auraId in auras) {
         if (auras[auraId] === cardId) {
@@ -4155,7 +4186,7 @@ function engineGetCreatureToughness(match, seat, cardId) {
 var SUPPORTED_KEYWORDS = ["Flying","Reach","First Strike","Double Strike","Trample","Deathtouch","Lifelink","Haste","Vigilance","Defender","Menace","Indestructible","Hexproof"];
 
 function engineGetKeywords(match, seat, cardId) {
-    var meta = (match.decks?.[seat]?.cardMeta || {})[cardId];
+    var meta = engineCardMeta(match, seat, cardId);
     return (meta && Array.isArray(meta.keywords)) ? meta.keywords : [];
 }
 function engineHasKeyword(match, seat, cardId, keyword) {
@@ -4171,7 +4202,7 @@ function engineHasKeyword(match, seat, cardId, keyword) {
 function engineHasKeywordAnySeat(match, cardId, keyword) {
     var seats = engineSeatOrder(match);
     for (var i = 0; i < seats.length; i++) {
-        var meta = (match.decks?.[seats[i]]?.cardMeta || {})[cardId];
+        var meta = engineCardMeta(match, seats[i], cardId);
         if (meta && Array.isArray(meta.keywords)) {
             for (var j = 0; j < meta.keywords.length; j++) { if (meta.keywords[j] === keyword) return true; }
         }
@@ -4189,12 +4220,12 @@ function engineFindSeatForCard(match, cardId) {
 }
 
 function engineIsAura(match, seat, cardId) {
-    var tl = String((match.decks?.[seat]?.cardMeta || {})[cardId]?.typeLine || "").toLowerCase();
+    var tl = String(engineCardMeta(match, seat, cardId)?.typeLine || "").toLowerCase();
     return tl.includes("enchantment") && tl.includes("aura");
 }
 
 function engineParseAuraMods(match, seat, cardId) {
-    var meta = (match.decks?.[seat]?.cardMeta || {})[cardId];
+    var meta = engineCardMeta(match, seat, cardId);
     var oracle = String(meta?.oracleText || "");
     var pw = 0; var tw = 0;
     var re = /([+-]\d+)\/([+-]\d+)/g;
@@ -4541,8 +4572,12 @@ function engineCheckGameOver(match) {
     }
 }
 
+function engineCardMeta(match, seat, cardId) {
+    var meta = match.decks?.[seat]?.cardMeta || {};
+    return meta[cardId] || meta[baseCardId(cardId)] || null;
+}
 function engineBotCardMeta(match, seat, cardId) {
-    return (match.decks?.[seat]?.cardMeta || {})[cardId] || {};
+    return engineCardMeta(match, seat, cardId) || {};
 }
 
 function engineBotIsLand(match, seat, cardId) {
@@ -4551,7 +4586,7 @@ function engineBotIsLand(match, seat, cardId) {
 }
 
 function engineCardType(match, seat, cardId) {
-    const tl = String((match.decks?.[seat]?.cardMeta || {})[cardId]?.typeLine || "").toLowerCase();
+    const tl = String(engineCardMeta(match, seat, cardId)?.typeLine || "").toLowerCase();
     if (tl.includes("creature")) return "creature";
     if (tl.includes("instant")) return "instant";
     if (tl.includes("sorcery")) return "sorcery";
@@ -4773,7 +4808,7 @@ function enginePlayCard(match, seat, cardId, targetId) {
     if (engineIsSpell(match, seat, cardId)) {
         var moveRes = engineMoveCard(match, seat, "hand", "graveyard", cardId);
         if (moveRes.ok) {
-            var meta = (match.decks?.[seat]?.cardMeta || {})[cardId];
+            var meta = engineCardMeta(match, seat, cardId);
             var effects = engineParseSpellEffects(meta?.oracleText);
             for (var ei = 0; ei < effects.length; ei++) {
                 engineApplyEffect(match, seat, effects[ei], targetId);
@@ -4801,6 +4836,8 @@ function enginePlayCard(match, seat, cardId, targetId) {
 
 function engineBotTakeTurn(match, botPlayer) {
     if (match.game?.status === "finished") return;
+    // If waiting for a human to declare blockers, don't continue the bot's turn
+    if (match.game.step === "combat_blockers") return;
     const seat = botPlayer.seat; const diff = botDifficultyNormalize(botPlayer.difficulty);
     engineEnsureZones(match, seat);
     const hand = Array.isArray(match.game.zones[seat].hand) ? match.game.zones[seat].hand : [];
@@ -5258,9 +5295,23 @@ function engineBotDeclareBlockers(match, botPlayer) {
     }
 }
 
+function baseCardId(instanceId) {
+    if (typeof instanceId !== 'string') return instanceId;
+    var idx = instanceId.lastIndexOf(':');
+    if (idx < 0) return instanceId;
+    var suffix = instanceId.substring(idx + 1);
+    // Only strip if suffix is a number (instance index)
+    if (/^\d+$/.test(suffix)) return instanceId.substring(0, idx);
+    return instanceId;
+}
+
 function expandDeckToList(cardsById) {
     const list = [];
-    for (const [id, count] of Object.entries(cardsById || {})) { for (let i = 0; i < (Number(count) || 0); i++) list.push(id); }
+    for (const [id, count] of Object.entries(cardsById || {})) {
+        var n = Number(count) || 0;
+        if (n === 1) { list.push(id); }
+        else { for (let i = 0; i < n; i++) list.push(id + ':' + i); }
+    }
     return list;
 }
 
