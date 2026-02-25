@@ -171,7 +171,7 @@ function getClientHtml() {
     .oppSide.multi .bfArea { min-height:40px; }
     .oppSide.multi .bfArea .cardImg { width:52px; height:72px; }
     .oppHandTray { display:flex; gap:6px; overflow-x:auto; padding:6px 8px; justify-content:center; background:var(--w06); border-radius:10px; border:1px solid var(--w08); flex:0 0 auto; }
-    .oppHandCard { width:48px; height:67px; border-radius:6px; border:1px solid rgba(255,255,255,0.12); object-fit:cover; flex:0 0 auto; transition:transform 180ms ease, border-color 200ms ease, box-shadow 200ms ease; }
+    .oppHandCard { width:48px; height:67px; border-radius:6px; border:none; object-fit:cover; flex:0 0 auto; transition:transform 180ms ease, box-shadow 200ms ease; }
     .oppHandCard:hover { transform:translateY(-4px); }
     .oppHandCard.highlight { border-color:rgba(251,191,36,0.7); box-shadow:0 0 10px rgba(251,191,36,0.35); }
     @keyframes oppCardExit { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(20px) scale(0.8)} }
@@ -1411,7 +1411,7 @@ function getClientHtml() {
     var badge = document.createElement('div');
     badge.className = 'mulliganCountBadge';
     badge.id = 'mulliganOverlayBadge';
-    badge.textContent = 'First hand';
+    badge.style.display = 'none';
     controls.appendChild(badge);
 
     var keepBtn = document.createElement('button');
@@ -1466,8 +1466,13 @@ function getClientHtml() {
     // Update badge
     var badge = overlay.querySelector('#mulliganOverlayBadge');
     if (badge) {
-      badge.textContent = mulligansTaken === 0 ? 'First hand' : 'Mulligans: ' + mulligansTaken;
-      badge.className = 'mulliganCountBadge' + (mulligansTaken > 0 ? ' warning' : '');
+      if (mulligansTaken > 0) {
+        badge.style.display = '';
+        badge.textContent = 'Mulligans: ' + mulligansTaken;
+        badge.className = 'mulliganCountBadge warning';
+      } else {
+        badge.style.display = 'none';
+      }
     }
 
     // Update buttons
