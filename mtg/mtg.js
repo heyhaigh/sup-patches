@@ -167,15 +167,14 @@ function getClientHtml() {
     .oppSide.multi .seatPanel { flex:1; min-width:140px; }
     .oppSide.multi .bfArea { min-height:40px; }
     .oppSide.multi .bfArea .cardImg { width:52px; height:72px; }
-    .seatPanel { display:flex; flex-direction:column; flex:1; min-height:0; border-radius:10px; padding:6px 8px; transition:background 200ms ease,border-color 200ms ease; border:2px solid transparent; }
-    .seatPanel.active { border-color:rgba(251,191,36,0.5); background:rgba(251,191,36,0.06); }
+    .seatPanel { display:flex; flex-direction:column; flex:1; min-height:0; border-radius:10px; padding:6px 8px; }
     .seatBar { display:flex; align-items:center; justify-content:space-between; gap:10px; }
     .seatName { font-weight:800; font-size:14px; color:rgba(255,255,255,0.85); }
     .lifeBadge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,0.12); color:#fff; font-size:13px; font-weight:700; border:1px solid rgba(255,255,255,0.15); }
     .lifeIcon { font-size:16px; }
     .zoneRow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
     .zoneBadge { padding:4px 8px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.6); font-size:11px; font-weight:600; border:1px solid rgba(255,255,255,0.08); }
-    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:8px 0; min-height:60px; }
+    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:10px; min-height:60px; }
     .bfArea .cardImg { width:72px; height:100px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; }
     .bfArea .cardImg:hover { transform:translateY(-4px) scale(1.05); box-shadow:0 8px 20px rgba(0,0,0,0.3); }
     .turnBar { display:flex; align-items:center; justify-content:center; gap:16px; padding:8px 16px; background:rgba(255,255,255,0.06); border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08); flex:0 0 auto; }
@@ -191,7 +190,7 @@ function getClientHtml() {
     .manaGem.empty { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); transform:scale(0.85); opacity:0.5; }
     .manaText { font-size:12px; font-weight:700; color:rgba(255,255,255,0.7); margin-left:4px; }
     .manaLabel { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:rgba(255,255,255,0.45); margin-right:4px; }
-    .handMana { display:flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; margin-top:4px; flex:0 0 auto; }
+    .handMana { display:flex; align-items:center; gap:6px; padding:4px 10px; flex:0 0 auto; border-right:1px solid rgba(255,255,255,0.1); margin-right:2px; }
     .handMana .hmLabel { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:rgba(192,132,252,0.85); margin-right:2px; }
     .handMana .hmGem { width:24px; height:24px; border-radius:50%; border:2px solid rgba(255,255,255,0.2); transition:all 200ms ease; }
     .handMana .hmGem.full { background:radial-gradient(circle at 35% 35%, #c084fc, #7c3aed 60%, #5b21b6); border-color:rgba(124,58,237,0.6); box-shadow:0 0 10px rgba(124,58,237,0.4); }
@@ -279,7 +278,7 @@ function getClientHtml() {
     .lobbyTurnOrder .turnLabel { font-size:11px; font-weight:700; color:var(--muted); margin-right:4px; }
     .lobbyTurnOrder .seatChip { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600; background:rgba(0,0,0,0.05); border:1px solid var(--border); }
     .lobbyTurnOrder .seatChip.me { border-color:rgba(11,116,255,0.3); background:rgba(11,116,255,0.08); color:#0a4db3; }
-    .mySide { flex:1; display:flex; flex-direction:column; padding:8px 16px 12px; min-height:0; }
+    .mySide { flex:1; display:flex; flex-direction:column; padding:0 16px 12px; min-height:0; gap:0; }
     .mySide .bfArea { align-items:flex-start; }
     .handTray { display:flex; gap:10px; overflow-x:auto; padding:10px 8px; justify-content:center; background:rgba(255,255,255,0.06); border-radius:14px; border:1px solid rgba(255,255,255,0.08); margin-top:auto; flex:0 0 auto; }
     .handTray .cardImg { width:90px; height:126px; flex:0 0 auto; border:1px solid rgba(255,255,255,0.18); border-radius:10px; }
@@ -1937,12 +1936,6 @@ function getClientHtml() {
     if (bar.dataset.cacheKey === cacheKey) return;
     bar.dataset.cacheKey = cacheKey;
 
-    var manaHtml = '<div class="manaBar"><span class="manaLabel">Mana</span>';
-    for (var mi = 0; mi < mana.max; mi++) {
-      manaHtml += '<div class="manaGem ' + (mi < mana.current ? 'full' : 'empty') + '"></div>';
-    }
-    manaHtml += '<div class="manaText">' + mana.current + '/' + mana.max + '</div></div>';
-
     var turnOrderHtml = '';
     if (isMulti) {
       turnOrderHtml = '<div class="turnOrder">';
@@ -1988,7 +1981,6 @@ function getClientHtml() {
     bar.innerHTML = '<div class="turnInfo">Turn <span class="turnHighlight">' + (match.game?.turn || '?') + '</span></div>'
       + '<div class="turnInfo">' + (isMyTurn ? '<span class="turnHighlight">Your turn</span>' : escapeHtml(activeName) + "'s turn") + '</div>'
       + phaseHtml
-      + manaHtml
       + turnOrderHtml
       + '<button id="btnGameDraw" class="btn">Draw</button>'
       + buttonsHtml
@@ -2068,7 +2060,12 @@ function getClientHtml() {
     const myEl = $('#mySide'); myEl.innerHTML = '';
     myEl.appendChild(renderBoardSeat(match, mySeat, true));
 
-    // Hand-adjacent mana display
+    const zones = match?.game?.zones?.[mySeat];
+    const hand = Array.isArray(zones?.hand) ? zones.hand : [];
+    const handTray = document.createElement('div');
+    handTray.className = 'handTray';
+
+    // Mana display inside hand tray
     var handMana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
     var handManaEl = document.createElement('div');
     handManaEl.className = 'handMana';
@@ -2082,12 +2079,7 @@ function getClientHtml() {
       handManaEl.classList.add('manaEnter');
       state.gameEntranceAnimated = true;
     }
-    myEl.appendChild(handManaEl);
-
-    const zones = match?.game?.zones?.[mySeat];
-    const hand = Array.isArray(zones?.hand) ? zones.hand : [];
-    const handTray = document.createElement('div');
-    handTray.className = 'handTray';
+    handTray.appendChild(handManaEl);
     if (!hand.length) {
       handTray.innerHTML = '<div class="emptyZone">No cards in hand</div>';
     } else {
