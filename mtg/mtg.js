@@ -1956,10 +1956,12 @@ function getClientHtml() {
         + '<button id="btnGameEndTurn" class="btn">End Turn</button>';
     } else if (step === 'combat_attackers' && isMyTurn) {
       buttonsHtml = '<button id="btnConfirmAttackers" class="btn btnPrimary">Confirm Attack' + (pendingAtkCount ? ' (' + pendingAtkCount + ')' : '') + '</button>'
-        + '<button id="btnSkipCombat" class="btn">Skip Combat</button>';
+        + '<button id="btnSkipCombat" class="btn">Skip Combat</button>'
+        + '<button id="btnGameEndTurn" class="btn">End Turn</button>';
     } else if (step === 'combat_blockers' && isMyPriority) {
       buttonsHtml = '<button id="btnConfirmBlockers" class="btn btnPrimary">Confirm Blocks' + (pendingBlkCount ? ' (' + pendingBlkCount + ')' : '') + '</button>'
-        + '<button id="btnNoBlocks" class="btn">No Blocks</button>';
+        + '<button id="btnNoBlocks" class="btn">No Blocks</button>'
+        + '<button id="btnGameEndTurn" class="btn">End Turn</button>';
     } else if (step === 'main2' && isMyTurn) {
       buttonsHtml = '<button id="btnGameEndTurn" class="btn btnPrimary">End Turn</button>';
     } else if (step === 'combat_blockers' && !isMyPriority) {
@@ -3497,7 +3499,11 @@ function engineApplyAction(match, user, action) {
         if (match.phase !== "playing") return { ok: false, error: "can only end turn during playing phase" };
         const seat = player.seat;
         if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
-        if (match.game.step !== "main1" && match.game.step !== "main2") return { ok: false, error: "can only end turn during a main phase" };
+        // Allow ending turn from any step — auto-skip combat if needed
+        if (match.game.step === "combat_attackers" || match.game.step === "combat_blockers") {
+            match.game.combat = null;
+            match.log.push({ t: Date.now(), type: "COMBAT_SKIPPED", by: user.username, seat: seat });
+        }
         engineAdvanceTurn(match, { by: user.username }); engineRunBotsIfActive(match);
         return { ok: true, match };
     }
