@@ -188,7 +188,7 @@ function getClientHtml() {
     .manaBar { display:flex; gap:3px; align-items:center; }
     .manaGem { width:18px; height:18px; border-radius:50%; border:1.5px solid rgba(255,255,255,0.2); transition:all 200ms ease; }
     .manaGem.full { background:radial-gradient(circle at 35% 35%, #c084fc, #7c3aed 60%, #5b21b6); border-color:rgba(124,58,237,0.5); box-shadow:0 0 6px rgba(124,58,237,0.3); }
-    .manaGem.empty { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); }
+    .manaGem.empty { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.1); transform:scale(0.85); opacity:0.5; }
     .manaText { font-size:12px; font-weight:700; color:rgba(255,255,255,0.7); margin-left:4px; }
     .cardImg.unplayable { opacity:0.45; filter:saturate(0.3); }
     .cardImg.unplayable:hover { opacity:0.6; filter:saturate(0.5); }
@@ -1450,9 +1450,6 @@ function getClientHtml() {
     if (step !== 'main1' && step !== 'main2') return false;
     var mana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
     var cmc = Number(cardMeta(id)?.cmc) || 0;
-    if (clientCardType(id) === 'land') {
-      return (match.game?.landsPlayedThisTurn || 0) < 1;
-    }
     return cmc <= mana.current;
   }
 
@@ -2253,6 +2250,38 @@ function getClientHtml() {
       await new Promise(function(r) { setTimeout(r, 800 + Math.floor(Math.random() * 600)); });
     }
     await refreshMatch();
+    // Show bot blocking result
+    if (hasBot) {
+      var log = state.lastMatch?.log || [];
+      var recentBlock = null;
+      for (var bi = log.length - 1; bi >= 0; bi--) {
+        if (log[bi].type === 'BLOCKERS_DECLARED' && log[bi].by === 'bot' && log[bi].t > Date.now() - 5000) { recentBlock = log[bi]; break; }
+      }
+      if (recentBlock && recentBlock.count > 0) {
+        toast('Bot blocked with ' + recentBlock.count + ' creature' + (recentBlock.count > 1 ? 's' : '') + '.', { type: 'info', ms: 2000 });
+      } else {
+        toast('Bot did not block.', { type: 'info', ms: 1500 });
+      }
+    }
+    // Show combat result summary
+    var combatLog = state.lastMatch?.log || [];
+    var recentDeaths = [];
+    var recentDmg = [];
+    var cutoff = Date.now() - 5000;
+    for (var ci = combatLog.length - 1; ci >= 0; ci--) {
+      if (combatLog[ci].t < cutoff) break;
+      if (combatLog[ci].type === 'CREATURE_DIED') recentDeaths.push(combatLog[ci]);
+      if (combatLog[ci].type === 'PLAYER_DAMAGE') recentDmg.push(combatLog[ci]);
+    }
+    if (recentDeaths.length || recentDmg.length) {
+      var parts = [];
+      if (recentDeaths.length) parts.push(recentDeaths.length + ' creature' + (recentDeaths.length > 1 ? 's' : '') + ' died');
+      if (recentDmg.length) {
+        var totalDmg = recentDmg.reduce(function(s, e) { return s + (e.damage || 0); }, 0);
+        parts.push(totalDmg + ' damage dealt');
+      }
+      toast('Combat: ' + parts.join(', ') + '.', { type: 'info', ms: 2500 });
+    }
   }
 
   async function skipCombat() {
@@ -2790,7 +2819,7 @@ function api_createQuickstartCommanderDeck(event) {
 function api_searchCards(event) {
     const { query, limit = 20 } = event?.value || {};
     if (!query || typeof query !== "string") throw new Error("query is required");
-    const url = `${SCRYFALL.search}?q=${encodeURIComponent(query)}&order=name&unique=cards`;
+    const url = `${SCRYFALL.search}?q=${encodeURIComponent(query + ' -type:land')}&order=name&unique=cards`;
     const json = scryfallFetchJsonCached(url);
     const data = Array.isArray(json?.data) ? json.data : [];
     return data.slice(0, Math.max(1, Math.min(50, Number(limit) || 20))).map(simplifyCard);
@@ -3108,6 +3137,8 @@ function validateDeck(deck) {
         const leg = card.legalities || {};
         if (deck.format === "standard" && leg.standard !== "legal") errors.push(`${card.name} is not legal in Standard (${leg.standard || "unknown"}).`);
         if (deck.format === "commander" && leg.commander !== "legal") errors.push(`${card.name} is not legal in Commander (${leg.commander || "unknown"}).`);
+        var cardTypeLine = String(card.type_line || '').toLowerCase();
+        if (cardTypeLine.includes('land')) errors.push(card.name + ' is a land card (not allowed in Spark format).');
     }
     if (deck.format === "commander" && deck.commander) {
         const cmd = cardById[deck.commander] || scryfallFetchJsonCached(`${SCRYFALL.card}/${encodeURIComponent(deck.commander)}`);
