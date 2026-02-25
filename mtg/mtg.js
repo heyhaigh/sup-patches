@@ -230,17 +230,26 @@ function getClientHtml() {
     .ptBuffed { color:#22c55e; }
     .phaseBar { display:flex; gap:4px; align-items:center; }
     .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.06); }
-    .phasePill.active { background:rgba(251,191,36,0.18); color:#fbbf24; border-color:rgba(251,191,36,0.35); }
+    .phasePill.active { background:rgba(251,191,36,0.18); color:#fbbf24; border-color:rgba(251,191,36,0.35); animation:phaseActivate 0.3s ease; }
+    @keyframes phaseActivate { 0%{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.35);border-color:rgba(255,255,255,0.06)} 100%{background:rgba(251,191,36,0.18);color:#fbbf24;border-color:rgba(251,191,36,0.35)} }
     .dmgFloat { position:absolute; font-size:24px; font-weight:900; color:#ef4444; text-shadow:0 2px 8px rgba(0,0,0,0.5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
     @keyframes dmgFloatUp { 0%{opacity:1;transform:translateY(0) scale(1.2)} 60%{opacity:1;transform:translateY(-30px) scale(1)} 100%{opacity:0;transform:translateY(-50px) scale(0.8)} }
     .dmgFloatHeal { position:absolute; font-size:24px; font-weight:900; color:#22c55e; text-shadow:0 2px 8px rgba(0,0,0,0.5); pointer-events:none; z-index:30; animation:dmgFloatUp 1.2s ease-out forwards; }
     .deathOverlay { position:absolute; z-index:25; border-radius:10px; pointer-events:none; display:flex; align-items:center; justify-content:center; font-size:32px; animation:deathFade 0.8s ease-out forwards; }
     @keyframes deathFade { 0%{background:rgba(239,68,68,0.4);opacity:1} 30%{background:rgba(239,68,68,0.2);opacity:1} 100%{background:transparent;opacity:0} }
-    .combatBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; }
+    .combatBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; animation:combatBannerIn 0.3s ease; }
+    @keyframes combatBannerIn { 0%{opacity:0;transform:scaleX(0.8)} 100%{opacity:1;transform:scaleX(1)} }
     .gameOverOverlay { position:absolute; inset:0; z-index:40; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; animation:gameOverIn 0.4s ease; }
     @keyframes gameOverIn { from{opacity:0} to{opacity:1} }
     .gameOverTitle { font-size:48px; font-weight:900; letter-spacing:-0.03em; text-shadow:0 4px 20px rgba(0,0,0,0.5); animation:gameOverPop 0.5s ease; }
     @keyframes gameOverPop { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
+    .turnOverlay { position:absolute; inset:0; z-index:45; background:rgba(0,0,0,0.70); display:flex; align-items:center; justify-content:center; pointer-events:none; animation:turnOverlayIn 0.3s ease forwards; }
+    .turnOverlay.fadeOut { animation:turnOverlayOut 0.4s ease forwards; }
+    .turnOverlayText { font-size:56px; font-weight:900; letter-spacing:-0.03em; color:white; text-transform:uppercase; text-shadow:0 4px 30px rgba(0,0,0,0.6); animation:turnTextPop 0.4s ease; }
+    .turnOverlay.myTurn .turnOverlayText { color:#fbbf24; }
+    @keyframes turnOverlayIn { from{opacity:0} to{opacity:1} }
+    @keyframes turnOverlayOut { from{opacity:1} to{opacity:0} }
+    @keyframes turnTextPop { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
     .gameOverTitle.victory { color:#22c55e; }
     .gameOverTitle.defeat { color:#ef4444; }
     .gameOverStats { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
@@ -2212,12 +2221,23 @@ function getClientHtml() {
     }
     await refreshMatch();
     if (hasBot) {
-      const log = res.match?.log || [];
-      const botPlays = log.filter(e => e.type === 'BOT_PLAY' && e.t > Date.now() - 5000);
-      if (botPlays.length) toast('Bot played ' + botPlays.length + ' card' + (botPlays.length > 1 ? 's' : '') + '.', { type: 'info', ms: 2000 });
-      else { const botPass = log.find(e => e.type === 'BOT_PASS' && e.t > Date.now() - 5000); if (botPass) toast('Bot passed.', { type: 'info', ms: 1500 }); }
-      if (state.lastMatch?.game?.status !== 'finished') {
-        toast('Your turn - Turn ' + (state.lastMatch?.game?.turn || '?'), { type: 'info', ms: 1500 });
+      var log = state.lastMatch?.log || [];
+      var botPlays = log.filter(function(e) {
+        return (e.type === 'BOT_PLAY' || e.type === 'BOT_CAST_SPELL') && e.t > Date.now() - 5000;
+      });
+      if (botPlays.length) {
+        for (var bpi = 0; bpi < botPlays.length; bpi++) {
+          (function(entry, delay) {
+            setTimeout(function() {
+              var cName = cardMeta(entry.cardId)?.name || 'a card';
+              var verb = entry.type === 'BOT_CAST_SPELL' ? 'cast' : 'played';
+              toast('Bot ' + verb + ' ' + cName + '.', { type: 'info', ms: 2000 });
+            }, delay);
+          })(botPlays[bpi], bpi * 600);
+        }
+      } else {
+        var botPass = log.find(function(e) { return e.type === 'BOT_PASS' && e.t > Date.now() - 5000; });
+        if (botPass) toast('Bot passed.', { type: 'info', ms: 1500 });
       }
     }
   }
@@ -2517,7 +2537,34 @@ function getClientHtml() {
       if (entry.type === 'CREATURE_DIED') {
         showDeathOverlay(entry.cardId);
       }
+      if (entry.type === 'TURN_START') {
+        var turnSeat = entry.seat;
+        var isMyTurn = turnSeat === newMatch.viewerSeat;
+        var turnPlayer = (newMatch.players || []).find(function(p) { return p.seat === turnSeat; });
+        var turnName = turnPlayer
+          ? (turnPlayer.isBot ? turnPlayer.username : ('@' + turnPlayer.username))
+          : ('Seat ' + turnSeat);
+        showTurnOverlay(turnName, isMyTurn);
+      }
     }
+  }
+
+  function showTurnOverlay(name, isMyTurn) {
+    var board = document.getElementById('gameBoard');
+    if (!board) return;
+    var existing = board.querySelector('.turnOverlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.className = 'turnOverlay' + (isMyTurn ? ' myTurn' : '');
+    var text = document.createElement('div');
+    text.className = 'turnOverlayText';
+    text.textContent = isMyTurn ? 'YOUR TURN' : (name + "'S TURN");
+    overlay.appendChild(text);
+    board.appendChild(overlay);
+    setTimeout(function() {
+      overlay.classList.add('fadeOut');
+      setTimeout(function() { if (overlay.isConnected) overlay.remove(); }, 400);
+    }, 1200);
   }
 
   function showCreatureDmgFloat(cardId, amount) {
