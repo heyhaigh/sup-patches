@@ -219,27 +219,37 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed.
 
 All regex patterns implemented in Phase 2F + token creation in Phase 2G.
 
-### 3A. Remaining Combat Depth
-- Multiple blockers on one attacker (with even damage split)
-- Commander damage tracking (21+ from one commander = loss)
+### ~~3A. Remaining Combat Depth~~ ✅ COMPLETE (2026-02-25)
+- ~~Multiple blockers on one attacker (with even damage split)~~ ✅ (already implemented)
+- ~~Commander damage tracking (21+ from one commander = loss)~~ ✅ (already implemented)
 - ~~Damage vs. toughness distinction (damage marked on creature, separate from toughness, clears end of turn)~~ ✅ (already works — `cardState.damage` tracked separately, clears at EOT)
+- ~~SVG combat lines connecting blockers to attackers during blocking phase~~ ✅ (blue dashed lines with endpoint dots, `renderCombatLines()`)
 
-### 3C. UX Polish
+### 3C. UX Polish (PARTIAL)
 - Mobile: long-press for floating inspector (no hover), swipe up from hand to play
 - Touch targets: minimum 44px (Apple HIG)
 - Undo: deselect attackers/blockers before confirming, deselect card from hand before playing
 - Right-click context menu for "Send to Graveyard" (prevents accidental moves)
-- Graveyard/exile zone inspection (click to see all cards)
+- ~~Graveyard/exile zone inspection (click to see all cards)~~ ✅ (already implemented)
 - Reconnection handling (polling failure → "Reconnecting..." → resume)
+- ~~Game event log~~ ✅ (2026-02-25) — collapsible panel at bottom-left showing last 25 events (plays, spells, combat, deaths, damage, tokens, game over). `renderEventLog(match)` called from `renderGame()`.
 
-### 3D. Game Over Experience
-- Victory/defeat screen with stats
-- Play Again / Change Decks / Main Menu buttons
+### ~~3D. Game Over Experience~~ ✅ COMPLETE (2026-02-25)
+- ~~Victory/defeat screen with stats~~ ✅ (already implemented + added opponent stats section)
+- ~~Play Again / Change Decks / Main Menu buttons~~ ✅ (Play Again + Main Menu already existed, added "Change Decks" button)
+- ~~Elimination reason display~~ ✅ (tracks `loserReasons` — life/commander_damage/deck_out/concede — shown on overlay)
 - Multiplayer elimination (Commander): removed player's permanents leave, game continues
 
-### 3E. Spell & Token Polish (NEW — follow-up from 2F/2G)
+### ~~3E. Spell & Token Polish~~ ✅ COMPLETE (2026-02-25)
 
 These are remaining edge cases and polish items discovered during the Phase 2F/2G implementation:
+
+**Implemented (2026-02-25):**
+- ~~`exile target creature/permanent`~~ ✅ — moves target to exile zone, bypasses Indestructible (correct MTG rules)
+- ~~`return target creature/permanent to its owner's hand` (bounce)~~ ✅ — returns target to hand, bypasses Indestructible
+- ~~Creature tokens with keywords~~ ✅ — regex captures "with [keyword]" suffix, passes keywords to `engineCreateToken`
+- ~~0-toughness death bug~~ ✅ — creatures with 0 or less toughness from -N/-N debuffs now die immediately (state-based action check)
+- ~~`engineCheckLethalDamage` called after negative tempBuff~~ ✅
 
 #### Testing needed (from 2026-02-25 session)
 - **Ancestors' Aid full flow**: Cast → target creature → creature gets +2/+0 and First Strike icon → Treasure token appears on battlefield → P/T badge shows green buffed values
@@ -247,19 +257,19 @@ These are remaining edge cases and polish items discovered during the Phase 2F/2
 - **End of turn cleanup**: Temp buffs and keywords clear when turn ends (creature reverts to base P/T, keyword icons disappear)
 - **Token lifecycle**: When a creature token dies in combat, it should NOT appear in graveyard
 - **Multi-effect spells**: Spells with both targeted effects (tempBuff) and non-targeted effects (createToken) should process all effects — the targeted ones use the selected target, non-targeted ones just fire
+- **Exile spell**: Cast exile spell on opponent's creature → creature moves to exile zone (not graveyard)
+- **Bounce spell**: Cast bounce spell on opponent's creature → creature returns to their hand
+- **0-toughness death**: Cast -2/-2 debuff on a 2/2 → creature dies immediately
+- **Event log**: Visible during gameplay, shows plays/spells/combat/deaths, collapse/expand works
 
 #### Potential edge cases to watch for
 - Token rendering when `cardMeta` hasn't hydrated yet (race condition on fast plays?)
 - Treasure token stacking — multiple Treasures on battlefield should each be individually activatable
 - `clientCardType` for tokens — a Treasure is an Artifact, not a creature. Verify it doesn't end up in the creature wrap path
-- Creature tokens with keywords (e.g., "Create a 1/1 white Soldier creature token with vigilance") — `tokenDef.keywords` array is wired up but no regex pattern captures keyword tokens yet
 - Token count display if a player has many tokens (battlefield could overflow)
 
 #### Future spell patterns to consider
-- `exile target creature/permanent` — similar to destroy but different zone
-- `return target creature to its owner's hand` (bounce)
 - `each player draws/discards N cards`
-- `target creature gets -N/-N until end of turn` (debuff — currently only +N/+N captured)
 - `put N +1/+1 counters on target creature` (requires counter system)
 - `sacrifice a creature` (requires sacrifice selection UI)
 
