@@ -170,6 +170,14 @@ function getClientHtml() {
     .oppSide.multi .seatPanel { flex:1; min-width:140px; }
     .oppSide.multi .bfArea { min-height:40px; }
     .oppSide.multi .bfArea .cardImg { width:52px; height:72px; }
+    .oppHandTray { display:flex; gap:6px; overflow-x:auto; padding:6px 8px; justify-content:center; background:var(--w06); border-radius:10px; border:1px solid var(--w08); flex:0 0 auto; }
+    .oppHandCard { width:48px; height:67px; border-radius:6px; border:1px solid rgba(255,255,255,0.12); object-fit:cover; flex:0 0 auto; transition:transform 180ms ease, border-color 200ms ease, box-shadow 200ms ease; }
+    .oppHandCard:hover { transform:translateY(-4px); }
+    .oppHandCard.highlight { border-color:rgba(251,191,36,0.7); box-shadow:0 0 10px rgba(251,191,36,0.35); }
+    @keyframes oppCardExit { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(20px) scale(0.8)} }
+    .oppHandCard.exiting { animation:oppCardExit 0.35s ease forwards; }
+    .oppSide.multi .oppHandTray { padding:4px 6px; }
+    .oppSide.multi .oppHandCard { width:36px; height:50px; border-radius:5px; }
     .seatPanel { display:flex; flex-direction:column; flex:1; min-height:0; border-radius:10px; padding:6px 8px; position:relative; overflow:visible; }
     .seatPanel.lowHealth::before { content:''; position:absolute; inset:0; border-radius:10px; background:rgba(220,38,38,0.08); animation:lowHealthPulse 2.5s ease-in-out infinite; pointer-events:none; z-index:0; }
     @keyframes lowHealthPulse { 0%,100% { background:rgba(220,38,38,0.04); } 50% { background:rgba(220,38,38,0.14); } }
@@ -360,6 +368,8 @@ function getClientHtml() {
       .oppSide.multi { flex-direction:column; gap:4px; }
       .oppSide.multi .seatPanel { min-width:0; }
       .oppSide.multi .bfArea .cardImg { width:48px; height:66px; }
+      .oppHandCard { width:36px; height:50px; border-radius:5px; }
+      .oppSide.multi .oppHandCard { width:30px; height:42px; }
       .zoneBrowserContent { max-width:95vw; }
       .zoneBrowserGrid { grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:6px; }
       .handMana .hmGem { width:20px; height:20px; }
@@ -680,6 +690,7 @@ function getClientHtml() {
     'Isshin, Two Heavens as One'
   ];
 
+  var CARD_BACK_URI = 'data:image/webp;base64,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';
   var GC = { HAND_SIZE: 7, STANDARD_LIFE: 20, COMMANDER_LIFE: 40, MAX_MANA: 10, MULLIGAN_LIMIT: 6, COMMANDER_DAMAGE_LETHAL: 21, LIFE_CRIT_STD: 5, LIFE_CRIT_CMD: 10 };
   var KW_TL = new Set(['Haste','Vigilance','Defender','Indestructible','Hexproof']);
   var KW_TR = new Set(['Flying','Reach','First Strike','Double Strike','Menace']);
@@ -692,7 +703,7 @@ function getClientHtml() {
     combatMode: null, pendingAttackers: {}, pendingBlockers: {}, selectedBlocker: null,
     targetingMode: null,
     lastLogIndex: 0, eventLogCollapsed: false,
-    _suppressTurnOverlay: false,
+    _suppressTurnOverlay: false, prevHandCounts: {}, oppHandHighlight: {},
   };
 
   /* Tab buttons work immediately via event delegation — no boot() needed */
@@ -2155,6 +2166,51 @@ function getClientHtml() {
     }
     el.appendChild(zr);
 
+    // Opponent hand card-backs display (non-viewer only)
+    if (!isViewer) {
+      var handCount = Array.isArray(hand) ? hand.length : Number(hand?.count || 0);
+      var oppHandTray = document.createElement('div');
+      oppHandTray.className = 'oppHandTray';
+      oppHandTray.dataset.seat = seat;
+      // Detect card played (hand count decreased) for exit animation
+      var prevCount = state.prevHandCounts[seat];
+      var cardPlayed = prevCount != null && handCount < prevCount;
+      state.prevHandCounts[seat] = handCount;
+      // Check game log for recent opponent actions to highlight a card
+      var highlightIdx = -1;
+      if (match?.log && match.log.length > 0) {
+        var lastEvt = match.log[match.log.length - 1];
+        if (lastEvt && lastEvt.seat === seat && (lastEvt.type === 'PLAY' || lastEvt.type === 'CAST_SPELL' || lastEvt.type === 'BOT_PLAY' || lastEvt.type === 'BOT_CAST_SPELL')) {
+          highlightIdx = 0; // highlight first card to suggest activity
+        }
+      }
+      if (handCount > 0) {
+        for (var ohi = 0; ohi < handCount; ohi++) {
+          var cardBack = document.createElement('img');
+          cardBack.className = 'oppHandCard' + (ohi === highlightIdx ? ' highlight' : '');
+          cardBack.src = CARD_BACK_URI;
+          cardBack.alt = 'Card back';
+          cardBack.width = 48; cardBack.height = 67;
+          cardBack.draggable = false;
+          oppHandTray.appendChild(cardBack);
+        }
+        // Animate an extra card exiting when a card was just played
+        if (cardPlayed) {
+          var ghost = document.createElement('img');
+          ghost.className = 'oppHandCard exiting';
+          ghost.src = CARD_BACK_URI;
+          ghost.alt = '';
+          ghost.width = 48; ghost.height = 67;
+          ghost.draggable = false;
+          oppHandTray.insertBefore(ghost, oppHandTray.firstChild);
+          setTimeout(function() { if (ghost.parentNode) ghost.remove(); }, 400);
+        }
+      } else {
+        oppHandTray.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:11px;font-style:italic;padding:4px 0;">No cards in hand</div>';
+      }
+      el.appendChild(oppHandTray);
+    }
+
     const bf = Array.isArray(zones?.battlefield) ? zones.battlefield : [];
     const bfArea = document.createElement('div');
     bfArea.className = 'bfArea';
@@ -2399,12 +2455,16 @@ function getClientHtml() {
     var z = match?.game?.zones?.[seat];
     var bf = z?.battlefield || [];
     var cs = match?.game?.cardState || {};
+    var hand = z?.hand;
+    var handCount = Array.isArray(hand) ? hand.length : Number(hand?.count || 0);
     var parts = [
       seat,
       match?.game?.lifeBySeat?.[seat],
       bf.join(','),
       match?.game?.activePlayerSeat,
       (match?.game?.combat?.attackers ? Object.keys(match.game.combat.attackers).join(',') : ''),
+      'h' + handCount,
+      'log' + (match?.log?.length || 0),
     ];
     for (var i = 0; i < bf.length; i++) {
       var s = cs[bf[i]];
