@@ -292,6 +292,9 @@ function getClientHtml() {
     .inspectFloat .inspectorSub { font-size:11px; color:rgba(255,255,255,0.55); margin-top:4px; }
     .inspectFloat .btn { width:100%; margin-top:6px; font-size:11px; padding:6px 10px; }
     .inspectFloatClose { position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:999px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; transition:background 120ms ease; padding:0; line-height:1; }
+    .tokenBadge { position:absolute; bottom:2px; left:50%; transform:translateX(-50%); background:rgba(245,158,11,0.9); color:#000; font-size:9px; font-weight:700; padding:2px 6px; border-radius:6px; white-space:nowrap; pointer-events:none; }
+    .tokenWrap { position:relative; display:inline-block; }
+    .tokenIndicator { position:absolute; top:2px; left:2px; background:rgba(245,158,11,0.85); color:#000; font-size:8px; font-weight:800; width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; pointer-events:none; }
     .inspectFloatClose:hover { background:rgba(255,255,255,0.2); color:#fff; }
     .zoneBrowserOverlay { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; animation:gameOverIn 0.3s ease; }
     .zoneBrowserContent { background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); max-width:600px; width:90vw; max-height:80vh; overflow:auto; padding:16px; position:relative; }
@@ -497,6 +500,7 @@ function getClientHtml() {
                 <div id="inspectorSub" class="inspectorSub"></div>
                 <button id="btnPlaySelected" class="btn btnPrimary">Play to battlefield</button>
                 <button id="btnToGraveyard" class="btn">To graveyard</button>
+                <button id="btnActivate" class="btn" style="display:none;">Activate ability</button>
                 <button id="btnInspect" class="btn btnGhost">Inspect</button>
               </div>
             </div>
@@ -1354,6 +1358,16 @@ function getClientHtml() {
     const missing = ids.filter(id => !state.cardIndex[id]); if (!missing.length) return;
     const res = await supExec('api_getCardsBulk', { ids: missing });
     state.cardIndex = { ...state.cardIndex, ...(res?.byId || {}) };
+    // Tokens don't have Scryfall data — populate from match deck meta
+    var allZones = match?.game?.zones || {};
+    for (var hSeat in allZones) {
+      var tokenMeta = match?.decks?.[hSeat]?.cardMeta || {};
+      for (var tid in tokenMeta) {
+        if (tokenMeta[tid].isToken && !state.cardIndex[tid]) {
+          state.cardIndex[tid] = tokenMeta[tid];
+        }
+      }
+    }
   }
 
   function setSelected(sel) {
@@ -1366,6 +1380,7 @@ function getClientHtml() {
       if (panel) panel.classList.remove('visible');
       img.src = ''; title.textContent = ''; sub.textContent = '';
       $('#btnPlaySelected').disabled = true; $('#btnToGraveyard').disabled = true; $('#btnInspect').disabled = true;
+      $('#btnActivate').style.display = 'none';
       return;
     }
     if (panel) panel.classList.add('visible');
@@ -1381,6 +1396,15 @@ function getClientHtml() {
       playBtn.textContent = (ct === 'instant' || ct === 'sorcery') ? 'Cast spell' : 'Play to battlefield';
     }
     $('#btnToGraveyard').disabled = !(state.selected.zone === 'battlefield' && state.selected.seat === state.lastMatch?.viewerSeat);
+    var activateBtn = $('#btnActivate');
+    if (state.selected.zone === 'battlefield' && state.selected.seat === state.lastMatch?.viewerSeat) {
+      var selOracle = String(cardMeta(state.selected.id)?.oracleText || '');
+      var hasActivatable = /sacrifice.*add.*mana/i.test(selOracle);
+      activateBtn.style.display = hasActivatable ? '' : 'none';
+      activateBtn.disabled = false;
+    } else {
+      activateBtn.style.display = 'none';
+    }
     $('#btnInspect').disabled = !c;
     $$('.cardImg[data-card-id="' + state.selected.id + '"]').forEach(el => el.classList.add('selected'));
   }
@@ -1664,6 +1688,11 @@ function getClientHtml() {
     const options = opts || {};
     const c = cardMeta(id); const img = document.createElement('img');
     img.className = 'cardImg'; img.src = c?.imageSmall || c?.imageNormal || ''; img.alt = c?.name || id;
+    if (!img.src && c?.isToken) {
+      img.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+      img.style.borderRadius = '10px';
+      img.alt = c.name || 'Token';
+    }
     img.width = options.w || 64; img.height = options.h || 90;
     img.decoding = 'async';
     if (options.lazy) img.loading = 'lazy';
@@ -1699,6 +1728,12 @@ function getClientHtml() {
       var kwTRNames = ['Flying','Reach','First Strike','Double Strike','Menace'];
       var kwBLNames = ['Trample','Deathtouch','Lifelink'];
       var myKws = clientGetKeywords(id);
+      var tempKwList = options.match?.game?.tempKeywords || [];
+      for (var tki = 0; tki < tempKwList.length; tki++) {
+        if (tempKwList[tki].cardId === id && myKws.indexOf(tempKwList[tki].keyword) < 0) {
+          myKws = myKws.concat([tempKwList[tki].keyword]);
+        }
+      }
       for (var ki = 0; ki < myKws.length; ki++) {
         var kw = myKws[ki];
         if (!kwMap[kw]) continue;
@@ -1736,14 +1771,26 @@ function getClientHtml() {
         abadge.textContent = '\u2728' + auraBuffs.count;
         wrap.appendChild(abadge);
       }
+      if (c?.isToken) {
+        var tokIcon = document.createElement('div');
+        tokIcon.className = 'tokenIndicator';
+        tokIcon.textContent = 'T';
+        tokIcon.title = 'Token';
+        wrap.appendChild(tokIcon);
+      }
       wrap.appendChild(img);
       var badge = document.createElement('div');
       badge.className = 'ptBadge';
       var basePw = Number(c?.power) || 0;
       var baseTw = Number(c?.toughness) || 0;
-      var buffedPw = basePw + auraBuffs.power;
-      var buffedTw = baseTw + auraBuffs.toughness;
-      var isBuffed = auraBuffs.power !== 0 || auraBuffs.toughness !== 0;
+      var tempBuffs = options.match?.game?.tempBuffs || [];
+      var tbPw = 0; var tbTw = 0;
+      for (var tbi = 0; tbi < tempBuffs.length; tbi++) {
+        if (tempBuffs[tbi].cardId === id) { tbPw += tempBuffs[tbi].power; tbTw += tempBuffs[tbi].toughness; }
+      }
+      var buffedPw = basePw + auraBuffs.power + tbPw;
+      var buffedTw = baseTw + auraBuffs.toughness + tbTw;
+      var isBuffed = auraBuffs.power !== 0 || auraBuffs.toughness !== 0 || tbPw !== 0 || tbTw !== 0;
       var dmg = cs ? (Number(cs.damage) || 0) : 0;
       if (dmg > 0) {
         var remaining = buffedTw - dmg;
@@ -1761,6 +1808,17 @@ function getClientHtml() {
       // Forward click/dblclick to wrapper level too
       wrap.dataset.cardId = id;
       return wrap;
+    }
+    if (options.zone === 'battlefield' && c?.isToken && !isCreature) {
+      var tWrap = document.createElement('div');
+      tWrap.className = 'cardWrap tokenWrap';
+      tWrap.dataset.cardId = id;
+      tWrap.appendChild(img);
+      var tBadge = document.createElement('div');
+      tBadge.className = 'tokenBadge';
+      tBadge.textContent = c.name || 'Token';
+      tWrap.appendChild(tBadge);
+      return tWrap;
     }
     return img;
   }
@@ -2753,9 +2811,18 @@ function getClientHtml() {
     var lifeRe = /gain\\s+(\\d+)\\s+life/gi;
     var lr;
     while ((lr = lifeRe.exec(oracleText)) !== null) { effects.push({ type: 'gainLife', amount: parseInt(lr[1], 10) }); }
-    var buffRe = /target\\s+creature\\s+gets\\s+([+-]\\d+)\\/([+-]\\d+)\\s+until\\s+end\\s+of\\s+turn/gi;
+    var buffRe = /target\\s+creature\\s+gets\\s+([+-]\\d+)\\/([+-]\\d+)[\\s\\S]*?until\\s+end\\s+of\\s+turn/gi;
     var br;
     while ((br = buffRe.exec(oracleText)) !== null) { effects.push({ type: 'tempBuff', power: parseInt(br[1], 10), toughness: parseInt(br[2], 10) }); }
+    var kwGrantRe = /(?:and\\s+)?gains?\\s+(flying|reach|first strike|double strike|trample|deathtouch|lifelink|haste|vigilance|defender|menace|indestructible|hexproof)\\s+until\\s+end\\s+of\\s+turn/gi;
+    var kr;
+    while ((kr = kwGrantRe.exec(oracleText)) !== null) { effects.push({ type: 'tempKeyword', keyword: kr[1] }); }
+    var treasureRe = /create\\s+(?:a|(\\d+))\\s+treasure\\s+tokens?/gi;
+    var tr;
+    while ((tr = treasureRe.exec(oracleText)) !== null) { effects.push({ type: 'createToken', tokenType: 'treasure', count: tr[1] ? parseInt(tr[1], 10) : 1 }); }
+    var creatureTokenRe = /create\\s+(?:a|(\\d+))\\s+(\\d+)\\/(\\d+)\\s+[\\w\\s]*?([\\w]+)\\s+creature\\s+tokens?/gi;
+    var ctr;
+    while ((ctr = creatureTokenRe.exec(oracleText)) !== null) { effects.push({ type: 'createToken', tokenType: 'creature', count: ctr[1] ? parseInt(ctr[1], 10) : 1, power: parseInt(ctr[2], 10), toughness: parseInt(ctr[3], 10), subtype: ctr[4] }); }
     return effects;
   }
 
@@ -2765,6 +2832,7 @@ function getClientHtml() {
       if (e.type === 'damage' && (e.targetType === 'target creature' || e.targetType === 'target player' || e.targetType === 'any target')) return true;
       if (e.type === 'destroy') return true;
       if (e.type === 'tempBuff') return true;
+      if (e.type === 'tempKeyword') return true;
     }
     return false;
   }
@@ -2783,6 +2851,7 @@ function getClientHtml() {
         else if (e.targetType === 'any target') { needsCreature = true; needsPlayer = true; }
       } else if (e.type === 'destroy') { needsCreature = true; }
       else if (e.type === 'tempBuff') { needsCreature = true; }
+      else if (e.type === 'tempKeyword') { needsCreature = true; }
     }
     if (needsCreature) {
       var creatures = getTargetableCreatures(match, mySeat);
@@ -2829,6 +2898,20 @@ function getClientHtml() {
     setSelected(null);
   }
 
+  async function activateAbility() {
+    var sel = state.selected;
+    if (!state.activeMatchId || !sel?.id) return;
+    if (!(sel.zone === 'battlefield' && sel.seat === state.lastMatch?.viewerSeat)) return;
+    var res = await supExec('api_matchAction', {
+      matchId: state.activeMatchId,
+      action: { type: 'ACTIVATE_ABILITY', cardId: sel.id }
+    });
+    if (!res.ok) { toast('Activate failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    toast((cardMeta(sel.id)?.name || 'Card') + ' ability activated!', { type: 'success', ms: 1500 });
+    await refreshMatch();
+    setSelected(null);
+  }
+
   async function moveSelectedToGraveyard() {
     const sel = state.selected; if (!state.activeMatchId || !sel?.id) return;
     if (!(sel.zone === 'battlefield' && sel.seat === state.lastMatch?.viewerSeat)) { toast('Select a card on your battlefield.', { type: 'warn' }); return; }
@@ -2863,6 +2946,7 @@ function getClientHtml() {
     $('#btnKeep').onclick = keepHand;
     $('#btnPlaySelected').onclick = playSelectedToBattlefield;
     $('#btnToGraveyard').onclick = moveSelectedToGraveyard;
+    $('#btnActivate').onclick = activateAbility;
     $('#btnInspect').onclick = () => { if (state.selected?.id) openCardModal(state.selected.id, state.selected.zone); };
     $('#inspectFloatClose').onclick = () => setSelected(null);
     $('#cardModalClose').onclick = closeCardModal;
@@ -3516,6 +3600,21 @@ function engineApplyAction(match, user, action) {
         return { ok: true, match };
     }
 
+    if (action.type === "ACTIVATE_ABILITY") {
+        if (match.phase !== "playing") return { ok: false, error: "not in playing phase" };
+        var seat = player.seat;
+        if (match.game?.activePlayerSeat != null && seat !== match.game.activePlayerSeat) return { ok: false, error: "not your turn" };
+        var cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId required" };
+        engineEnsureZones(match, seat);
+        if (match.game.zones[seat].battlefield.indexOf(cardId) < 0) return { ok: false, error: "card not on battlefield" };
+        var abMeta = (match.decks?.[seat]?.cardMeta || {})[cardId];
+        var abOracle = String(abMeta?.oracleText || '');
+        var abResult = engineActivateAbility(match, seat, cardId, abOracle);
+        if (!abResult.ok) return abResult;
+        match.log.push({ t: Date.now(), type: "ACTIVATE", by: user.username, seat: seat, cardId: cardId, ability: abResult.ability });
+        return { ok: true, match };
+    }
+
     if (action.type === "END_TURN") {
         if (match.phase !== "playing") return { ok: false, error: "can only end turn during playing phase" };
         const seat = player.seat;
@@ -3746,6 +3845,14 @@ function engineMoveCard(match, seat, fromZone, toZone, cardId) {
     const idx = from.indexOf(cardId); if (idx < 0) return { ok: false, error: `card not in ${fromZone}` };
     from.splice(idx, 1); to.push(cardId);
     if (fromZone === "battlefield" && match.game.cardState?.[cardId]) { delete match.game.cardState[cardId]; }
+    // Tokens cease to exist when leaving the battlefield
+    if (fromZone === 'battlefield' && (match.game.tokenIds || []).indexOf(cardId) >= 0) {
+        var tokIdx = to.indexOf(cardId);
+        if (tokIdx >= 0) to.splice(tokIdx, 1);
+        if (match.decks?.[seat]?.cardMeta?.[cardId]) delete match.decks[seat].cardMeta[cardId];
+        var tokListIdx = match.game.tokenIds.indexOf(cardId);
+        if (tokListIdx >= 0) match.game.tokenIds.splice(tokListIdx, 1);
+    }
     // Aura cleanup when card leaves battlefield
     if (fromZone === "battlefield" && match.game.auraAttachments) {
         // If this card is an aura, remove its attachment entry and check if enchanted creature now has lethal damage
@@ -3825,6 +3932,10 @@ function engineAdvanceTurn(match, opts) {
         match.game.tempBuffs = [];
         engineCheckLethalDamage(match);
     }
+    // Clear temp keywords
+    if (match.game.tempKeywords && match.game.tempKeywords.length) {
+        match.game.tempKeywords = [];
+    }
     // Clear combat state
     match.game.combat = null;
     match.log.push({ t: Date.now(), type: "TURN_START", by: (opts || {}).by || "engine", turn: match.game.turn, seat: next });
@@ -3876,6 +3987,10 @@ function engineGetKeywords(match, seat, cardId) {
 function engineHasKeyword(match, seat, cardId, keyword) {
     var kws = engineGetKeywords(match, seat, cardId);
     for (var i = 0; i < kws.length; i++) { if (kws[i] === keyword) return true; }
+    var tempKws = match.game?.tempKeywords || [];
+    for (var ti = 0; ti < tempKws.length; ti++) {
+        if (tempKws[ti].cardId === cardId && tempKws[ti].keyword === keyword) return true;
+    }
     return false;
 }
 // Check keyword on a card that may be in graveyard (for deathtouch source tracking)
@@ -3958,6 +4073,32 @@ function engineEnsureCardState(match, cardId) {
     if (!match.game.cardState) match.game.cardState = {};
     if (!match.game.cardState[cardId]) match.game.cardState[cardId] = { tapped: false, summoningSick: false, damage: 0, damageSourceIds: [] };
     if (!match.game.cardState[cardId].damageSourceIds) match.game.cardState[cardId].damageSourceIds = [];
+}
+
+function engineCreateToken(match, seat, tokenDef) {
+    var tokenId = 'tok_' + sup.uuid().slice(0, 8);
+    engineEnsureZones(match, seat);
+    match.game.zones[seat].battlefield.push(tokenId);
+    if (!match.decks) match.decks = {};
+    if (!match.decks[seat]) match.decks[seat] = { cardMeta: {} };
+    if (!match.decks[seat].cardMeta) match.decks[seat].cardMeta = {};
+    match.decks[seat].cardMeta[tokenId] = {
+        name: tokenDef.name || 'Token',
+        typeLine: tokenDef.typeLine || 'Token',
+        oracleText: tokenDef.oracleText || '',
+        power: tokenDef.power != null ? String(tokenDef.power) : null,
+        toughness: tokenDef.toughness != null ? String(tokenDef.toughness) : null,
+        keywords: tokenDef.keywords || [],
+        cmc: 0, imageSmall: null, imageNormal: null, isToken: true,
+    };
+    if (!match.game.tokenIds) match.game.tokenIds = [];
+    match.game.tokenIds.push(tokenId);
+    if (tokenDef.typeLine && tokenDef.typeLine.toLowerCase().includes('creature')) {
+        engineEnsureCardState(match, tokenId);
+        match.game.cardState[tokenId].summoningSick = true;
+    }
+    match.log.push({ t: Date.now(), type: "CREATE_TOKEN", seat: seat, tokenId: tokenId, name: tokenDef.name });
+    return tokenId;
 }
 
 function engineTrackCommanderDamage(match, atkSeat, atkId, defSeat, amount) {
@@ -4265,10 +4406,28 @@ function engineParseSpellEffects(oracleText) {
         effects.push({ type: 'gainLife', amount: parseInt(lr[1], 10) });
     }
     // "target creature gets +N/+N until end of turn"
-    var buffRe = /target\s+creature\s+gets\s+([+-]\d+)\/([+-]\d+)\s+until\s+end\s+of\s+turn/gi;
+    var buffRe = /target\s+creature\s+gets\s+([+-]\d+)\/([+-]\d+)[\s\S]*?until\s+end\s+of\s+turn/gi;
     var br;
     while ((br = buffRe.exec(oracleText)) !== null) {
         effects.push({ type: 'tempBuff', power: parseInt(br[1], 10), toughness: parseInt(br[2], 10) });
+    }
+    // "gains [keyword] until end of turn"
+    var kwGrantRe = /(?:and\s+)?gains?\s+(flying|reach|first strike|double strike|trample|deathtouch|lifelink|haste|vigilance|defender|menace|indestructible|hexproof)\s+until\s+end\s+of\s+turn/gi;
+    var kr;
+    while ((kr = kwGrantRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'tempKeyword', keyword: kr[1] });
+    }
+    // "Create a/N Treasure token(s)"
+    var treasureRe = /create\s+(?:a|(\d+))\s+treasure\s+tokens?/gi;
+    var tr;
+    while ((tr = treasureRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'createToken', tokenType: 'treasure', count: tr[1] ? parseInt(tr[1], 10) : 1 });
+    }
+    // "Create a/N P/T [type] creature token(s)"
+    var creatureTokenRe = /create\s+(?:a|(\d+))\s+(\d+)\/(\d+)\s+[\w\s]*?([\w]+)\s+creature\s+tokens?/gi;
+    var ctr;
+    while ((ctr = creatureTokenRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'createToken', tokenType: 'creature', count: ctr[1] ? parseInt(ctr[1], 10) : 1, power: parseInt(ctr[2], 10), toughness: parseInt(ctr[3], 10), subtype: ctr[4] });
     }
     return effects;
 }
@@ -4279,6 +4438,7 @@ function engineEffectNeedsTarget(effects) {
         if (e.type === 'damage' && (e.targetType === 'target creature' || e.targetType === 'target player' || e.targetType === 'any target')) return true;
         if (e.type === 'destroy') return true;
         if (e.type === 'tempBuff') return true;
+        if (e.type === 'tempKeyword') return true;
     }
     return false;
 }
@@ -4346,7 +4506,42 @@ function engineApplyEffect(match, casterSeat, effect, targetId) {
             match.game.tempBuffs.push({ cardId: targetId, power: effect.power, toughness: effect.toughness });
             match.log.push({ t: Date.now(), type: "SPELL_BUFF", target: targetId, power: effect.power, toughness: effect.toughness });
         }
+    } else if (effect.type === 'tempKeyword') {
+        if (targetId) {
+            if (!match.game.tempKeywords) match.game.tempKeywords = [];
+            var kwName = String(effect.keyword || '').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+            match.game.tempKeywords.push({ cardId: targetId, keyword: kwName });
+            match.log.push({ t: Date.now(), type: "SPELL_KEYWORD", target: targetId, keyword: kwName });
+        }
+    } else if (effect.type === 'createToken') {
+        var tokenCount = effect.count || 1;
+        for (var tci = 0; tci < tokenCount; tci++) {
+            if (effect.tokenType === 'treasure') {
+                engineCreateToken(match, casterSeat, {
+                    name: 'Treasure', typeLine: 'Token Artifact \u2014 Treasure',
+                    oracleText: '{T}, Sacrifice this artifact: Add one mana of any color.',
+                });
+            } else if (effect.tokenType === 'creature') {
+                engineCreateToken(match, casterSeat, {
+                    name: (effect.subtype || 'Creature') + ' Token',
+                    typeLine: 'Token Creature \u2014 ' + (effect.subtype || 'Creature'),
+                    power: effect.power || 1, toughness: effect.toughness || 1,
+                });
+            }
+        }
     }
+}
+
+function engineActivateAbility(match, seat, cardId, oracleText) {
+    // Treasure: "Sacrifice this artifact: Add one mana"
+    if (/sacrifice\s+this\s+artifact.*add\s+one\s+mana/i.test(oracleText)) {
+        engineMoveCard(match, seat, "battlefield", "graveyard", cardId);
+        if (!match.game.manaBySeat) match.game.manaBySeat = {};
+        if (!match.game.manaBySeat[seat]) match.game.manaBySeat[seat] = { current: 0, max: 0 };
+        match.game.manaBySeat[seat].current += 1;
+        return { ok: true, ability: 'sacrifice_for_mana' };
+    }
+    return { ok: false, error: "no recognized activated ability" };
 }
 
 function enginePlayCard(match, seat, cardId, targetId) {
@@ -4477,6 +4672,16 @@ function engineBotTakeTurn(match, botPlayer) {
                     if (bp > bestBp) { bestBp = bp; bestBuff = ownBf[bi]; }
                 }
                 return bestBuff;
+            }
+            if (eff.type === 'tempKeyword') {
+                var ownBf2 = match.game.zones?.[seat]?.battlefield || [];
+                var bestKw = null; var bestKp = -1;
+                for (var ki = 0; ki < ownBf2.length; ki++) {
+                    if (!engineIsCreature(match, seat, ownBf2[ki])) continue;
+                    var kp = engineGetCreaturePower(match, seat, ownBf2[ki]);
+                    if (kp > bestKp) { bestKp = kp; bestKw = ownBf2[ki]; }
+                }
+                return bestKw;
             }
         }
         return null;
