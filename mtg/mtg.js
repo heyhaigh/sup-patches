@@ -3019,10 +3019,9 @@ function getClientHtml() {
         totalWait = Math.max(totalWait, atkDelay + toastDuration);
       }
 
-      // 6. Wait for toasts to play out, then show "YOUR TURN" if game isn't over
-      await new Promise(function(r) { setTimeout(r, totalWait + 400); });
+      // 6. Show "YOUR TURN" immediately (don't wait for toasts) — unless game ended or it's blocker phase
       state._suppressTurnOverlay = false;
-      if (state.lastMatch?.game?.status !== 'finished') {
+      if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
         showTurnOverlay('', true);
       }
     } else {
@@ -3339,6 +3338,8 @@ function getClientHtml() {
         showDeathOverlay(entry.cardId);
       }
       if (entry.type === 'TURN_START' && !state._suppressTurnOverlay) {
+        // Don't show turn overlay during blocker phase — it's not actually a turn change
+        if (newMatch.game?.step === 'combat_blockers') continue;
         var turnSeat = entry.seat;
         var isMyTurn = turnSeat === newMatch.viewerSeat;
         var turnPlayer = (newMatch.players || []).find(function(p) { return p.seat === turnSeat; });
