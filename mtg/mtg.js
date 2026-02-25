@@ -217,6 +217,9 @@ function getClientHtml() {
     .cardWrap.blocking { box-shadow:0 0 10px 3px rgba(59,130,246,0.5); border-radius:12px; }
     .cardWrap.blocking .cardImg { border-color:rgba(59,130,246,0.7); }
     .cardWrap.combatIneligible .cardImg { opacity:0.35; filter:saturate(0.2); }
+    .combatSvg { position:absolute; inset:0; z-index:15; pointer-events:none; overflow:visible; }
+    .combatLine { stroke:rgba(59,130,246,0.55); stroke-width:2; stroke-dasharray:6 3; }
+    .combatLineDot { fill:rgba(59,130,246,0.7); }
     .kwIcons { position:absolute; display:flex; gap:2px; z-index:3; pointer-events:none; }
     .kwIcons-tl { top:3px; left:3px; flex-direction:column; }
     .kwIcons-tr { top:3px; right:3px; flex-direction:column; align-items:flex-end; }
@@ -263,6 +266,8 @@ function getClientHtml() {
     .gameOverStatVal { font-size:20px; font-weight:800; color:#fff; }
     .gameOverStatLabel { font-size:11px; color:rgba(255,255,255,0.6); margin-top:2px; }
     .gameOverBtns { display:flex; gap:10px; margin-top:8px; }
+    .gameOverReason { font-size:14px; color:rgba(255,255,255,0.6); margin-top:-8px; }
+    .gameOverSection { font-size:12px; color:rgba(255,255,255,0.45); text-transform:uppercase; letter-spacing:0.05em; margin-top:8px; }
     .lifeBadge.critical { background:rgba(239,68,68,0.25); border-color:rgba(239,68,68,0.4); animation:lifePulse 1s ease infinite; }
     @keyframes lifePulse { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 12px rgba(239,68,68,0.4)} }
     .lifeBadge.flash { animation:lifeFlash 0.4s ease; }
@@ -304,6 +309,11 @@ function getClientHtml() {
     .zoneBrowserGrid .cardImg { width:100%; height:auto; aspect-ratio:5/7; border-radius:8px; cursor:pointer; transition:transform 120ms ease; border:1px solid var(--border); }
     .zoneBrowserGrid .cardImg:hover { transform:scale(1.05); }
     .zoneBrowserEmpty { color:var(--muted); font-size:13px; font-style:italic; text-align:center; padding:20px 0; }
+    .eventLog { position:absolute; bottom:0; left:0; width:200px; max-height:180px; overflow-y:auto; z-index:18; background:rgba(10,10,20,0.85); backdrop-filter:blur(4px); border-top-right-radius:10px; border:1px solid rgba(255,255,255,0.1); padding:6px 8px; font-size:11px; }
+    .eventLog.collapsed { max-height:26px; overflow:hidden; cursor:pointer; }
+    .eventLogToggle { position:absolute; top:3px; right:6px; background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; font-size:11px; padding:2px 4px; }
+    .eventLogTitle { font-size:10px; font-weight:700; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:0.05em; margin:0 0 4px 0; }
+    .eventEntry { color:rgba(255,255,255,0.65); padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.05); line-height:1.3; }
     .zoneBadge.clickable { cursor:pointer; border:1px solid var(--border2); transition:background 120ms ease; }
     .zoneBadge.clickable:hover { background:rgba(18,21,26,0.08); }
     @media (max-width:980px) {
@@ -644,7 +654,7 @@ function getClientHtml() {
     cardIndex: {}, selected: { id: null, zone: null, seat: null }, qsCommanderChosen: null,
     combatMode: null, pendingAttackers: {}, pendingBlockers: {}, selectedBlocker: null,
     targetingMode: null,
-    lastLogIndex: 0,
+    lastLogIndex: 0, eventLogCollapsed: false,
     _suppressTurnOverlay: false,
   };
 
@@ -2213,6 +2223,16 @@ function getClientHtml() {
         titleEl.textContent = isVictory ? 'VICTORY' : 'DEFEAT';
         overlay.appendChild(titleEl);
 
+        var reasonMap = { life: 'Life reached 0', commander_damage: 'Commander damage (21+)', deck_out: 'Library depleted', concede: 'Conceded' };
+        var oppSeatsGO = (match.players || []).filter(function(p) { return p.seat !== match.viewerSeat; }).map(function(p) { return p.seat; });
+        var reasonKey = isVictory ? (match.game.loserReasons || {})[oppSeatsGO[0]] : (match.game.loserReasons || {})[match.viewerSeat];
+        if (reasonKey) {
+          var reasonEl = document.createElement('div');
+          reasonEl.className = 'gameOverReason';
+          reasonEl.textContent = isVictory ? 'Opponent: ' + (reasonMap[reasonKey] || reasonKey) : reasonMap[reasonKey] || reasonKey;
+          overlay.appendChild(reasonEl);
+        }
+
         var myStats = match.game.stats?.[match.viewerSeat] || { damageDealt: 0, creaturesKilled: 0 };
         var myLife = match.game.lifeBySeat?.[match.viewerSeat] || 0;
         var turns = match.game.turn || 0;
@@ -2239,6 +2259,25 @@ function getClientHtml() {
         }
         overlay.appendChild(statsRow);
 
+        var oppSeatsForStats = (match.players || []).filter(function(p) { return p.seat !== match.viewerSeat; });
+        if (oppSeatsForStats.length) {
+          var oppLabel = document.createElement('div');
+          oppLabel.className = 'gameOverSection';
+          oppLabel.textContent = oppSeatsForStats[0].username || 'Opponent';
+          overlay.appendChild(oppLabel);
+          var oppStats = match.game.stats?.[oppSeatsForStats[0].seat] || {};
+          var oppLife = match.game.lifeBySeat?.[oppSeatsForStats[0].seat] || 0;
+          var oppItems = [[String(oppLife), 'Life'], [String(oppStats.creaturesKilled || 0), 'Kills'], [String(oppStats.damageDealt || 0), 'Damage']];
+          var oppRow = document.createElement('div');
+          oppRow.className = 'gameOverStats';
+          for (var oi = 0; oi < oppItems.length; oi++) {
+            var od = document.createElement('div'); od.className = 'gameOverStat';
+            od.innerHTML = '<div class="gameOverStatVal">' + oppItems[oi][0] + '</div><div class="gameOverStatLabel">' + oppItems[oi][1] + '</div>';
+            oppRow.appendChild(od);
+          }
+          overlay.appendChild(oppRow);
+        }
+
         var btns = document.createElement('div');
         btns.className = 'gameOverBtns';
         var btnAgain = document.createElement('button');
@@ -2249,7 +2288,12 @@ function getClientHtml() {
         btnMenu.className = 'btn';
         btnMenu.textContent = 'Main Menu';
         btnMenu.onclick = function() { exitMatchMode(); };
+        var btnDecks = document.createElement('button');
+        btnDecks.className = 'btn';
+        btnDecks.textContent = 'Change Decks';
+        btnDecks.onclick = function() { exitMatchMode(); switchTab('decks'); };
         btns.appendChild(btnAgain);
+        btns.appendChild(btnDecks);
         btns.appendChild(btnMenu);
         overlay.appendChild(btns);
 
@@ -2259,6 +2303,122 @@ function getClientHtml() {
     } else if (existingOverlay) {
       existingOverlay.remove();
     }
+
+    renderCombatLines();
+    renderEventLog(match);
+  }
+
+  function renderCombatLines() {
+    var existing = document.querySelector('#gameBoard .combatSvg');
+    if (existing) existing.remove();
+    if (state.combatMode !== 'selecting_blockers') return;
+    var pbs = state.pendingBlockers;
+    var anyBlocks = false;
+    for (var k in pbs) { if (pbs[k] && pbs[k].length) { anyBlocks = true; break; } }
+    if (!anyBlocks) return;
+    var board = document.getElementById('gameBoard');
+    if (!board) return;
+    var br = board.getBoundingClientRect();
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('class', 'combatSvg');
+    svg.setAttribute('width', br.width);
+    svg.setAttribute('height', br.height);
+    for (var atkId in pbs) {
+      var blockers = pbs[atkId];
+      if (!blockers || !blockers.length) continue;
+      var atkEl = document.querySelector('.cardWrap[data-card-id="' + atkId + '"]');
+      if (!atkEl) continue;
+      var atkRect = getGameBoardRelativeRect(atkEl);
+      var ax = atkRect.left + atkRect.width / 2;
+      var ay = atkRect.top + atkRect.height / 2;
+      for (var bi = 0; bi < blockers.length; bi++) {
+        var blkEl = document.querySelector('.cardWrap[data-card-id="' + blockers[bi] + '"]');
+        if (!blkEl) continue;
+        var blkRect = getGameBoardRelativeRect(blkEl);
+        var bx = blkRect.left + blkRect.width / 2;
+        var by = blkRect.top + blkRect.height / 2;
+        var line = document.createElementNS(svgNS, 'line');
+        line.setAttribute('x1', bx); line.setAttribute('y1', by);
+        line.setAttribute('x2', ax); line.setAttribute('y2', ay);
+        line.setAttribute('class', 'combatLine');
+        svg.appendChild(line);
+        var dot1 = document.createElementNS(svgNS, 'circle');
+        dot1.setAttribute('cx', bx); dot1.setAttribute('cy', by); dot1.setAttribute('r', 4);
+        dot1.setAttribute('class', 'combatLineDot');
+        svg.appendChild(dot1);
+        var dot2 = document.createElementNS(svgNS, 'circle');
+        dot2.setAttribute('cx', ax); dot2.setAttribute('cy', ay); dot2.setAttribute('r', 4);
+        dot2.setAttribute('class', 'combatLineDot');
+        svg.appendChild(dot2);
+      }
+    }
+    board.appendChild(svg);
+  }
+
+  function renderEventLog(match) {
+    var existing = document.querySelector('#gameBoard .eventLog');
+    if (existing) existing.remove();
+    if (!match?.log || !match.game || match.phase === 'lobby') return;
+    var board = document.getElementById('gameBoard');
+    if (!board) return;
+    var logDiv = document.createElement('div');
+    logDiv.className = 'eventLog' + (state.eventLogCollapsed ? ' collapsed' : '');
+    var title = document.createElement('div');
+    title.className = 'eventLogTitle';
+    title.textContent = 'Game Log';
+    logDiv.appendChild(title);
+    var toggle = document.createElement('button');
+    toggle.className = 'eventLogToggle';
+    toggle.textContent = state.eventLogCollapsed ? '+' : '-';
+    toggle.onclick = function(ev) { ev.stopPropagation(); state.eventLogCollapsed = !state.eventLogCollapsed; renderEventLog(match); };
+    logDiv.appendChild(toggle);
+    if (state.eventLogCollapsed) { logDiv.onclick = function() { state.eventLogCollapsed = false; renderEventLog(match); }; }
+    var playerName = function(seat) {
+      var p = (match.players || []).find(function(pl) { return pl.seat === seat; });
+      return p ? p.username : 'Player ' + seat;
+    };
+    var cName = function(cid) { return cardMeta(cid)?.name || cid; };
+    var displayTypes = {
+      PLAY: function(e) { return playerName(e.seat) + ' played ' + cName(e.cardId); },
+      CAST_SPELL: function(e) { return playerName(e.seat) + ' cast ' + cName(e.cardId); },
+      ATTACKERS_DECLARED: function(e) { return playerName(e.seat) + ' attacks with ' + (e.count || '?') + ' creature(s)'; },
+      COMBAT_RESOLVED: function() { return 'Combat resolved'; },
+      CREATURE_DIED: function(e) { return cName(e.cardId) + ' died'; },
+      SPELL_DAMAGE: function(e) { return playerName(e.seat) + ' took ' + e.damage + ' spell damage'; },
+      SPELL_DAMAGE_CREATURE: function(e) { return cName(e.target) + ' took ' + e.damage + ' damage'; },
+      SPELL_DESTROY: function(e) { return cName(e.target) + ' destroyed'; },
+      SPELL_EXILE: function(e) { return cName(e.target) + ' exiled'; },
+      SPELL_BOUNCE: function(e) { return cName(e.target) + ' bounced to hand'; },
+      SPELL_BUFF: function(e) { return cName(e.target) + ' got ' + (e.power >= 0 ? '+' : '') + e.power + '/' + (e.toughness >= 0 ? '+' : '') + e.toughness; },
+      SPELL_KEYWORD: function(e) { return cName(e.target) + ' gained ' + e.keyword; },
+      SPELL_GAIN_LIFE: function(e) { return playerName(e.seat) + ' gained ' + e.amount + ' life'; },
+      PLAYER_DAMAGE: function(e) { return playerName(e.seat) + ' took ' + e.damage + ' combat damage'; },
+      CREATE_TOKEN: function(e) { return playerName(e.seat) + ' created ' + (e.name || 'a token'); },
+      ACTIVATE: function(e) { return cName(e.cardId) + ' ability activated'; },
+      PLAYER_ELIMINATED: function(e) { return (e.by || 'Player') + ' eliminated'; },
+      CONCEDE: function(e) { return (e.by || 'Player') + ' conceded'; },
+      GAME_OVER: function(e) { return 'Game over' + (e.winnerName ? ' - ' + e.winnerName + ' wins!' : ''); },
+    };
+    var entries = [];
+    for (var li = match.log.length - 1; li >= 0 && entries.length < 25; li--) {
+      var le = match.log[li];
+      var fn = displayTypes[le.type];
+      if (fn) entries.push(fn(le));
+    }
+    for (var ei = 0; ei < entries.length; ei++) {
+      var entry = document.createElement('div');
+      entry.className = 'eventEntry';
+      entry.textContent = entries[ei];
+      logDiv.appendChild(entry);
+    }
+    if (!entries.length) {
+      var empty = document.createElement('div');
+      empty.className = 'eventEntry';
+      empty.textContent = 'No events yet.';
+      logDiv.appendChild(empty);
+    }
+    board.appendChild(logDiv);
   }
 
   async function refreshMatch() {
@@ -2804,6 +2964,12 @@ function getClientHtml() {
     var destRe = /destroy\\s+target\\s+(creature|permanent)/gi;
     var de;
     while ((de = destRe.exec(oracleText)) !== null) { effects.push({ type: 'destroy', targetType: de[1].toLowerCase() }); }
+    var exileRe = /exile\\s+target\\s+(creature|permanent)/gi;
+    var ex;
+    while ((ex = exileRe.exec(oracleText)) !== null) { effects.push({ type: 'exile', targetType: ex[1].toLowerCase() }); }
+    var bounceRe = /return\\s+target\\s+(creature|permanent)\\s+to\\s+its\\s+owner'?s\\s+hand/gi;
+    var bo;
+    while ((bo = bounceRe.exec(oracleText)) !== null) { effects.push({ type: 'bounce', targetType: bo[1].toLowerCase() }); }
     var drawRe = /draw\\s+(\\w+)\\s+cards?/gi;
     var dr;
     var wordToNum = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
@@ -2820,9 +2986,9 @@ function getClientHtml() {
     var treasureRe = /create\\s+(?:a|(\\d+))\\s+treasure\\s+tokens?/gi;
     var tr;
     while ((tr = treasureRe.exec(oracleText)) !== null) { effects.push({ type: 'createToken', tokenType: 'treasure', count: tr[1] ? parseInt(tr[1], 10) : 1 }); }
-    var creatureTokenRe = /create\\s+(?:a|(\\d+))\\s+(\\d+)\\/(\\d+)\\s+[\\w\\s]*?([\\w]+)\\s+creature\\s+tokens?/gi;
+    var creatureTokenRe = /create\\s+(?:a|(\\d+))\\s+(\\d+)\\/(\\d+)\\s+[\\w\\s]*?([\\w]+)\\s+creature\\s+tokens?(?:\\s+with\\s+([\\w\\s]+))?/gi;
     var ctr;
-    while ((ctr = creatureTokenRe.exec(oracleText)) !== null) { effects.push({ type: 'createToken', tokenType: 'creature', count: ctr[1] ? parseInt(ctr[1], 10) : 1, power: parseInt(ctr[2], 10), toughness: parseInt(ctr[3], 10), subtype: ctr[4] }); }
+    while ((ctr = creatureTokenRe.exec(oracleText)) !== null) { effects.push({ type: 'createToken', tokenType: 'creature', count: ctr[1] ? parseInt(ctr[1], 10) : 1, power: parseInt(ctr[2], 10), toughness: parseInt(ctr[3], 10), subtype: ctr[4], keywords: ctr[5] ? ctr[5].split(/\\s+and\\s+|\\s*,\\s*/) : [] }); }
     return effects;
   }
 
@@ -2831,6 +2997,8 @@ function getClientHtml() {
       var e = effects[i];
       if (e.type === 'damage' && (e.targetType === 'target creature' || e.targetType === 'target player' || e.targetType === 'any target')) return true;
       if (e.type === 'destroy') return true;
+      if (e.type === 'exile') return true;
+      if (e.type === 'bounce') return true;
       if (e.type === 'tempBuff') return true;
       if (e.type === 'tempKeyword') return true;
     }
@@ -2850,6 +3018,8 @@ function getClientHtml() {
         else if (e.targetType === 'target player') needsPlayer = true;
         else if (e.targetType === 'any target') { needsCreature = true; needsPlayer = true; }
       } else if (e.type === 'destroy') { needsCreature = true; }
+      else if (e.type === 'exile') { needsCreature = true; }
+      else if (e.type === 'bounce') { needsCreature = true; }
       else if (e.type === 'tempBuff') { needsCreature = true; }
       else if (e.type === 'tempKeyword') { needsCreature = true; }
     }
@@ -3409,7 +3579,7 @@ function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponent
         v: 1, matchId, format, createdAt: now, phase: "lobby",
         hostUserId: hostUser.id, readyByUserId: { [hostUser.id]: false },
         players: [{ userId: hostUser.id, username: hostUser.username, joinedAt: now, seat: 1 }],
-        game: { turn: 0, activePlayerSeat: 1, prioritySeat: 1, step: "main1", stack: [], zones: {}, lifeBySeat: {}, manaBySeat: {}, mulligansBySeat: {}, keptBySeat: {}, cardState: {}, combat: null, status: "playing", winner: null, losers: [], stats: {} },
+        game: { turn: 0, activePlayerSeat: 1, prioritySeat: 1, step: "main1", stack: [], zones: {}, lifeBySeat: {}, manaBySeat: {}, mulligansBySeat: {}, keptBySeat: {}, cardState: {}, combat: null, status: "playing", winner: null, losers: [], loserReasons: {}, stats: {} },
         decks: { 1: { deckId: hostDeck.id, format: hostDeck.format, name: hostDeck.name, commander: hostDeck.commander, cards: hostDeck.cards, cardMeta: hostDeck.cardMeta || {} } },
         botsBySeat: {},
         log: [{ t: now, type: "MATCH_CREATED", by: hostUser.username, opponentType: opponentType || "human" }],
@@ -3636,6 +3806,7 @@ function engineApplyAction(match, user, action) {
             if (!match.game.losers) match.game.losers = [];
             if (match.game.losers.indexOf(seat) < 0) {
                 match.game.losers.push(seat);
+                if (!match.game.loserReasons) match.game.loserReasons = {}; match.game.loserReasons[seat] = 'deck_out';
                 match.log.push({ t: Date.now(), type: "DECK_OUT", seat: seat });
                 engineCheckGameOver(match);
             }
@@ -3815,7 +3986,10 @@ function engineApplyAction(match, user, action) {
         if (match.game?.status === "finished") return { ok: false, error: "game is already over" };
         var seat = player.seat;
         if (!match.game.losers) match.game.losers = [];
-        if (match.game.losers.indexOf(seat) < 0) match.game.losers.push(seat);
+        if (match.game.losers.indexOf(seat) < 0) {
+            match.game.losers.push(seat);
+            if (!match.game.loserReasons) match.game.loserReasons = {}; match.game.loserReasons[seat] = 'concede';
+        }
         match.log.push({ t: Date.now(), type: "CONCEDE", by: user.username, seat: seat });
         engineCheckGameOver(match);
         return { ok: true, match };
@@ -3911,6 +4085,7 @@ function engineAdvanceTurn(match, opts) {
         if (!match.game.losers) match.game.losers = [];
         if (match.game.losers.indexOf(next) < 0) {
             match.game.losers.push(next);
+            if (!match.game.loserReasons) match.game.loserReasons = {}; match.game.loserReasons[next] = 'deck_out';
             match.log.push({ t: Date.now(), type: "DECK_OUT", seat: next });
             engineCheckGameOver(match);
         }
@@ -4269,6 +4444,21 @@ function engineCheckLethalDamage(match) {
             if (!cs) continue;
             var dmg = Number(cs.damage) || 0;
             var tough = engineGetCreatureToughness(match, seat, cid);
+            // State-based: creature with 0 or less toughness dies (e.g. from -N/-N debuff)
+            if (tough <= 0) {
+                if (engineHasKeyword(match, seat, cid, "Indestructible")) continue;
+                engineMoveCard(match, seat, "battlefield", "graveyard", cid);
+                if (!match.game.stats) match.game.stats = {};
+                var otherSeats0 = engineSeatOrder(match);
+                for (var ki0 = 0; ki0 < otherSeats0.length; ki0++) {
+                    if (otherSeats0[ki0] !== seat) {
+                        if (!match.game.stats[otherSeats0[ki0]]) match.game.stats[otherSeats0[ki0]] = { damageDealt: 0, creaturesKilled: 0 };
+                        match.game.stats[otherSeats0[ki0]].creaturesKilled = (match.game.stats[otherSeats0[ki0]].creaturesKilled || 0) + 1;
+                    }
+                }
+                match.log.push({ t: Date.now(), type: "CREATURE_DIED", seat: seat, cardId: cid, damage: dmg, toughness: tough });
+                continue;
+            }
             var isLethal = dmg >= tough && tough > 0;
             // Deathtouch: any damage from a Deathtouch source is lethal
             if (!isLethal && dmg > 0 && Array.isArray(cs.damageSourceIds)) {
@@ -4306,6 +4496,7 @@ function engineCheckGameOver(match) {
         if (match.game.losers.indexOf(s) >= 0) continue;
         if (match.game.lifeBySeat[s] != null && match.game.lifeBySeat[s] <= 0) {
             match.game.losers.push(s);
+            if (!match.game.loserReasons) match.game.loserReasons = {}; match.game.loserReasons[s] = 'life';
             var lp = (match.players || []).find(function(p) { return p.seat === s; });
             match.log.push({ t: Date.now(), type: "PLAYER_ELIMINATED", seat: s, by: lp ? lp.username : "seat " + s, reason: "life" });
         }
@@ -4319,6 +4510,7 @@ function engineCheckGameOver(match) {
             for (var cmdId in cdMap) {
                 if (cdMap[cmdId] >= 21) {
                     match.game.losers.push(cs);
+                    if (!match.game.loserReasons) match.game.loserReasons = {}; match.game.loserReasons[cs] = 'commander_damage';
                     var clp = (match.players || []).find(function(p) { return p.seat === cs; });
                     match.log.push({ t: Date.now(), type: "PLAYER_ELIMINATED", seat: cs, by: clp ? clp.username : "seat " + cs, reason: "commander_damage" });
                     break;
@@ -4390,6 +4582,18 @@ function engineParseSpellEffects(oracleText) {
     while ((de = destRe.exec(oracleText)) !== null) {
         effects.push({ type: 'destroy', targetType: de[1].toLowerCase() });
     }
+    // "exile target creature/permanent"
+    var exileRe = /exile\s+target\s+(creature|permanent)/gi;
+    var ex;
+    while ((ex = exileRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'exile', targetType: ex[1].toLowerCase() });
+    }
+    // "return target creature/permanent to its owner's hand"
+    var bounceRe = /return\s+target\s+(creature|permanent)\s+to\s+its\s+owner'?s\s+hand/gi;
+    var bo;
+    while ((bo = bounceRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'bounce', targetType: bo[1].toLowerCase() });
+    }
     // "draw N card(s)"
     var drawRe = /draw\s+(\w+)\s+cards?/gi;
     var dr;
@@ -4424,10 +4628,10 @@ function engineParseSpellEffects(oracleText) {
         effects.push({ type: 'createToken', tokenType: 'treasure', count: tr[1] ? parseInt(tr[1], 10) : 1 });
     }
     // "Create a/N P/T [type] creature token(s)"
-    var creatureTokenRe = /create\s+(?:a|(\d+))\s+(\d+)\/(\d+)\s+[\w\s]*?([\w]+)\s+creature\s+tokens?/gi;
+    var creatureTokenRe = /create\s+(?:a|(\d+))\s+(\d+)\/(\d+)\s+[\w\s]*?([\w]+)\s+creature\s+tokens?(?:\s+with\s+([\w\s]+))?/gi;
     var ctr;
     while ((ctr = creatureTokenRe.exec(oracleText)) !== null) {
-        effects.push({ type: 'createToken', tokenType: 'creature', count: ctr[1] ? parseInt(ctr[1], 10) : 1, power: parseInt(ctr[2], 10), toughness: parseInt(ctr[3], 10), subtype: ctr[4] });
+        effects.push({ type: 'createToken', tokenType: 'creature', count: ctr[1] ? parseInt(ctr[1], 10) : 1, power: parseInt(ctr[2], 10), toughness: parseInt(ctr[3], 10), subtype: ctr[4], keywords: ctr[5] ? ctr[5].split(/\s+and\s+|\s*,\s*/) : [] });
     }
     return effects;
 }
@@ -4437,6 +4641,8 @@ function engineEffectNeedsTarget(effects) {
         var e = effects[i];
         if (e.type === 'damage' && (e.targetType === 'target creature' || e.targetType === 'target player' || e.targetType === 'any target')) return true;
         if (e.type === 'destroy') return true;
+        if (e.type === 'exile') return true;
+        if (e.type === 'bounce') return true;
         if (e.type === 'tempBuff') return true;
         if (e.type === 'tempKeyword') return true;
     }
@@ -4491,6 +4697,7 @@ function engineApplyEffect(match, casterSeat, effect, targetId) {
             if (!match.game.losers) match.game.losers = [];
             if (match.game.losers.indexOf(casterSeat) < 0) {
                 match.game.losers.push(casterSeat);
+                if (!match.game.loserReasons) match.game.loserReasons = {}; match.game.loserReasons[casterSeat] = 'deck_out';
                 match.log.push({ t: Date.now(), type: "DECK_OUT", seat: casterSeat });
                 engineCheckGameOver(match);
             }
@@ -4505,6 +4712,8 @@ function engineApplyEffect(match, casterSeat, effect, targetId) {
             if (!match.game.tempBuffs) match.game.tempBuffs = [];
             match.game.tempBuffs.push({ cardId: targetId, power: effect.power, toughness: effect.toughness });
             match.log.push({ t: Date.now(), type: "SPELL_BUFF", target: targetId, power: effect.power, toughness: effect.toughness });
+            // Check if debuff killed the creature (toughness reduced to 0 or less)
+            if (effect.toughness < 0) engineCheckLethalDamage(match);
         }
     } else if (effect.type === 'tempKeyword') {
         if (targetId) {
@@ -4526,7 +4735,24 @@ function engineApplyEffect(match, casterSeat, effect, targetId) {
                     name: (effect.subtype || 'Creature') + ' Token',
                     typeLine: 'Token Creature \u2014 ' + (effect.subtype || 'Creature'),
                     power: effect.power || 1, toughness: effect.toughness || 1,
+                    keywords: (effect.keywords || []).map(function(k) { return k.trim().replace(/\b\w/g, function(c2) { return c2.toUpperCase(); }); }),
                 });
+            }
+        }
+    } else if (effect.type === 'exile') {
+        if (targetId) {
+            var exSeat = engineFindSeatForCard(match, targetId);
+            if (exSeat != null) {
+                engineMoveCard(match, exSeat, "battlefield", "exile", targetId);
+                match.log.push({ t: Date.now(), type: "SPELL_EXILE", target: targetId });
+            }
+        }
+    } else if (effect.type === 'bounce') {
+        if (targetId) {
+            var boSeat = engineFindSeatForCard(match, targetId);
+            if (boSeat != null) {
+                engineMoveCard(match, boSeat, "battlefield", "hand", targetId);
+                match.log.push({ t: Date.now(), type: "SPELL_BOUNCE", target: targetId });
             }
         }
     }
@@ -4661,6 +4887,21 @@ function engineBotTakeTurn(match, botPlayer) {
                     }
                 }
                 return bestDest;
+            }
+            if (eff.type === 'exile' || eff.type === 'bounce') {
+                // Pick strongest opponent creature (no Indestructible check — exile/bounce bypass it)
+                var bestRemoval = null; var bestRp = -1;
+                for (var si3 = 0; si3 < allSeats.length; si3++) {
+                    if (allSeats[si3] === seat) continue;
+                    var oBf3 = match.game.zones?.[allSeats[si3]]?.battlefield || [];
+                    for (var ci3 = 0; ci3 < oBf3.length; ci3++) {
+                        if (!engineIsCreature(match, allSeats[si3], oBf3[ci3])) continue;
+                        if (engineHasKeyword(match, allSeats[si3], oBf3[ci3], "Hexproof")) continue;
+                        var rp = engineGetCreaturePower(match, allSeats[si3], oBf3[ci3]);
+                        if (rp > bestRp) { bestRp = rp; bestRemoval = oBf3[ci3]; }
+                    }
+                }
+                return bestRemoval;
             }
             if (eff.type === 'tempBuff') {
                 // Pick own strongest creature
