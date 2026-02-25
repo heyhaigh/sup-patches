@@ -189,7 +189,8 @@ function getClientHtml() {
     .lifeIcon { font-size:16px; }
     .zoneRow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; position:relative; z-index:1; }
     .zoneBadge { padding:4px 8px; border-radius:8px; background:var(--w08); color:rgba(255,255,255,0.6); font-size:11px; font-weight:600; border:1px solid var(--w08); }
-    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:24px 10px 10px; min-height:60px; overflow:visible; }
+    .bfRow { flex:1; display:flex; gap:8px; padding:8px 10px; min-height:60px; overflow:visible; align-items:flex-end; }
+    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; min-height:40px; overflow:visible; }
     .bfArea .cardImg { width:72px; height:100px; border:1px solid var(--w15); border-radius:10px; }
     .bfArea .cardImg:hover { transform:translateY(-4px) scale(1.05); box-shadow:0 8px 20px rgba(0,0,0,0.3); }
     .turnBar { display:flex; align-items:center; justify-content:center; gap:16px; padding:8px 16px; background:var(--w06); border-top:1px solid var(--w08); border-bottom:1px solid var(--w08); flex:0 0 auto; }
@@ -307,6 +308,7 @@ function getClientHtml() {
     .lobbyTurnOrder .seatChip.me { border-color:rgba(11,116,255,0.3); background:rgba(11,116,255,0.08); color:#0a4db3; }
     .mySide { flex:1; display:flex; flex-direction:column; padding:0 16px 12px; min-height:0; gap:0; }
     .mySide .bfArea { align-items:flex-start; }
+    .mySide .bfRow { align-items:flex-start; }
     .handTray { display:flex; gap:10px; overflow-x:auto; padding:10px 8px; justify-content:center; background:var(--w06); border-radius:14px; border:1px solid var(--w08); margin-top:auto; flex:0 0 auto; }
     .handTray .cardImg { width:90px; height:126px; flex:0 0 auto; border:1px solid rgba(255,255,255,0.18); border-radius:10px; }
     .handTray .cardImg:hover { transform:translateY(-8px) scale(1.06); box-shadow:0 12px 28px rgba(0,0,0,0.35); }
@@ -322,7 +324,7 @@ function getClientHtml() {
     .tokenBadge { position:absolute; bottom:2px; left:50%; transform:translateX(-50%); background:rgba(245,158,11,0.9); color:#000; font-size:9px; font-weight:700; padding:2px 6px; border-radius:6px; white-space:nowrap; pointer-events:none; }
     .tokenWrap { position:relative; display:inline-block; }
     .tokenIndicator { position:absolute; top:2px; left:2px; background:rgba(245,158,11,0.85); color:#000; font-size:8px; font-weight:800; width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; pointer-events:none; }
-    .tokenTray { display:flex; gap:4px; align-items:center; padding:4px 8px; flex:0 0 auto; flex-wrap:wrap; justify-content:center; background:rgba(245,158,11,0.06); border-radius:8px; border:1px solid rgba(245,158,11,0.15); margin-top:4px; }
+    .tokenTray { display:flex; flex-direction:column; gap:4px; align-items:center; padding:6px 8px; flex:0 0 auto; justify-content:center; background:rgba(245,158,11,0.06); border-radius:8px; border:1px solid rgba(245,158,11,0.15); align-self:center; }
     .tokenTray .tokenCardWrap { position:relative; display:inline-flex; flex-direction:column; align-items:center; cursor:pointer; }
     .tokenTray .tokenCard { width:48px; height:67px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(20,20,30,0.85); border:1px solid rgba(245,158,11,0.3); }
     .tokenTray .tokenCard:hover { border-color:rgba(245,158,11,0.6); background:rgba(30,30,45,0.95); }
@@ -359,7 +361,9 @@ function getClientHtml() {
       .appRoot.matchActive .body { grid-template-columns:1fr; }
       .gameBoard { height:auto; min-height:100vh; border-radius:0; }
       .btn,.navBtn,.zoneBadge,.cardModalClose,.zoneBrowserClose,.inspectFloatClose { min-height:44px; min-width:44px; }
+      .bfRow { flex-wrap:wrap; }
       .bfArea .cardWrap .cardImg { width:60px; height:84px; }
+      .tokenTray { flex-direction:row; flex-wrap:wrap; align-self:auto; }
       .handTray { justify-content:flex-start; -webkit-overflow-scrolling:touch; }
       .handTray .cardImg { width:72px; height:100px; min-width:72px; flex:0 0 auto; }
       .turnBar { flex-wrap:wrap; gap:6px; padding:8px 10px; }
@@ -2101,10 +2105,6 @@ function getClientHtml() {
       tWrap.className = 'cardWrap tokenWrap';
       tWrap.dataset.cardId = id;
       tWrap.appendChild(img);
-      var tBadge = document.createElement('div');
-      tBadge.className = 'tokenBadge';
-      tBadge.textContent = c.name || 'Token';
-      tWrap.appendChild(tBadge);
       return tWrap;
     }
     return img;
@@ -2304,16 +2304,15 @@ function getClientHtml() {
         }
       }
     }
-    el.appendChild(bfArea);
+    // Wrap battlefield + tokens in a horizontal row
+    var bfRowEl = document.createElement('div');
+    bfRowEl.className = 'bfRow';
+    bfRowEl.appendChild(bfArea);
 
     // Token tray for non-creature tokens (Treasure, Food, Clue, etc.)
     if (tokenBf.length) {
       var tray = document.createElement('div');
       tray.className = 'tokenTray';
-      var trayLabel = document.createElement('span');
-      trayLabel.className = 'tokenTrayLabel';
-      trayLabel.textContent = 'Tokens';
-      tray.appendChild(trayLabel);
       // Group tokens by name for count badges
       var tokenGroups = {};
       for (var tgi = 0; tgi < tokenBf.length; tgi++) {
@@ -2341,8 +2340,9 @@ function getClientHtml() {
         })(tgIds);
         tray.appendChild(tcWrap);
       }
-      el.appendChild(tray);
+      bfRowEl.appendChild(tray);
     }
+    el.appendChild(bfRowEl);
 
     // Player seat targeting for spells (e.g., "target player" damage spells)
     if (state.targetingMode && !isViewer) {
@@ -2464,7 +2464,6 @@ function getClientHtml() {
       match?.game?.activePlayerSeat,
       (match?.game?.combat?.attackers ? Object.keys(match.game.combat.attackers).join(',') : ''),
       'h' + handCount,
-      'log' + (match?.log?.length || 0),
     ];
     for (var i = 0; i < bf.length; i++) {
       var s = cs[bf[i]];
@@ -2481,9 +2480,8 @@ function getClientHtml() {
     parts.push(state.selected?.id || 'n');
     var pa = state.pendingAttackers; for (var pk in pa) { if (pa[pk]) parts.push('pa' + pk); }
     var pb = state.pendingBlockers; for (var bk in pb) { if (pb[bk]) parts.push('pb' + bk + (Array.isArray(pb[bk]) ? pb[bk].join('.') : pb[bk])); }
-    var lib = z?.library; var hand = z?.hand; var gy = z?.graveyard; var ex = z?.exile;
+    var lib = z?.library; var gy = z?.graveyard; var ex = z?.exile;
     parts.push('l' + (Array.isArray(lib) ? lib.length : (lib?.count || 0)));
-    parts.push('h' + (Array.isArray(hand) ? hand.length : (hand?.count || 0)));
     parts.push('g' + (Array.isArray(gy) ? gy.length : 0));
     parts.push('e' + (Array.isArray(ex) ? ex.length : 0));
     return parts.join('|');
@@ -2501,6 +2499,17 @@ function getClientHtml() {
     const show = !!match && (match.phase === 'playing' || match.phase === 'finished' || match.phase === 'mulligan') && !!match.viewerSeat;
     $('#gamePanel').style.display = show ? '' : 'none';
     if (!show) return;
+
+    // During mulligan, skip heavy board rendering — overlay covers everything
+    if (match.phase === 'mulligan') {
+      var existingMulliganOverlay = document.querySelector('#gameBoard .mulliganOverlay');
+      if (!existingMulliganOverlay) {
+        var mulliganOverlay = renderMulliganOverlay(match);
+        document.getElementById('gameBoard').appendChild(mulliganOverlay);
+      }
+      updateMulliganOverlay(match);
+      return;
+    }
 
     const mySeat = match.viewerSeat;
     const step = match.game?.step || 'main1';
@@ -2636,17 +2645,9 @@ function getClientHtml() {
       else setSelected(state.selected);
     } else { setSelected(null); }
 
-    // Mulligan overlay
+    // Clean up mulligan overlay if we transitioned out of mulligan
     var existingMulliganOverlay = document.querySelector('#gameBoard .mulliganOverlay');
-    if (match.phase === 'mulligan') {
-      if (!existingMulliganOverlay) {
-        var mulliganOverlay = renderMulliganOverlay(match);
-        document.getElementById('gameBoard').appendChild(mulliganOverlay);
-      }
-      updateMulliganOverlay(match);
-    } else if (existingMulliganOverlay) {
-      existingMulliganOverlay.remove();
-    }
+    if (existingMulliganOverlay) existingMulliganOverlay.remove();
 
     // Game over overlay
     var existingOverlay = document.querySelector('#gameBoard .gameOverOverlay');
