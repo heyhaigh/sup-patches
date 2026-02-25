@@ -283,6 +283,8 @@ function getClientHtml() {
     .inspectFloat .inspectorTitle { font-weight:800; font-size:13px; color:#fff; margin-top:8px; }
     .inspectFloat .inspectorSub { font-size:11px; color:rgba(255,255,255,0.55); margin-top:4px; }
     .inspectFloat .btn { width:100%; margin-top:6px; font-size:11px; padding:6px 10px; }
+    .inspectFloatClose { position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:999px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; transition:background 120ms ease; padding:0; line-height:1; }
+    .inspectFloatClose:hover { background:rgba(255,255,255,0.2); color:#fff; }
     .zoneBrowserOverlay { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; animation:gameOverIn 0.3s ease; }
     .zoneBrowserContent { background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); max-width:600px; width:90vw; max-height:80vh; overflow:auto; padding:16px; position:relative; }
     .zoneBrowserTitle { font-size:16px; font-weight:700; margin:0 0 12px 0; }
@@ -302,7 +304,7 @@ function getClientHtml() {
       .cardModalImg { max-height:45vh; width:auto; margin:0 auto; display:block; }
       .appRoot.matchActive .body { grid-template-columns:1fr; }
       .gameBoard { height:auto; min-height:100vh; border-radius:0; }
-      .btn,.navBtn,.zoneBadge,.cardModalClose,.zoneBrowserClose { min-height:44px; min-width:44px; }
+      .btn,.navBtn,.zoneBadge,.cardModalClose,.zoneBrowserClose,.inspectFloatClose { min-height:44px; min-width:44px; }
       .bfArea .cardWrap .cardImg { width:60px; height:84px; }
       .handTray { justify-content:flex-start; -webkit-overflow-scrolling:touch; }
       .handTray .cardImg { width:72px; height:100px; min-width:72px; flex:0 0 auto; }
@@ -479,6 +481,7 @@ function getClientHtml() {
                 <div class="mySide" id="mySide"></div>
               </div>
               <div class="inspectFloat" id="inspectFloat">
+                <button class="inspectFloatClose" id="inspectFloatClose" aria-label="Close card preview">&times;</button>
                 <img id="inspectorImg" class="inspectorImg" width="180" height="252" decoding="async" />
                 <div id="inspectorTitle" class="inspectorTitle"></div>
                 <div id="inspectorSub" class="inspectorSub"></div>
@@ -2093,8 +2096,10 @@ function getClientHtml() {
 
             if (state.combatMode === 'selecting_attackers' && cardSeat === mySeat) {
               toggleAttacker(cardId);
+              setSelected(null);
             } else if (state.combatMode === 'selecting_blockers') {
               handleBlockerClick(cardId, cardSeat === mySeat);
+              setSelected(null);
             }
           };
           // Also forward clicks on the img inside
@@ -2781,9 +2786,10 @@ function getClientHtml() {
     $('#btnPlaySelected').onclick = playSelectedToBattlefield;
     $('#btnToGraveyard').onclick = moveSelectedToGraveyard;
     $('#btnInspect').onclick = () => { if (state.selected?.id) openCardModal(state.selected.id, state.selected.zone); };
+    $('#inspectFloatClose').onclick = () => setSelected(null);
     $('#cardModalClose').onclick = closeCardModal;
     $('#cardModal').onclick = (e) => { if (e.target === $('#cardModal')) closeCardModal(); };
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeCardModal(); setSelected(null); } });
     $('#btnCreateQsStandard').onclick = createQuickstartStandard;
     $('#btnCreateQsCommanderPopular').onclick = createQuickstartCommanderFromPopular;
     $('#btnQsCommanderSearch').onclick = quickstartCommanderSearch;
