@@ -1334,9 +1334,19 @@ function getClientHtml() {
       turnOrderEl.innerHTML = '';
     }
     const isReady = !!readyBy[state.user?.id];
-    $('#btnReady').textContent = isReady ? 'Unready' : 'Ready';
+    var allPlayersReady = (match.players || []).every(function(p) { return !!readyBy[p.userId]; });
+    var btnReady = $('#btnReady');
+    var btnStart = $('#btnStartGame');
+    btnReady.textContent = isReady ? 'Unready' : 'Ready';
+    if (allPlayersReady) {
+      btnReady.className = 'btn'; btnReady.style.width = '100%'; btnReady.style.marginTop = '10px';
+      btnStart.className = 'btn btnPrimary'; btnStart.style.background = '';
+    } else {
+      btnReady.className = 'btn btnPrimary'; btnReady.style.width = '100%'; btnReady.style.marginTop = '10px';
+      btnStart.className = 'btn'; btnStart.style.background = 'rgba(255,255,255,0.9)';
+    }
     const isHost = match.hostUserId === state.user?.id;
-    $('#btnStartGame').disabled = !isHost || match.phase !== 'lobby';
+    btnStart.disabled = !isHost || match.phase !== 'lobby';
     const me = (match.players || []).find(p => p.userId === state.user?.id);
     if (me && match.decks && match.decks[me.seat]) { const assigned = match.decks[me.seat].deckId; if (assigned) $('#assignDeckSelect').value = assigned; }
     const showMulligan = match.phase === 'mulligan' && !!match.viewerSeat;
