@@ -176,7 +176,7 @@ function getClientHtml() {
     .lifeIcon { font-size:16px; }
     .zoneRow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; position:relative; z-index:1; }
     .zoneBadge { padding:4px 8px; border-radius:8px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.6); font-size:11px; font-weight:600; border:1px solid rgba(255,255,255,0.08); }
-    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:10px; min-height:60px; }
+    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:10px; min-height:60px; overflow-y:auto; }
     .bfArea .cardImg { width:72px; height:100px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; }
     .bfArea .cardImg:hover { transform:translateY(-4px) scale(1.05); box-shadow:0 8px 20px rgba(0,0,0,0.3); }
     .turnBar { display:flex; align-items:center; justify-content:center; gap:16px; padding:8px 16px; background:rgba(255,255,255,0.06); border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08); flex:0 0 auto; }
@@ -1464,8 +1464,26 @@ function getClientHtml() {
     inspectItem.textContent = 'Inspect';
     inspectItem.onclick = function() { menu.remove(); openCardModal(cardId, zone); };
     menu.appendChild(inspectItem);
-    // Send to Graveyard (only for viewer's battlefield cards)
+    // Battlefield-only options for viewer's cards
     if (zone === 'battlefield' && seat === state.lastMatch?.viewerSeat) {
+      var ctxOracle = String(cardMeta(cardId)?.oracleText || '');
+      // Activate ability (e.g. Treasure sacrifice)
+      if (/sacrifice.*add.*mana/i.test(ctxOracle)) {
+        var divider0 = document.createElement('div');
+        divider0.className = 'ctxDivider';
+        menu.appendChild(divider0);
+        var actItem = document.createElement('div');
+        actItem.className = 'ctxItem';
+        actItem.textContent = 'Activate Ability';
+        actItem.onclick = async function() {
+          menu.remove();
+          var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'ACTIVATE_ABILITY', cardId: cardId } });
+          if (!res.ok) { toast('Activate failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+          toast((cardMeta(cardId)?.name || 'Card') + ' ability activated!', { type: 'success', ms: 1500 });
+          await refreshMatch(); setSelected(null);
+        };
+        menu.appendChild(actItem);
+      }
       var divider = document.createElement('div');
       divider.className = 'ctxDivider';
       menu.appendChild(divider);
@@ -1768,10 +1786,11 @@ function getClientHtml() {
     const options = opts || {};
     const c = cardMeta(id); const img = document.createElement('img');
     img.className = 'cardImg'; img.src = c?.imageSmall || c?.imageNormal || ''; img.alt = c?.name || id;
-    if (!img.src && c?.isToken) {
+    var isTokenCard = c?.isToken || (typeof id === 'string' && id.indexOf('tok_') === 0);
+    if (!img.src && isTokenCard) {
       img.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
       img.style.borderRadius = '10px';
-      img.alt = c.name || 'Token';
+      img.alt = c?.name || 'Token';
     }
     img.width = options.w || 64; img.height = options.h || 90;
     img.decoding = 'async';
@@ -4929,6 +4948,19 @@ function engineBotTakeTurn(match, botPlayer) {
     match.game.manaBySeat[seat] = mana;
 
     const getCmc = (id) => Number(engineBotCardMeta(match, seat, id).cmc) || 0;
+
+    // Bot uses Treasures for extra mana if needed
+    var treasuresOnBf = bf.filter(function(id) {
+        var m = engineCardMeta(match, seat, id);
+        return m && /sacrifice.*add.*mana/i.test(m.oracleText || '');
+    });
+    var cheapestInHand = hand.length ? Math.min.apply(null, hand.map(getCmc)) : 999;
+    while (treasuresOnBf.length && mana.current < cheapestInHand) {
+        var tid = treasuresOnBf.shift();
+        engineActivateAbility(match, seat, tid, String(engineCardMeta(match, seat, tid)?.oracleText || ''));
+        match.log.push({ t: Date.now(), type: "ACTIVATE", by: "bot", seat: seat, cardId: tid, ability: 'sacrifice_for_mana' });
+    }
+
     const affordable = hand.filter(id => getCmc(id) <= mana.current);
 
     if (!affordable.length || (diff === "easy" && sup.random.integer(0, 6) < 1)) {
