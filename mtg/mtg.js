@@ -167,16 +167,18 @@ function getClientHtml() {
     .oppSide.multi .seatPanel { flex:1; min-width:140px; }
     .oppSide.multi .bfArea { min-height:40px; }
     .oppSide.multi .bfArea .cardImg { width:52px; height:72px; }
-    .seatPanel { display:flex; flex-direction:column; flex:1; min-height:0; border-radius:10px; padding:6px 8px; position:relative; overflow:hidden; }
+    .seatPanel { display:flex; flex-direction:column; flex:1; min-height:0; border-radius:10px; padding:6px 8px; position:relative; overflow:visible; }
     .seatPanel.lowHealth::before { content:''; position:absolute; inset:0; border-radius:10px; background:rgba(220,38,38,0.08); animation:lowHealthPulse 2.5s ease-in-out infinite; pointer-events:none; z-index:0; }
     @keyframes lowHealthPulse { 0%,100% { background:rgba(220,38,38,0.04); } 50% { background:rgba(220,38,38,0.14); } }
+    @keyframes victoryPulse { 0%,100%{background:rgba(34,197,94,0.03)} 50%{background:rgba(34,197,94,0.10)} }
+    .gameOverOverlay.victoryPulse::before { content:''; position:absolute; inset:0; background:rgba(34,197,94,0.05); animation:victoryPulse 2.5s ease-in-out infinite; pointer-events:none; z-index:0; }
     .seatBar { display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative; z-index:1; }
     .seatName { font-weight:800; font-size:14px; color:rgba(255,255,255,0.85); }
     .lifeBadge { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,0.12); color:#fff; font-size:13px; font-weight:700; border:1px solid var(--w15); }
     .lifeIcon { font-size:16px; }
     .zoneRow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; position:relative; z-index:1; }
     .zoneBadge { padding:4px 8px; border-radius:8px; background:var(--w08); color:rgba(255,255,255,0.6); font-size:11px; font-weight:600; border:1px solid var(--w08); }
-    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:10px; min-height:60px; overflow-y:auto; }
+    .bfArea { flex:1; display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; justify-content:center; padding:24px 10px 10px; min-height:60px; overflow:visible; }
     .bfArea .cardImg { width:72px; height:100px; border:1px solid var(--w15); border-radius:10px; }
     .bfArea .cardImg:hover { transform:translateY(-4px) scale(1.05); box-shadow:0 8px 20px rgba(0,0,0,0.3); }
     .turnBar { display:flex; align-items:center; justify-content:center; gap:16px; padding:8px 16px; background:var(--w06); border-top:1px solid var(--w08); border-bottom:1px solid var(--w08); flex:0 0 auto; }
@@ -298,6 +300,14 @@ function getClientHtml() {
     .tokenBadge { position:absolute; bottom:2px; left:50%; transform:translateX(-50%); background:rgba(245,158,11,0.9); color:#000; font-size:9px; font-weight:700; padding:2px 6px; border-radius:6px; white-space:nowrap; pointer-events:none; }
     .tokenWrap { position:relative; display:inline-block; }
     .tokenIndicator { position:absolute; top:2px; left:2px; background:rgba(245,158,11,0.85); color:#000; font-size:8px; font-weight:800; width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; pointer-events:none; }
+    .tokenTray { display:flex; gap:4px; align-items:center; padding:4px 8px; flex:0 0 auto; flex-wrap:wrap; justify-content:center; background:rgba(245,158,11,0.06); border-radius:8px; border:1px solid rgba(245,158,11,0.15); margin-top:4px; }
+    .tokenTray .tokenCardWrap { position:relative; display:inline-flex; flex-direction:column; align-items:center; cursor:pointer; }
+    .tokenTray .tokenCard { width:48px; height:67px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(20,20,30,0.85); border:1px solid rgba(245,158,11,0.3); }
+    .tokenTray .tokenCard:hover { border-color:rgba(245,158,11,0.6); background:rgba(30,30,45,0.95); }
+    .tokenTray .tokenEmoji { font-size:24px; line-height:1; }
+    .tokenTray .tokenLabel { font-size:8px; color:rgba(255,255,255,0.6); font-weight:700; margin-top:2px; text-align:center; max-width:46px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tokenTray .tokenCount { position:absolute; top:-4px; right:-4px; background:rgba(245,158,11,0.85); color:#000; font-size:9px; font-weight:800; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; }
+    .tokenTrayLabel { font-size:9px; font-weight:700; color:rgba(245,158,11,0.6); text-transform:uppercase; letter-spacing:0.04em; }
     .inspectFloatClose:hover { background:rgba(255,255,255,0.2); color:#fff; }
     .zoneBrowserOverlay { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; animation:gameOverIn 0.3s ease; }
     .zoneBrowserContent { background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); max-width:600px; width:90vw; max-height:80vh; overflow:auto; padding:16px; position:relative; }
@@ -1449,9 +1459,29 @@ function getClientHtml() {
     var activateBtn = $('#btnActivate');
     if (state.selected.zone === 'battlefield' && state.selected.seat === state.lastMatch?.viewerSeat) {
       var selOracle = String(cardMeta(state.selected.id)?.oracleText || '');
+      var selTypeLine = String(cardMeta(state.selected.id)?.typeLine || '').toLowerCase();
       var hasActivatable = /sacrifice.*add.*mana/i.test(selOracle);
+      // Class enchantment level-up
+      if (selTypeLine.includes('class')) {
+        var selClassState = state.lastMatch?.game?.cardState?.[state.selected.id];
+        var selClassLvl = (selClassState && selClassState.classLevel) || 1;
+        if (selClassLvl < 3) {
+          var selNextLvl = selClassLvl + 1;
+          var selLvlPattern = /((?:\\{[^}]+\\})+)\\s*:\\s*Level\\s+(\\d+)/gi;
+          var selLvlMatch; var selLvlCost = null;
+          while ((selLvlMatch = selLvlPattern.exec(selOracle)) !== null) {
+            if (parseInt(selLvlMatch[2]) === selNextLvl) { selLvlCost = selLvlMatch[1]; break; }
+          }
+          if (selLvlCost) {
+            hasActivatable = true;
+            activateBtn.textContent = 'Level Up to ' + selNextLvl + ' (' + selLvlCost.replace(/\\{/g, '').replace(/\\}/g, ' ').trim() + ')';
+          }
+        }
+      } else {
+        activateBtn.textContent = 'Activate ability';
+      }
       activateBtn.style.display = hasActivatable ? '' : 'none';
-      activateBtn.disabled = false;
+      activateBtn.disabled = !hasActivatable;
     } else {
       activateBtn.style.display = 'none';
     }
@@ -1475,6 +1505,36 @@ function getClientHtml() {
     // Battlefield-only options for viewer's cards
     if (zone === 'battlefield' && seat === state.lastMatch?.viewerSeat) {
       var ctxOracle = String(cardMeta(cardId)?.oracleText || '');
+      // Class enchantment level-up
+      var ctxTypeLine = String(cardMeta(cardId)?.typeLine || '').toLowerCase();
+      if (ctxTypeLine.includes('class')) {
+        var ctxClassState = state.lastMatch?.game?.cardState?.[cardId];
+        var ctxClassLevel = (ctxClassState && ctxClassState.classLevel) || 1;
+        if (ctxClassLevel < 3) {
+          var ctxNextLvl = ctxClassLevel + 1;
+          var ctxLvlPattern = /((?:\\{[^}]+\\})+)\\s*:\\s*Level\\s+(\\d+)/gi;
+          var ctxLvlMatch; var ctxLvlCost = null;
+          while ((ctxLvlMatch = ctxLvlPattern.exec(ctxOracle)) !== null) {
+            if (parseInt(ctxLvlMatch[2]) === ctxNextLvl) { ctxLvlCost = ctxLvlMatch[1]; break; }
+          }
+          if (ctxLvlCost) {
+            var dividerLvl = document.createElement('div');
+            dividerLvl.className = 'ctxDivider';
+            menu.appendChild(dividerLvl);
+            var lvlItem = document.createElement('div');
+            lvlItem.className = 'ctxItem';
+            lvlItem.textContent = 'Level Up to ' + ctxNextLvl + ' (' + ctxLvlCost.replace(/\\{/g, '').replace(/\\}/g, ' ').trim() + ')';
+            lvlItem.onclick = async function() {
+              menu.remove();
+              var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'ACTIVATE_ABILITY', cardId: cardId } });
+              if (!res.ok) { toast('Level up failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+              toast((cardMeta(cardId)?.name || 'Card') + ' leveled up!', { type: 'success', ms: 1500 });
+              await refreshMatch(); setSelected(null);
+            };
+            menu.appendChild(lvlItem);
+          }
+        }
+      }
       // Activate ability (e.g. Treasure sacrifice)
       if (/sacrifice.*add.*mana/i.test(ctxOracle)) {
         var divider0 = document.createElement('div');
@@ -1796,9 +1856,20 @@ function getClientHtml() {
     img.className = 'cardImg'; img.src = c?.imageSmall || c?.imageNormal || ''; img.alt = c?.name || id;
     var isTokenCard = c?.isToken || (typeof id === 'string' && id.indexOf('tok_') === 0);
     if (!img.src && isTokenCard) {
-      img.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+      var tokenName = (c?.name || 'Token').toLowerCase();
+      var tokenEmoji = String.fromCodePoint(0x2B50);
+      if (tokenName.includes('treasure')) tokenEmoji = String.fromCodePoint(0x1FA99);
+      else if (tokenName.includes('food')) tokenEmoji = String.fromCodePoint(0x1F356);
+      else if (tokenName.includes('clue')) tokenEmoji = String.fromCodePoint(0x1F50D);
+      else if (tokenName.includes('blood')) tokenEmoji = String.fromCodePoint(0x1FA78);
+      else if (tokenName.includes('map')) tokenEmoji = String.fromCodePoint(0x1F5FA);
+      var tLabel = c?.name || 'Token';
+      img.style.background = 'rgba(20,20,30,0.85)';
       img.style.borderRadius = '10px';
-      img.alt = c?.name || 'Token';
+      img.style.border = '1px solid rgba(245,158,11,0.3)';
+      img.style.objectFit = 'none';
+      img.alt = tLabel;
+      img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="90"><text x="50%" y="40%" dominant-baseline="central" text-anchor="middle" font-size="32">' + tokenEmoji + '</text><text x="50%" y="72%" dominant-baseline="central" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.6)" font-weight="700" font-family="system-ui">' + tLabel + '</text></svg>');
     }
     img.width = options.w || 64; img.height = options.h || 90;
     img.decoding = 'async';
@@ -2021,15 +2092,27 @@ function getClientHtml() {
     for (var abi = 0; abi < visibleBf.length; abi++) {
       auraMap[visibleBf[abi]] = clientGetAuraBuffs(visibleBf[abi], match);
     }
-    if (visibleBf.length) {
-      for (var bfi = 0; bfi < visibleBf.length; bfi++) {
-        var id = visibleBf[bfi];
+    // Partition into main battlefield cards and non-creature tokens
+    var mainBf = []; var tokenBf = [];
+    for (var pi = 0; pi < visibleBf.length; pi++) {
+      var pid = visibleBf[pi];
+      var pMeta = cardMeta(pid);
+      var pType = String(pMeta?.typeLine || '').toLowerCase();
+      if (pMeta?.isToken && !pType.includes('creature')) {
+        tokenBf.push(pid);
+      } else {
+        mainBf.push(pid);
+      }
+    }
+    if (mainBf.length) {
+      for (var bfi = 0; bfi < mainBf.length; bfi++) {
+        var id = mainBf[bfi];
         var cs = match?.game?.cardState?.[id] || null;
         var isAtk = !!combatAttackers[id] || !!state.pendingAttackers[id];
         var cardEl = renderCardImg(id, { zone: 'battlefield', seat, w: 72, h: 100, lazy: !isViewer, cardState: cs, isAttacking: isAtk, match: match, meta: cardMeta(id), buffMap: buffMap, auraMap: auraMap });
         bfArea.appendChild(cardEl);
       }
-    } else {
+    } else if (!tokenBf.length) {
       bfArea.innerHTML = '<div class="emptyZone">No permanents</div>';
     }
     // Apply targeting mode CSS classes
@@ -2085,6 +2168,44 @@ function getClientHtml() {
       }
     }
     el.appendChild(bfArea);
+
+    // Token tray for non-creature tokens (Treasure, Food, Clue, etc.)
+    if (tokenBf.length) {
+      var tray = document.createElement('div');
+      tray.className = 'tokenTray';
+      var trayLabel = document.createElement('span');
+      trayLabel.className = 'tokenTrayLabel';
+      trayLabel.textContent = 'Tokens';
+      tray.appendChild(trayLabel);
+      // Group tokens by name for count badges
+      var tokenGroups = {};
+      for (var tgi = 0; tgi < tokenBf.length; tgi++) {
+        var tgId = tokenBf[tgi];
+        var tgName = cardMeta(tgId)?.name || 'Token';
+        if (!tokenGroups[tgName]) tokenGroups[tgName] = [];
+        tokenGroups[tgName].push(tgId);
+      }
+      for (var tgKey in tokenGroups) {
+        var tgIds = tokenGroups[tgKey];
+        var repId = tgIds[0];
+        var tcWrap = document.createElement('div');
+        tcWrap.className = 'tokenCardWrap';
+        tcWrap.dataset.cardId = repId;
+        var tcCard = renderCardImg(repId, { zone: 'battlefield', seat, w: 48, h: 67, lazy: !isViewer, cardState: match?.game?.cardState?.[repId] || null, match: match, meta: cardMeta(repId) });
+        tcWrap.appendChild(tcCard);
+        if (tgIds.length >= 2) {
+          var tcCount = document.createElement('div');
+          tcCount.className = 'tokenCount';
+          tcCount.textContent = String(tgIds.length);
+          tcWrap.appendChild(tcCount);
+        }
+        (function(capturedIds) {
+          tcWrap.onclick = function() { showCardContextMenu({ preventDefault: function(){}, clientX: tcWrap.getBoundingClientRect().right, clientY: tcWrap.getBoundingClientRect().top }, capturedIds[0], 'battlefield', seat); };
+        })(tgIds);
+        tray.appendChild(tcWrap);
+      }
+      el.appendChild(tray);
+    }
 
     // Player seat targeting for spells (e.g., "target player" damage spells)
     if (state.targetingMode && !isViewer) {
@@ -2174,11 +2295,9 @@ function getClientHtml() {
       + '<div class="turnInfo">' + (isMyTurn ? '<span class="turnHighlight">Your turn</span>' : escapeHtml(activeName) + "'s turn") + '</div>'
       + phaseHtml
       + turnOrderHtml
-      + '<button id="btnGameDraw" class="btn">Draw</button>'
       + buttonsHtml
       + '<button id="btnConcede" class="btn" style="color:rgba(239,68,68,0.7);border-color:rgba(239,68,68,0.2);background:transparent;margin-left:auto;">Concede</button>';
 
-    bar.querySelector('#btnGameDraw').onclick = drawDebug;
     var endTurnBtn = bar.querySelector('#btnGameEndTurn');
     if (endTurnBtn) endTurnBtn.onclick = endTurn;
     var goToCombatBtn = bar.querySelector('#btnGoToCombat');
@@ -2381,8 +2500,8 @@ function getClientHtml() {
     if (match.game?.status === 'finished') {
       if (!existingOverlay) {
         var overlay = document.createElement('div');
-        overlay.className = 'gameOverOverlay';
         var isVictory = match.game.winner === match.viewerSeat;
+        overlay.className = 'gameOverOverlay' + (isVictory ? ' victoryPulse' : '');
         var titleEl = document.createElement('div');
         titleEl.className = 'gameOverTitle ' + (isVictory ? 'victory' : 'defeat');
         titleEl.textContent = isVictory ? 'VICTORY' : 'DEFEAT';
@@ -2550,6 +2669,14 @@ function getClientHtml() {
     var displayTypes = {
       PLAY: function(e) { return playerName(e.seat) + ' played ' + cName(e.cardId); },
       CAST_SPELL: function(e) { return playerName(e.seat) + ' cast ' + cName(e.cardId); },
+      BOT_PLAY: function(e) { return playerName(e.seat) + ' played ' + cName(e.cardId); },
+      BOT_CAST_SPELL: function(e) { return playerName(e.seat) + ' cast ' + cName(e.cardId); },
+      BOT_PASS: function(e) { return playerName(e.seat) + ' passed'; },
+      TURN_START: function(e) { return 'Turn ' + (e.turn || '?') + ' - ' + playerName(e.seat); },
+      DRAW: function(e) { return (e.by || 'Player') + ' drew ' + (e.n || 1) + ' card(s)'; },
+      SPELL_DRAW: function(e) { return playerName(e.seat) + ' drew ' + (e.amount || 1) + ' card(s)'; },
+      BLOCKERS_DECLARED: function(e) { return playerName(e.seat) + ' blocks with ' + (e.count || 0) + ' creature(s)'; },
+      COMBAT_SKIPPED: function(e) { return playerName(e.seat) + ' skipped combat'; },
       ATTACKERS_DECLARED: function(e) { return playerName(e.seat) + ' attacks with ' + (e.count || '?') + ' creature(s)'; },
       COMBAT_RESOLVED: function() { return 'Combat resolved'; },
       CREATURE_DIED: function(e) { return cName(e.cardId) + ' died'; },
@@ -2564,7 +2691,9 @@ function getClientHtml() {
       PLAYER_DAMAGE: function(e) { return playerName(e.seat) + ' took ' + e.damage + ' combat damage'; },
       CREATE_TOKEN: function(e) { return playerName(e.seat) + ' created ' + (e.name || 'a token'); },
       ACTIVATE: function(e) { return cName(e.cardId) + ' ability activated'; },
+      LIFELINK: function(e) { return playerName(e.seat) + ' gained ' + e.amount + ' life (lifelink)'; },
       PLAYER_ELIMINATED: function(e) { return (e.by || 'Player') + ' eliminated'; },
+      DECK_OUT: function(e) { return playerName(e.seat) + ' ran out of cards'; },
       CONCEDE: function(e) { return (e.by || 'Player') + ' conceded'; },
       GAME_OVER: function(e) { return 'Game over' + (e.winnerName ? ' - ' + e.winnerName + ' wins!' : ''); },
     };
@@ -4986,6 +5115,38 @@ function engineApplyEffect(match, casterSeat, effect, targetId) {
 }
 
 function engineActivateAbility(match, seat, cardId, oracleText) {
+    // Class enchantment: level up
+    var typeLine = String(engineCardMeta(match, seat, cardId)?.typeLine || '');
+    if (/class/i.test(typeLine)) {
+        if (!match.game.cardState) match.game.cardState = {};
+        if (!match.game.cardState[cardId]) match.game.cardState[cardId] = {};
+        var currentLevel = match.game.cardState[cardId].classLevel || 1;
+        if (currentLevel >= 3) return { ok: false, error: "Already at max level" };
+        var nextLevel = currentLevel + 1;
+        var levelPattern = /((?:\{[^}]+\})+)\s*:\s*Level\s+(\d+)/gi;
+        var levelMatch; var nextCost = null;
+        while ((levelMatch = levelPattern.exec(oracleText)) !== null) {
+            if (parseInt(levelMatch[2]) === nextLevel) { nextCost = levelMatch[1]; break; }
+        }
+        if (!nextCost) return { ok: false, error: "No level " + nextLevel + " ability found" };
+        // Parse total mana cost from symbols like {2}{R}
+        var totalMana = 0;
+        var costSymbols = nextCost.match(/\{[^}]+\}/g) || [];
+        for (var ci = 0; ci < costSymbols.length; ci++) {
+            var sym = costSymbols[ci].replace(/[{}]/g, '');
+            var numVal = parseInt(sym);
+            if (!isNaN(numVal)) { totalMana += numVal; }
+            else { totalMana += 1; } // Colored mana symbol costs 1 from generic pool
+        }
+        if (!match.game.manaBySeat) match.game.manaBySeat = {};
+        if (!match.game.manaBySeat[seat]) match.game.manaBySeat[seat] = { current: 0, max: 0 };
+        if (match.game.manaBySeat[seat].current < totalMana) {
+            return { ok: false, error: "Not enough mana (" + totalMana + " needed, have " + match.game.manaBySeat[seat].current + ")" };
+        }
+        match.game.manaBySeat[seat].current -= totalMana;
+        match.game.cardState[cardId].classLevel = nextLevel;
+        return { ok: true, ability: 'class_level_up', newLevel: nextLevel };
+    }
     // Treasure: "Sacrifice this artifact: Add one mana"
     if (/sacrifice\s+this\s+artifact.*add\s+one\s+mana/i.test(oracleText)) {
         engineMoveCard(match, seat, "battlefield", "graveyard", cardId);
