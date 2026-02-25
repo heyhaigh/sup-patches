@@ -201,6 +201,8 @@ function getClientHtml() {
     .cardImg.unplayable { opacity:0.45; filter:saturate(0.3); }
     .cardImg.unplayable:hover { opacity:0.6; filter:saturate(0.5); }
     .botThinking { display:flex; align-items:center; gap:8px; padding:8px 16px; background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.25); border-radius:10px; color:rgba(255,255,255,0.85); font-size:13px; font-weight:600; }
+    .reconnectBanner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:8px; padding:12px 24px; background:rgba(220,38,38,0.15); border:1px solid rgba(220,38,38,0.3); border-radius:12px; color:rgba(255,255,255,0.9); font-size:14px; font-weight:600; z-index:50; backdrop-filter:blur(6px); }
+    .reconnectBanner .spinner { width:16px; height:16px; border:2px solid rgba(220,38,38,0.3); border-top-color:#ef4444; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
     .cardWrap { position:relative; display:inline-block; flex:0 0 auto; }
     .ptBadge { position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.82); color:#fff; font-size:10px; font-weight:800; padding:2px 5px; border-radius:5px; line-height:1; pointer-events:none; border:1px solid rgba(255,255,255,0.2); font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; z-index:2; }
     .ptBadge .ptDamaged { color:#ef4444; }
@@ -341,6 +343,9 @@ function getClientHtml() {
       .zoneBrowserGrid { grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); gap:6px; }
       .handMana .hmGem { width:20px; height:20px; }
       .handMana .hmText { font-size:12px; }
+      .eventLogToggle { min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center; }
+      .eventLog { width:180px; max-height:140px; font-size:10px; }
+      .lifeBadge { min-height:36px; padding:6px 10px; }
     }
   </style>
 
@@ -1731,7 +1736,13 @@ function getClientHtml() {
     if (options.lazy) img.loading = 'lazy';
     img.dataset.cardId = id;
     if (state.selected?.id === id && state.selected?.zone === options.zone && state.selected?.seat === options.seat) img.classList.add('selected');
-    img.onclick = () => setSelected({ id, zone: options.zone || null, seat: options.seat || null });
+    img.onclick = () => {
+      if (state.selected?.id === id && state.selected?.zone === (options.zone || null) && state.selected?.seat === (options.seat || null)) {
+        setSelected(null);
+      } else {
+        setSelected({ id, zone: options.zone || null, seat: options.seat || null });
+      }
+    };
     if (options.onDblClick) img.ondblclick = options.onDblClick;
     else img.ondblclick = () => openCardModal(id, options.zone || null);
     // Wrap battlefield creatures with P/T badge + summoning sickness + tapped + attacking
@@ -2446,15 +2457,34 @@ function getClientHtml() {
 
   async function refreshMatch() {
     if (!state.activeMatchId) { $('#matchDebug').textContent = 'No active match.'; renderLobby(null); $('#gamePanel').style.display = 'none'; return; }
-    const match = await supExec('api_getMatch', { matchId: state.activeMatchId });
-    state.lastMatch = match; await hydrateCardIndexForMatch(match);
-    if (!state.lastLogIndex && match?.log?.length && match.phase === 'playing') {
-      state.lastLogIndex = match.log.length;
+    try {
+      var reconnBanner = document.querySelector('.reconnectBanner');
+      const match = await supExec('api_getMatch', { matchId: state.activeMatchId });
+      // Clear reconnection banner on success
+      if (reconnBanner) reconnBanner.remove();
+      state._reconnectAttempts = 0;
+      state.lastMatch = match; await hydrateCardIndexForMatch(match);
+      if (!state.lastLogIndex && match?.log?.length && match.phase === 'playing') {
+        state.lastLogIndex = match.log.length;
+      }
+      processAnimationEvents(match);
+      $('#matchDebug').textContent = JSON.stringify(match, null, 2);
+      renderLobby(match); renderGame(match);
+      if (document.querySelector('.appRoot').classList.contains('matchActive')) updateMatchBar();
+    } catch (err) {
+      // Show reconnection banner and retry
+      if (!state._reconnectAttempts) state._reconnectAttempts = 0;
+      state._reconnectAttempts++;
+      var board = document.getElementById('gameBoard');
+      if (board && !document.querySelector('.reconnectBanner')) {
+        var banner = document.createElement('div');
+        banner.className = 'reconnectBanner';
+        banner.innerHTML = '<span class="spinner"></span> Reconnecting\\u2026';
+        board.appendChild(banner);
+      }
+      var delay = Math.min(5000, 1000 * Math.pow(1.5, state._reconnectAttempts - 1));
+      setTimeout(function() { refreshMatch(); }, delay);
     }
-    processAnimationEvents(match);
-    $('#matchDebug').textContent = JSON.stringify(match, null, 2);
-    renderLobby(match); renderGame(match);
-    if (document.querySelector('.appRoot').classList.contains('matchActive')) updateMatchBar();
   }
 
   async function drawDebug() {
