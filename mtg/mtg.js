@@ -1745,6 +1745,13 @@ function getClientHtml() {
     };
     if (options.onDblClick) img.ondblclick = options.onDblClick;
     else img.ondblclick = () => openCardModal(id, options.zone || null);
+    // Long-press on mobile opens card modal
+    var lpTimer = null;
+    img.addEventListener('touchstart', function(ev) {
+      lpTimer = setTimeout(function() { lpTimer = null; openCardModal(id, options.zone || null); }, 500);
+    }, { passive: true });
+    img.addEventListener('touchend', function() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }, { passive: true });
+    img.addEventListener('touchmove', function() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }, { passive: true });
     // Wrap battlefield creatures with P/T badge + summoning sickness + tapped + attacking
     if (options.zone === 'battlefield' && clientCardType(id) === 'creature') {
       var wrap = document.createElement('div');
