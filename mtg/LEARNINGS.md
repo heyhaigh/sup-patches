@@ -183,6 +183,55 @@ When multiple concurrent users share the same `sup.global` cache:
 - **Monitoring**: If match creation slows down again, check `Object.keys(sup.global.get("mtg.scryfallCache.v2") || {}).length` in the browser console to see if the cache is consistently hitting the 400 cap.
 - **Orphaned v1 cache**: The old `mtg.scryfallCache.v1` key still exists in `sup.global`. It will persist until manually cleaned up or the platform garbage-collects it. Not harmful but wastes storage.
 
+## Creature Lethal Damage: Multi-Source Kill Bug
+
+### The Bug
+
+When two damage sources target the same creature in a single turn (e.g. ability deals 3, spell deals 4 to a 5/6), the game log shows "Creature died" but the creature stays on the battlefield with full health (damage resets to 0, stats display as base P/T).
+
+### Why It Was Hard to Find
+
+Static analysis of the code showed each function working correctly in isolation:
+- `engineApplyEffect` adds damage to `cardState[targetId].damage` ✓
+- `engineCheckLethalDamage` checks `damage >= toughness` and calls `engineMoveCard` ✓
+- `engineMoveCard` splices card from battlefield array and pushes to graveyard ✓
+- `api_matchAction` saves match via `sup.chat.set` after action ✓
+
+The damage accumulation path (3 + 4 = 7 >= 6 → lethal) looks correct on paper. The actual root cause was likely one of:
+1. **Missing `engineCheckLethalDamage` calls** — `ACTIVATE_ABILITY` handler never called it, so damage dealt by abilities wasn't checked for lethality
+2. **`sup.chat` eventual consistency** — back-to-back `set` then `get` might return stale data, causing the second action to read the match without the first action's damage
+3. **`engineMoveCard` failure not caught** — `engineCheckLethalDamage` logged `CREATURE_DIED` without checking if the zone transfer succeeded
+
+### Key Insight: Defensive Layers > Precise Root Cause
+
+When the exact root cause involves platform behavior (`sup.chat` consistency) that can't be debugged directly, add defensive safety nets:
+
+### Fixes Applied
+
+1. **Safety net in `api_matchAction`** — EVERY action now runs `engineCheckLethalDamage` + `engineCheckGameOver` before `sup.chat.set`, regardless of which handler processed the action. This catches accumulated damage even if individual handlers miss it.
+
+2. **`ACTIVATE_ABILITY` calls `engineCheckLethalDamage`** — class level-ups, treasure sacrifice, or any future ability that deals damage will now trigger death checks.
+
+3. **`engineCheckLethalDamage` verifies `engineMoveCard` result** — only logs `CREATURE_DIED` if the move actually succeeded. Prevents phantom death entries that confuse players.
+
+### Architecture Lesson: State-Based Actions Need a Guaranteed Check Point
+
+In MTG, "state-based actions" (SBA) like creature death from lethal damage should be checked after **every game state change**, not just after specific known actions. The engine had `engineCheckLethalDamage` calls sprinkled in individual handlers (spell resolution, combat damage, debuffs), but missed:
+- Ability activations
+- Any future action type that might deal damage
+- Edge cases with accumulated damage across separate API calls
+
+The fix puts the SBA check at the `api_matchAction` level — the single gateway for ALL state changes — so no action can ever skip it.
+
+### Debugging Technique: Display State vs Log State
+
+The key clue was: creature shows **5/6 with no damage styling** on the battlefield, but log says "took 3 damage," "took 4 damage," "died." This means:
+- `cardState.damage` was 0 at render time (not 7)
+- The CREATURE_DIED log entry existed but the zone transfer didn't stick
+- Either the damage was never persisted, or the creature was moved then somehow restored
+
+When investigating state bugs, always compare **what the display renders** (which reads current state) against **what the log says happened** (which is append-only). A mismatch means the state was modified after the log was written.
+
 ## Workflow: Always Commit & Push After Plan Completion
 
 Every completed phase/plan improvement must be committed and pushed to git before considering it done. Don't wait for the user to ask — commit and push immediately after verifying the changes (syntax check, etc.).
