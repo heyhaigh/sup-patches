@@ -313,6 +313,10 @@ function getClientHtml() {
     .zoneBrowserGrid .cardImg { width:100%; height:auto; aspect-ratio:5/7; border-radius:8px; cursor:pointer; transition:transform 120ms ease; border:1px solid var(--border); }
     .zoneBrowserGrid .cardImg:hover { transform:scale(1.05); }
     .zoneBrowserEmpty { color:var(--muted); font-size:13px; font-style:italic; text-align:center; padding:20px 0; }
+    .cardContextMenu { position:fixed; z-index:100; background:rgba(15,15,25,0.95); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.15); border-radius:8px; padding:4px 0; min-width:160px; box-shadow:0 8px 24px rgba(0,0,0,0.4); }
+    .cardContextMenu .ctxItem { padding:8px 14px; color:rgba(255,255,255,0.8); font-size:12px; cursor:pointer; display:flex; align-items:center; gap:8px; }
+    .cardContextMenu .ctxItem:hover { background:rgba(255,255,255,0.08); }
+    .cardContextMenu .ctxDivider { height:1px; background:rgba(255,255,255,0.08); margin:4px 0; }
     .eventLog { position:absolute; bottom:0; left:0; width:200px; max-height:180px; overflow-y:auto; z-index:18; background:rgba(10,10,20,0.85); backdrop-filter:blur(4px); border-top-right-radius:10px; border:1px solid rgba(255,255,255,0.1); padding:6px 8px; font-size:11px; }
     .eventLog.collapsed { max-height:26px; overflow:hidden; cursor:pointer; }
     .eventLogToggle { position:absolute; top:3px; right:6px; background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; font-size:11px; padding:2px 4px; }
@@ -1447,6 +1451,44 @@ function getClientHtml() {
     $$('.cardImg[data-card-id="' + state.selected.id + '"]').forEach(el => el.classList.add('selected'));
   }
 
+  function showCardContextMenu(ev, cardId, zone, seat) {
+    ev.preventDefault();
+    // Remove any existing context menu
+    var existing = document.querySelector('.cardContextMenu');
+    if (existing) existing.remove();
+    var menu = document.createElement('div');
+    menu.className = 'cardContextMenu';
+    // Inspect option (always available)
+    var inspectItem = document.createElement('div');
+    inspectItem.className = 'ctxItem';
+    inspectItem.textContent = 'Inspect';
+    inspectItem.onclick = function() { menu.remove(); openCardModal(cardId, zone); };
+    menu.appendChild(inspectItem);
+    // Send to Graveyard (only for viewer's battlefield cards)
+    if (zone === 'battlefield' && seat === state.lastMatch?.viewerSeat) {
+      var divider = document.createElement('div');
+      divider.className = 'ctxDivider';
+      menu.appendChild(divider);
+      var gyItem = document.createElement('div');
+      gyItem.className = 'ctxItem';
+      gyItem.textContent = 'Send to Graveyard';
+      gyItem.onclick = async function() {
+        menu.remove();
+        var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'MOVE_BATTLEFIELD_TO_GRAVEYARD', cardId: cardId } });
+        if (!res.ok) { toast('Move failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+        await refreshMatch(); setSelected(null);
+      };
+      menu.appendChild(gyItem);
+    }
+    // Position at click location
+    menu.style.left = Math.min(ev.clientX, window.innerWidth - 180) + 'px';
+    menu.style.top = Math.min(ev.clientY, window.innerHeight - 100) + 'px';
+    document.body.appendChild(menu);
+    // Close on click outside
+    var closeMenu = function(e) { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', closeMenu); } };
+    setTimeout(function() { document.addEventListener('click', closeMenu); }, 0);
+  }
+
   function openCardModal(cardId, zone) {
     const c = cardMeta(cardId);
     if (!c) return;
@@ -1752,6 +1794,8 @@ function getClientHtml() {
     }, { passive: true });
     img.addEventListener('touchend', function() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }, { passive: true });
     img.addEventListener('touchmove', function() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }, { passive: true });
+    // Right-click context menu
+    img.oncontextmenu = function(ev) { showCardContextMenu(ev, id, options.zone || null, options.seat || null); };
     // Wrap battlefield creatures with P/T badge + summoning sickness + tapped + attacking
     if (options.zone === 'battlefield' && clientCardType(id) === 'creature') {
       var wrap = document.createElement('div');
