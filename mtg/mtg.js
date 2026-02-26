@@ -415,6 +415,21 @@ function getClientHtml() {
     .cardContextMenu .ctxItem { padding:8px 14px; color:rgba(255,255,255,0.8); font-size:12px; cursor:pointer; display:flex; align-items:center; gap:8px; }
     .cardContextMenu .ctxItem:hover { background:var(--w08); }
     .cardContextMenu .ctxDivider { height:1px; background:var(--w08); margin:4px 0; }
+    .seatPanel.eliminated { opacity:0.4; filter:grayscale(0.5); pointer-events:none; }
+    .deathOverlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:56px; z-index:5; opacity:0.75; pointer-events:none; text-shadow:0 2px 12px rgba(0,0,0,0.6); }
+    .cardWrap.staged { outline:2px dashed #fbbf24; outline-offset:2px; animation:stagePulse 1.2s ease-in-out infinite; }
+    @keyframes stagePulse { 0%,100%{outline-color:rgba(251,191,36,0.8);} 50%{outline-color:rgba(251,191,36,0.3);} }
+    .discardOverlay { position:absolute; inset:0; z-index:50; background:rgba(0,0,0,0.85); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; animation:gameOverIn 0.3s ease; }
+    .discardPanel { background:rgba(30,30,50,0.95); border:1px solid rgba(239,68,68,0.4); border-radius:16px; padding:20px; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; }
+    .discardPanel h3 { color:#fff; font-size:16px; margin:0 0 4px 0; }
+    .discardPanel .discardSub { color:rgba(255,255,255,0.6); font-size:12px; margin:0 0 14px 0; }
+    .discardGrid { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:14px; }
+    .discardGrid .discardCard { width:80px; height:112px; border-radius:6px; overflow:hidden; cursor:pointer; border:2px solid transparent; transition:all 120ms ease; position:relative; }
+    .discardGrid .discardCard img { width:100%; height:100%; object-fit:cover; }
+    .discardGrid .discardCard:hover { transform:translateY(-4px); }
+    .discardGrid .discardCard.discardSelected { border-color:#ef4444; box-shadow:0 0 12px rgba(239,68,68,0.4); }
+    .discardGrid .discardCard.discardSelected::after { content:'X'; position:absolute; top:2px; right:4px; color:#ef4444; font-weight:900; font-size:14px; text-shadow:0 1px 3px rgba(0,0,0,0.8); }
+    .discardActions { display:flex; gap:8px; justify-content:center; }
     .eventLog { position:absolute; bottom:0; left:0; width:200px; max-height:180px; overflow-y:auto; z-index:18; background:rgba(10,10,20,0.85); backdrop-filter:blur(4px); border-top-right-radius:10px; border:1px solid var(--w1); padding:6px 8px; font-size:11px; }
     .eventLog.collapsed { max-height:26px; overflow:hidden; cursor:pointer; }
     .eventLogToggle { position:absolute; top:3px; right:6px; background:none; border:none; color:rgba(255,255,255,0.4); cursor:pointer; font-size:11px; padding:2px 4px; }
@@ -634,6 +649,7 @@ function getClientHtml() {
                 <button id="btnPlaySelected" class="btn btnPrimary">Play to battlefield</button>
                 <button id="btnToGraveyard" class="btn">To graveyard</button>
                 <button id="btnActivate" class="btn" style="display:none;">Activate ability</button>
+                <button id="btnEquip" class="btn" style="display:none;">Equip</button>
                 <button id="btnInspect" class="btn btnGhost">Inspect</button>
               </div>
             </div>
@@ -794,7 +810,7 @@ function getClientHtml() {
     targetingMode: null, modalSelection: null,
     lastLogIndex: 0, eventLogCollapsed: false,
     _suppressTurnOverlay: false, prevHandCounts: {}, oppHandHighlight: {},
-    _atkTargetPending: null, quickMode: true,
+    _atkTargetPending: null, _atkStagedCreatures: [], discardSelection: null, quickMode: true,
   };
 
   /* Tab buttons work immediately via event delegation — no boot() needed */
@@ -1723,6 +1739,7 @@ function getClientHtml() {
       img.src = ''; title.textContent = ''; sub.textContent = '';
       $('#btnPlaySelected').disabled = true; $('#btnToGraveyard').disabled = true; $('#btnInspect').disabled = true;
       $('#btnActivate').style.display = 'none';
+      $('#btnEquip').style.display = 'none';
       return;
     }
     if (panel) panel.classList.add('visible');
@@ -1769,6 +1786,21 @@ function getClientHtml() {
       activateBtn.disabled = !hasActivatable;
     } else {
       activateBtn.style.display = 'none';
+    }
+    // Equip button for equipment on battlefield
+    var equipBtn = $('#btnEquip');
+    if (state.selected.zone === 'battlefield' && state.selected.seat === state.lastMatch?.viewerSeat && clientIsEquipment(state.selected.id)) {
+      var selEqCost = clientParseEquipCost(state.selected.id);
+      if (selEqCost !== null) {
+        var eqMana = state.lastMatch?.game?.manaBySeat?.[state.lastMatch.viewerSeat] || { current: 0 };
+        equipBtn.textContent = 'Equip (' + selEqCost + ' mana)';
+        equipBtn.style.display = '';
+        equipBtn.disabled = eqMana.current < selEqCost;
+      } else {
+        equipBtn.style.display = 'none';
+      }
+    } else {
+      equipBtn.style.display = 'none';
     }
     $('#btnInspect').disabled = !c;
     $$('.cardImg[data-card-id="' + state.selected.id + '"]').forEach(el => el.classList.add('selected'));
@@ -1993,8 +2025,9 @@ function getClientHtml() {
   function clientCanPlay(id, match) {
     if (!match || match.game?.status === 'finished') return false;
     var mySeat = match.viewerSeat;
-    // Block all plays while scry is pending — must resolve first
+    // Block all plays while scry or discard is pending — must resolve first
     if (match.game?.scryPending && match.game.scryPending.seat === mySeat) return false;
+    if (match.game?.discardPending && match.game.discardPending.seat === mySeat) return false;
     var mana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
     var cmc = Number(cardMeta(id)?.cmc) || 0;
     if (cmc > mana.current) return false;
@@ -2478,9 +2511,11 @@ function getClientHtml() {
     const isActive = match?.game?.activePlayerSeat === seat;
 
     const el = document.createElement('div');
+    var losers = match?.game?.losers || [];
+    var isDead = losers.indexOf(seat) >= 0;
     var critThresh = match.format === 'commander' ? GC.LIFE_CRIT_CMD : GC.LIFE_CRIT_STD;
     var lifeCritical = life != null && life <= critThresh && life > 0;
-    el.className = 'seatPanel' + (isActive ? ' active' : '') + (lifeCritical && !isViewer ? ' lowHealth' : '');
+    el.className = 'seatPanel' + (isActive ? ' active' : '') + (lifeCritical && !isViewer ? ' lowHealth' : '') + (isDead ? ' eliminated' : '');
     el.dataset.seat = seat;
 
     const bar = document.createElement('div');
@@ -2647,6 +2682,9 @@ function getClientHtml() {
         if (state.combatMode === 'selecting_attackers' && isViewer) {
           if (state.pendingAttackers[cid]) {
             cWrap.classList.add('attacking');
+          } else if (state._atkStagedCreatures.indexOf(cid) >= 0) {
+            cWrap.classList.add('attacking');
+            cWrap.classList.add('staged');
           } else if (eligibleAtk.indexOf(cid) >= 0) {
             cWrap.classList.add('canAttack');
           } else if (clientCardType(cid) === 'creature') {
@@ -2675,6 +2713,13 @@ function getClientHtml() {
     var bfRowEl = document.createElement('div');
     bfRowEl.className = 'bfRow';
     bfRowEl.appendChild(bfArea);
+    if (isDead) {
+      bfArea.style.position = 'relative';
+      var skullOv = document.createElement('div');
+      skullOv.className = 'deathOverlay';
+      skullOv.textContent = '\u2620';
+      bfArea.appendChild(skullOv);
+    }
 
     // Token tray for non-creature tokens (Treasure, Food, Clue, etc.)
     if (tokenBf.length) {
@@ -2726,13 +2771,10 @@ function getClientHtml() {
       }
     }
 
-    // Attack target selection highlighting (Commander multiplayer)
-    if (state._atkTargetPending && !isViewer) {
-      var losers = match?.game?.losers || [];
-      if (losers.indexOf(seat) < 0) {
-        el.classList.add('atkTargetable');
-        (function(capturedSeat) { el.onclick = function(e) { e.stopPropagation(); selectAttackTarget(capturedSeat); }; })(seat);
-      }
+    // Attack target selection highlighting (Commander multiplayer — batch select)
+    if (state._atkStagedCreatures.length > 0 && !isViewer && !isDead) {
+      el.classList.add('atkTargetable');
+      (function(capturedSeat) { el.onclick = function(e) { e.stopPropagation(); selectAttackTarget(capturedSeat); }; })(seat);
     }
 
     return el;
@@ -2796,6 +2838,8 @@ function getClientHtml() {
         + '<button id="btnGameEndTurn" class="btn">End Turn</button>';
     } else if (step === 'main2' && isMyTurn) {
       buttonsHtml = '<button id="btnGameEndTurn" class="btn btnPrimary">End Turn</button>';
+    } else if (step === 'discard' && match.game?.discardPending?.seat === mySeat) {
+      buttonsHtml = '<div class="combatBanner" style="background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.3);color:rgba(239,68,68,0.9);">Discard to hand size \u2014 select cards in the overlay above</div>';
     } else if (step === 'combat_blockers' && !isMyPriority) {
       var defenderPlayer = (match.players || []).find(function(p) { return p.seat === match.game?.prioritySeat; });
       var defName = defenderPlayer ? (defenderPlayer.isBot ? defenderPlayer.username : ('@' + defenderPlayer.username)) : 'Opponent';
@@ -2904,6 +2948,7 @@ function getClientHtml() {
     } else if (step === 'main1' || step === 'main2') {
       state.combatMode = null;
       state.pendingAttackers = {};
+      state._atkStagedCreatures = [];
       state.pendingBlockers = {};
       state.selectedBlocker = null;
     }
@@ -2913,7 +2958,7 @@ function getClientHtml() {
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const oppSeats = seats.filter(s => s !== mySeat);
 
-    var oppCacheKey = oppSeats.map(function(s) { return buildSeatCacheKey(match, s); }).join('||') + '||atk:' + (state._atkTargetPending || 'n');
+    var oppCacheKey = oppSeats.map(function(s) { return buildSeatCacheKey(match, s); }).join('||') + '||atk:' + (state._atkStagedCreatures.length || 'n');
     const oppEl = $('#oppSide');
     if (oppEl.dataset.cacheKey !== oppCacheKey) {
       oppEl.innerHTML = '';
@@ -2947,14 +2992,14 @@ function getClientHtml() {
       }, 0);
     }
 
-    // Attack target selection banner (Commander multiplayer)
+    // Attack target selection banner (Commander multiplayer — batch select)
     var existingATB = document.querySelector('#gameBoard .atkTargetBanner');
     if (existingATB) existingATB.remove();
-    if (state._atkTargetPending) {
-      var atkCardName = cardMeta(state._atkTargetPending)?.name || 'Creature';
+    if (state._atkStagedCreatures.length > 0) {
+      var stagedN = state._atkStagedCreatures.length;
       var atbDiv = document.createElement('div');
       atbDiv.className = 'atkTargetBanner';
-      atbDiv.innerHTML = '\u2694\uFE0F Select which player <strong>' + escapeHtml(atkCardName) + '</strong> attacks'
+      atbDiv.innerHTML = '\u2694\uFE0F Click an opponent to assign <strong>' + stagedN + ' creature' + (stagedN > 1 ? 's' : '') + '</strong> to attack'
         + '<button id="btnAtkTargetCancel" class="btn" style="margin-left:8px;padding:4px 12px;font-size:12px;">Cancel</button>';
       var turnBarEl2 = document.getElementById('turnBar');
       if (turnBarEl2 && turnBarEl2.parentNode) turnBarEl2.parentNode.insertBefore(atbDiv, turnBarEl2.nextSibling);
@@ -3168,6 +3213,11 @@ function getClientHtml() {
       showScryOverlay(match);
     }
 
+    // Discard overlay: show if discardPending is set for viewer
+    if (match.game?.discardPending && match.game.discardPending.seat === mySeat) {
+      showDiscardOverlay(match);
+    }
+
     renderCombatLines();
     renderEventLog(match);
   }
@@ -3252,6 +3302,8 @@ function getClientHtml() {
       BOT_PLAY: function(e) { return playerName(e.seat) + ' played ' + cName(e.cardId); },
       BOT_CAST_SPELL: function(e) { return playerName(e.seat) + ' cast ' + cName(e.cardId); },
       BOT_PASS: function(e) { return playerName(e.seat) + ' passed'; },
+      DISCARD: function(e) { return playerName(e.seat) + ' discarded ' + (e.count || 1) + ' card(s) to hand size'; },
+      BOT_DISCARD: function(e) { return playerName(e.seat) + ' discarded ' + (e.count || 1) + ' card(s) to hand size'; },
       TURN_START: function(e) { return 'Turn ' + (e.turn || '?') + ' - ' + playerName(e.seat); },
       DRAW: function(e) { return (e.by || 'Player') + ' drew ' + (e.n || 1) + ' card(s)'; },
       SPELL_DRAW: function(e) { return playerName(e.seat) + ' drew ' + (e.amount || 1) + ' card(s)'; },
@@ -3352,11 +3404,18 @@ function getClientHtml() {
     // Clear combat UI state
     state.combatMode = null;
     state.pendingAttackers = {};
+    state._atkStagedCreatures = [];
     state.pendingBlockers = {};
     state.selectedBlocker = null;
     const hasBot = (state.lastMatch?.players || []).some(p => p.isBot);
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'END_TURN' } });
     if (!res.ok) { toast('End turn failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    // Check if discard is required before turn advances
+    await refreshMatch();
+    if (state.lastMatch?.game?.discardPending) {
+      // Discard overlay will be shown by renderGame
+      return;
+    }
     if (hasBot) {
       var botPlayers = (state.lastMatch?.players || []).filter(function(p) { return p.isBot; });
 
@@ -3448,11 +3507,16 @@ function getClientHtml() {
                 })(se.entry, revealDelay, botName);
                 revealDelay += revealGap;
               } else if (se.kind === 'attack') {
-                (function(entry, delay, name) {
+                (function(entry, delay, name, match) {
                   setTimeout(function() {
-                    showBotAttackOverlay(name, entry.count);
+                    var tgtName = '';
+                    if (entry.targetSeat) {
+                      var tgtP = (match?.players || []).find(function(p) { return p.seat === entry.targetSeat; });
+                      tgtName = tgtP ? (tgtP.isBot ? tgtP.username : ('@' + tgtP.username)) : '';
+                    }
+                    showBotAttackOverlay(name, entry.count, tgtName);
                   }, delay);
-                })(se.entry, revealDelay, botName);
+                })(se.entry, revealDelay, botName, state.lastMatch);
                 revealDelay += 1400;
               } else if (se.kind === 'pass') {
                 (function(entry, delay, name) {
@@ -3485,6 +3549,7 @@ function getClientHtml() {
     if (!res.ok) { toast('Go to combat failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     state.combatMode = 'selecting_attackers';
     state.pendingAttackers = {};
+    state._atkStagedCreatures = [];
     await refreshMatch();
   }
 
@@ -3611,37 +3676,45 @@ function getClientHtml() {
     if (!state.lastMatch) return;
     var eligible = getCombatEligibleAttackers(state.lastMatch);
     if (eligible.indexOf(cardId) < 0) return;
+    // If already assigned to a target, unassign
     if (state.pendingAttackers[cardId]) {
       delete state.pendingAttackers[cardId];
-      state._atkTargetPending = null;
+      renderGame(state.lastMatch);
+      return;
+    }
+    // If already staged, unstage
+    var idx = state._atkStagedCreatures.indexOf(cardId);
+    if (idx >= 0) {
+      state._atkStagedCreatures.splice(idx, 1);
+      renderGame(state.lastMatch);
+      return;
+    }
+    var mySeat = state.lastMatch.viewerSeat;
+    var losers = state.lastMatch.game?.losers || [];
+    var opponents = (state.lastMatch.players || []).filter(function(p) {
+      return p.seat !== mySeat && losers.indexOf(p.seat) < 0;
+    });
+    if (opponents.length <= 1) {
+      // Standard or only 1 opponent — auto-target
+      if (opponents.length) state.pendingAttackers[cardId] = opponents[0].seat;
     } else {
-      var mySeat = state.lastMatch.viewerSeat;
-      var losers = state.lastMatch.game?.losers || [];
-      var opponents = (state.lastMatch.players || []).filter(function(p) {
-        return p.seat !== mySeat && losers.indexOf(p.seat) < 0;
-      });
-      if (opponents.length <= 1) {
-        // Standard or only 1 opponent — auto-target
-        if (opponents.length) state.pendingAttackers[cardId] = opponents[0].seat;
-      } else {
-        // Commander multiplayer — enter attack target selection
-        state._atkTargetPending = cardId;
-        renderGame(state.lastMatch);
-        return;
-      }
+      // Commander multiplayer — stage creature for batch target assignment
+      state._atkStagedCreatures.push(cardId);
     }
     renderGame(state.lastMatch);
   }
 
   function selectAttackTarget(seat) {
-    if (!state._atkTargetPending) return;
-    state.pendingAttackers[state._atkTargetPending] = seat;
-    state._atkTargetPending = null;
+    if (!state._atkStagedCreatures.length) return;
+    for (var i = 0; i < state._atkStagedCreatures.length; i++) {
+      state.pendingAttackers[state._atkStagedCreatures[i]] = seat;
+    }
+    state._atkStagedCreatures = [];
     renderGame(state.lastMatch);
   }
 
   function cancelAttackTarget() {
-    state._atkTargetPending = null;
+    state._atkStagedCreatures = [];
     renderGame(state.lastMatch);
   }
 
@@ -3801,7 +3874,7 @@ function getClientHtml() {
     setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 1500);
   }
 
-  function showBotAttackOverlay(botName, count) {
+  function showBotAttackOverlay(botName, count, targetName) {
     var board = document.getElementById('gameBoard');
     if (!board) return;
     var existing = board.querySelector('.turnOverlay');
@@ -3810,7 +3883,7 @@ function getClientHtml() {
     overlay.className = 'turnOverlay botAttackOverlay';
     var text = document.createElement('div');
     text.className = 'turnOverlayText';
-    text.textContent = (botName || 'Bot') + ' attacks' + (count > 1 ? ' with ' + count + ' creatures!' : '!');
+    text.textContent = (botName || 'Bot') + ' attacks' + (targetName ? ' ' + targetName : '') + (count > 1 ? ' with ' + count + ' creatures!' : '!');
     overlay.appendChild(text);
     board.appendChild(overlay);
     setTimeout(function() {
@@ -4406,6 +4479,77 @@ function getClientHtml() {
     await refreshMatch();
   }
 
+  function showDiscardOverlay(match) {
+    var dp = match?.game?.discardPending;
+    if (!dp || dp.seat !== match?.viewerSeat) return;
+    var hand = match?.game?.zones?.[dp.seat]?.hand || [];
+    if (!hand.length) return;
+    var board = document.getElementById('gameBoard');
+    if (!board) return;
+    var existing = board.querySelector('.discardOverlay');
+    if (existing) existing.remove();
+    if (!state.discardSelection) state.discardSelection = [];
+    var overlay = document.createElement('div');
+    overlay.className = 'discardOverlay';
+    var panel = document.createElement('div');
+    panel.className = 'discardPanel';
+    panel.innerHTML = '<h3>Discard to Hand Size</h3>'
+      + '<div class="discardSub">You have ' + hand.length + ' cards in hand. Maximum is 7. Select <strong>' + dp.mustDiscard + '</strong> card' + (dp.mustDiscard > 1 ? 's' : '') + ' to discard.</div>';
+    var grid = document.createElement('div');
+    grid.className = 'discardGrid';
+    for (var di = 0; di < hand.length; di++) {
+      var cid = hand[di];
+      var c = cardMeta(cid);
+      var card = document.createElement('div');
+      card.className = 'discardCard' + (state.discardSelection.indexOf(cid) >= 0 ? ' discardSelected' : '');
+      card.dataset.cardId = cid;
+      var cImg = document.createElement('img');
+      cImg.src = c?.imageSmall || c?.imageNormal || '';
+      cImg.alt = c?.name || cid;
+      card.appendChild(cImg);
+      (function(capturedId) {
+        card.onclick = function() {
+          var idx = state.discardSelection.indexOf(capturedId);
+          if (idx >= 0) {
+            state.discardSelection.splice(idx, 1);
+          } else if (state.discardSelection.length < dp.mustDiscard) {
+            state.discardSelection.push(capturedId);
+          }
+          showDiscardOverlay(match);
+        };
+      })(cid);
+      grid.appendChild(card);
+    }
+    panel.appendChild(grid);
+    var counter = document.createElement('div');
+    counter.style.cssText = 'text-align:center;color:rgba(255,255,255,0.6);font-size:12px;margin-bottom:8px;';
+    counter.textContent = 'Selected: ' + state.discardSelection.length + ' / ' + dp.mustDiscard;
+    panel.appendChild(counter);
+    var actions = document.createElement('div');
+    actions.className = 'discardActions';
+    var confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btnPrimary';
+    confirmBtn.textContent = 'Confirm Discard';
+    confirmBtn.disabled = state.discardSelection.length !== dp.mustDiscard;
+    confirmBtn.onclick = function() { confirmDiscard(); };
+    actions.appendChild(confirmBtn);
+    panel.appendChild(actions);
+    overlay.appendChild(panel);
+    board.appendChild(overlay);
+  }
+
+  async function confirmDiscard() {
+    if (!state.activeMatchId || !state.discardSelection?.length) return;
+    var res = await supExec('api_matchAction', {
+      matchId: state.activeMatchId,
+      action: { type: 'DISCARD_TO_HANDSIZE', cardIds: state.discardSelection }
+    });
+    if (!res.ok) { toast('Discard failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    state.discardSelection = null;
+    toast('Discarded to hand size.', { type: 'info', ms: 1500 });
+    await refreshMatch();
+  }
+
   async function activateAbility() {
     var sel = state.selected;
     if (!state.activeMatchId || !sel?.id) return;
@@ -4458,6 +4602,12 @@ function getClientHtml() {
     $('#btnPlaySelected').onclick = playSelectedToBattlefield;
     $('#btnToGraveyard').onclick = moveSelectedToGraveyard;
     $('#btnActivate').onclick = activateAbility;
+    $('#btnEquip').onclick = function() {
+      if (!state.selected?.id || !clientIsEquipment(state.selected.id)) return;
+      var eqCost = clientParseEquipCost(state.selected.id);
+      if (eqCost === null) return;
+      enterEquipTargetingMode(state.selected.id, eqCost);
+    };
     $('#btnInspect').onclick = () => { if (state.selected?.id) openCardModal(state.selected.id, state.selected.zone); };
     $('#inspectFloatClose').onclick = () => setSelected(null);
     $('#cardModalClose').onclick = closeCardModal;
@@ -5159,6 +5309,10 @@ function engineApplyAction(match, user, action) {
     if (match.game?.scryPending && match.game.scryPending.seat === player?.seat && _scryBlockActions.indexOf(action.type) >= 0) {
         return { ok: false, error: "resolve scry first" };
     }
+    // Block game actions while discard is pending — must discard first
+    if (match.game?.discardPending && match.game.discardPending.seat === player?.seat && action.type !== "DISCARD_TO_HANDSIZE") {
+        return { ok: false, error: "must discard to hand size first" };
+    }
 
     if (action.type === "PLAY_FROM_HAND") {
         var _v; if (_v = engineRequirePlaying(match)) return _v;
@@ -5300,6 +5454,38 @@ function engineApplyAction(match, user, action) {
             match.game.combat = null;
             match.log.push({ t: Date.now(), type: "COMBAT_SKIPPED", by: user.username, seat: seat });
         }
+        // Check hand size limit (default 7) before ending turn
+        engineEnsureZones(match, seat);
+        var handSize = (match.game.zones[seat].hand || []).length;
+        var maxHS = engineGetMaxHandSize(match, seat);
+        if (handSize > maxHS) {
+            match.game.discardPending = { seat: seat, mustDiscard: handSize - maxHS };
+            match.game.step = "discard";
+            return { ok: true, match };
+        }
+        engineAdvanceTurn(match, { by: user.username }); engineRunBotsIfActive(match);
+        return { ok: true, match };
+    }
+
+    if (action.type === "DISCARD_TO_HANDSIZE") {
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
+        var seat = player.seat;
+        if (!match.game.discardPending) return { ok: false, error: "no discard pending" };
+        if (match.game.discardPending.seat !== seat) return { ok: false, error: "not your discard to resolve" };
+        var discardIds = action.cardIds || [];
+        if (discardIds.length !== match.game.discardPending.mustDiscard) {
+            return { ok: false, error: "must discard exactly " + match.game.discardPending.mustDiscard + " card(s)" };
+        }
+        engineEnsureZones(match, seat);
+        var curHand = match.game.zones[seat].hand || [];
+        for (var dvi = 0; dvi < discardIds.length; dvi++) {
+            if (curHand.indexOf(discardIds[dvi]) < 0) return { ok: false, error: "card not in hand" };
+        }
+        for (var dmi = 0; dmi < discardIds.length; dmi++) {
+            engineMoveCard(match, seat, "hand", "graveyard", discardIds[dmi]);
+        }
+        match.log.push({ t: Date.now(), type: "DISCARD", by: user.username, seat: seat, count: discardIds.length });
+        delete match.game.discardPending;
         engineAdvanceTurn(match, { by: user.username }); engineRunBotsIfActive(match);
         return { ok: true, match };
     }
@@ -5631,6 +5817,17 @@ function engineNextSeat(match, currentSeat) {
         if (losers.indexOf(candidate) < 0) return candidate;
     }
     return seats[(idx < 0 ? 0 : idx + 1) % seats.length];
+}
+
+function engineGetMaxHandSize(match, seat) {
+    // Default is 7. Cards with "no maximum hand size" (Reliquary Tower, Thought Vessel, etc.) override to Infinity
+    engineEnsureZones(match, seat);
+    var bf = match.game.zones[seat]?.battlefield || [];
+    for (var i = 0; i < bf.length; i++) {
+        var oracle = String(engineCardMeta(match, seat, bf[i])?.oracleText || "").toLowerCase();
+        if (oracle.indexOf("no maximum hand size") >= 0 || oracle.indexOf("have no maximum hand size") >= 0) return Infinity;
+    }
+    return 7;
 }
 
 function engineAdvanceTurn(match, opts) {
@@ -7102,6 +7299,21 @@ function engineBotTakeTurn(match, botPlayer) {
         }
     }
     if (match.game?.status !== "finished") {
+        // Bot discard to hand size (default 7)
+        engineEnsureZones(match, seat);
+        var botHand = match.game.zones[seat]?.hand || [];
+        var botMaxHS = engineGetMaxHandSize(match, seat);
+        if (botHand.length > botMaxHS) {
+            var discN = botHand.length - botMaxHS;
+            // Discard highest CMC cards first
+            var sortedHand = botHand.slice().sort(function(a, b) {
+                return (Number(engineCardMeta(match, seat, b)?.cmc) || 0) - (Number(engineCardMeta(match, seat, a)?.cmc) || 0);
+            });
+            for (var dsi = 0; dsi < discN; dsi++) {
+                engineMoveCard(match, seat, "hand", "graveyard", sortedHand[dsi]);
+            }
+            match.log.push({ t: Date.now(), type: "BOT_DISCARD", by: "bot", seat: seat, count: discN });
+        }
         // Check if any human has castable instants before ending bot turn
         var instantCheck = engineHumanHasInstants(match);
         if (instantCheck) {
@@ -7283,7 +7495,7 @@ function engineBotDeclareAttackers(match, botPlayer) {
         }
     }
     match.game.step = "combat_attackers";
-    match.log.push({ t: Date.now(), type: "ATTACKERS_DECLARED", by: "bot", seat: seat, count: chosen.length });
+    match.log.push({ t: Date.now(), type: "ATTACKERS_DECLARED", by: "bot", seat: seat, count: chosen.length, targetSeat: targetSeat });
     return true;
 }
 
