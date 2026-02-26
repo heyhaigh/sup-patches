@@ -1290,8 +1290,8 @@ function getClientHtml() {
       const deck = await supExec('api_createQuickstartStandardDeck', { color });
       await loadDecks();
       if (deck?.id) { setActiveDeck(deck.id); $('#builderDeck').value = deck.id; }
-      $('#qsStandardMsg').textContent = 'Created.';
-      toast('Quickstart deck created.', { type: 'success' }); switchTab('play'); renderDeckSelectors();
+      $('#qsStandardMsg').textContent = '';
+      toast((deck?.name || 'Quickstart deck') + ' added to your decks.', { type: 'success', ms: 3000 }); switchTab('decks');
     } catch (err) {
       const msg = String(err?.message || err || '');
       $('#qsStandardMsg').textContent = 'Failed: ' + msg;
@@ -1311,8 +1311,8 @@ function getClientHtml() {
       const deck = await supExec('api_createQuickstartCommanderDeck', { commanderName: name });
       await loadDecks();
       if (deck?.id) { setActiveDeck(deck.id); $('#builderDeck').value = deck.id; }
-      $('#qsCommanderMsg').textContent = 'Created.';
-      toast('Commander quickstart deck created.', { type: 'success' }); switchTab('play'); renderDeckSelectors();
+      $('#qsCommanderMsg').textContent = '';
+      toast((deck?.name || 'Commander deck') + ' added to your decks.', { type: 'success', ms: 3000 }); switchTab('decks');
     } catch (err) {
       const msg = String(err?.message || err || '');
       $('#qsCommanderMsg').textContent = 'Failed: ' + msg;
@@ -1345,8 +1345,8 @@ function getClientHtml() {
       const deck = await supExec('api_createQuickstartCommanderDeck', { commanderId: card.id });
       await loadDecks();
       if (deck?.id) { setActiveDeck(deck.id); $('#builderDeck').value = deck.id; }
-      $('#qsCommanderMsg').textContent = 'Created.';
-      toast('Commander quickstart deck created.', { type: 'success' }); switchTab('play'); renderDeckSelectors();
+      $('#qsCommanderMsg').textContent = '';
+      toast((deck?.name || 'Commander deck') + ' added to your decks.', { type: 'success', ms: 3000 }); switchTab('decks');
     } catch (err) {
       const msg = String(err?.message || err || '');
       $('#qsCommanderMsg').textContent = 'Failed: ' + msg;
