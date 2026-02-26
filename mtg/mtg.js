@@ -3901,8 +3901,6 @@ function api_createMatch(event) {
                 bDeck = allDecks.find(function(d) { return d.id === b.deckId; });
                 if (!bDeck) return { ok: false, error: "Bot " + (bi + 1) + " deck not found" };
                 if (bDeck.format !== format) return { ok: false, error: "Bot " + (bi + 1) + " deck format mismatch" };
-                var bv = validateDeck(bDeck);
-                if (!bv.ok) return { ok: false, error: "Bot " + (bi + 1) + " deck invalid", errors: bv.errors };
             }
             resolvedBots.push({ difficulty: botDifficultyNormalize(b.difficulty), deck: bDeck });
         }
@@ -3918,8 +3916,6 @@ function api_createMatch(event) {
         botDeck = allDecks.find(function(d) { return d.id === opp.deckId; });
         if (!botDeck) return { ok: false, error: "bot deck not found" };
         if (botDeck.format !== format) return { ok: false, error: "bot deck format mismatch" };
-        var bv2 = validateDeck(botDeck);
-        if (!bv2.ok) return { ok: false, error: "bot deck invalid", errors: bv2.errors };
     }
     const matchId = sup.uuid().slice(0, 8);
     const match = createInitialMatchState({ matchId, format, hostUser: sup.user, hostDeck: deck, opponentType, botDifficulty: difficulty, botDeck });
@@ -4194,11 +4190,13 @@ function validateDeck(deck) {
     const uniqueCardIds = Object.keys(deck.cards || {});
     if (uniqueCardIds.length > 300) errors.push("Too many unique cards in deck.");
     if (errors.length) return { ok: false, errors };
+    // Batch-fetch all cards in one Scryfall /collection call (single global cache round-trip)
+    const allCards = scryfallGetCardsByIdsCached(uniqueCardIds);
     const cardById = {};
+    for (const card of allCards) { if (card?.id) cardById[card.id] = card; }
     for (const cardId of uniqueCardIds) {
-        const card = scryfallFetchJsonCached(`${SCRYFALL.card}/${encodeURIComponent(cardId)}`);
+        const card = cardById[cardId];
         if (!card || card.object !== "card") { errors.push(`Missing card data for ${cardId}`); continue; }
-        cardById[cardId] = card;
         const leg = card.legalities || {};
         if (deck.format === "standard" && leg.standard !== "legal") errors.push(`${card.name} is not legal in Standard (${leg.standard || "unknown"}).`);
         if (deck.format === "commander" && leg.commander !== "legal") errors.push(`${card.name} is not legal in Commander (${leg.commander || "unknown"}).`);
@@ -4206,7 +4204,7 @@ function validateDeck(deck) {
         if (cardTypeLine.includes('land')) errors.push(card.name + ' is a land card (not allowed in Spark format).');
     }
     if (deck.format === "commander" && deck.commander) {
-        const cmd = cardById[deck.commander] || scryfallFetchJsonCached(`${SCRYFALL.card}/${encodeURIComponent(deck.commander)}`);
+        const cmd = cardById[deck.commander];
         if (!cmd || cmd.object !== "card") { errors.push("Commander card data not found."); }
         else {
             if ((cmd.legalities || {}).commander !== "legal") errors.push(`${cmd.name} is not legal in Commander.`);
