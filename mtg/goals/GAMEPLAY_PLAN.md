@@ -375,27 +375,16 @@ Purple flash banner below turn bar, playable instants in hand get glow highlight
 
 ---
 
-### Phase 5D: Scry / Top-Card-View Abilities
+### Phase 5D: Scry / Top-Card-View Abilities ✅
 **Impact: Medium — enables Sensei's Divining Top, scry effects**
 
-#### 5D1. Scry State
-`match.game.scryPending = { seat, count, cardIds }` — set when scry triggers
+**Implemented:**
 
-#### 5D2. Engine: Scry Patterns
-Extend `engineActivateAbility` to match:
-- "Look at the top N cards of your library, then put them back in any order"
-- "Scry N"
-
-Returns scry card IDs to client.
-
-#### 5D3. New Action: SCRY_REORDER
-Accepts `order` (card IDs to keep on top in order) + `bottomIds` (send to bottom).
-
-#### 5D4. Client: Scry Overlay
-Shows top N cards face-up. Click-to-select-then-click-to-place reordering (simpler than drag-and-drop in template literal context). "Keep on top" zone + "Send to bottom" zone. Confirm button resolves.
-
-#### 5D5. Bot Scry
-Auto-resolve: score cards by impact, keep best on top.
+- **Scry state** — `match.game.scryPending = { seat, count, cardIds }` set by activated abilities (Sensei's Divining Top) and spell effects (Scry N)
+- **Engine: Scry patterns** — `engineActivateAbility` detects "Scry N" and "Look at the top N cards" oracle text. `engineParseSpellEffects` parses scry as an effect type. `engineApplyEffect` handles scry by setting `scryPending`.
+- **SCRY_REORDER action** — accepts `topIds` (kept on top in order) + `bottomIds` (sent to bottom of library). Validates all scried cards accounted for. Clears `scryPending`.
+- **Client: Scry overlay** — blue-themed overlay with "Keep on top" and "Send to bottom" zones. Click cards to toggle between zones. Order badges show draw order. "All to Bottom" shortcut. Context menu "Scry N" / "Look at top N" option for cards with scry abilities.
+- **Bot scry** — `engineBotResolveScry` auto-resolves: scores cards by type (removal +3, creatures +2, CMC bonus), keeps lands only if few on battlefield, sorts by score descending.
 
 ---
 

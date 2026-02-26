@@ -301,6 +301,24 @@ function getClientHtml() {
     .equipBadge { position:absolute; bottom:20px; right:4px; background:rgba(251,191,36,0.85); color:#000; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.2); }
     .equipPeek { position:absolute; top:-14px; left:50%; transform:translateX(-50%); width:56px; height:14px; border-radius:4px 4px 0 0; overflow:hidden; border:1px solid rgba(251,191,36,0.5); border-bottom:none; cursor:pointer; z-index:4; }
     .equipPeek img { width:56px; height:80px; object-fit:cover; object-position:top; pointer-events:none; }
+    .scryOverlay { position:absolute; inset:0; z-index:50; background:rgba(0,0,0,0.8); backdrop-filter:blur(6px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; animation:modeOverlayIn 0.3s ease; }
+    .scryPanel { background:rgba(30,30,50,0.95); border:1px solid rgba(59,130,246,0.4); border-radius:16px; padding:24px; max-width:560px; width:92%; display:flex; flex-direction:column; gap:14px; box-shadow:0 8px 40px rgba(0,0,0,0.5); }
+    .scryPanelTitle { font-size:20px; font-weight:900; color:#fff; text-align:center; letter-spacing:-0.02em; }
+    .scryPanelSubtitle { font-size:13px; color:rgba(255,255,255,0.55); text-align:center; margin-top:-8px; }
+    .scryZoneLabel { font-size:12px; font-weight:700; text-transform:uppercase; color:rgba(255,255,255,0.45); margin-bottom:4px; }
+    .scryZone { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; min-height:100px; padding:12px; border-radius:10px; border:2px dashed rgba(255,255,255,0.12); background:rgba(255,255,255,0.03); }
+    .scryZone.top { border-color:rgba(59,130,246,0.3); background:rgba(59,130,246,0.05); }
+    .scryZone.bottom { border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.05); }
+    .scryCard { width:80px; height:112px; border-radius:6px; overflow:hidden; border:2px solid rgba(255,255,255,0.15); cursor:pointer; transition:all 0.15s ease; position:relative; }
+    .scryCard:hover { border-color:rgba(59,130,246,0.7); transform:translateY(-3px); }
+    .scryCard img { width:100%; height:100%; object-fit:cover; pointer-events:none; }
+    .scryCard .scryOrder { position:absolute; top:2px; right:2px; width:18px; height:18px; border-radius:50%; background:rgba(59,130,246,0.9); color:#fff; font-size:10px; font-weight:900; display:flex; align-items:center; justify-content:center; }
+    .scryControls { display:flex; gap:10px; justify-content:center; margin-top:4px; }
+    .scryControls button { padding:8px 20px; border-radius:8px; font-weight:700; font-size:13px; border:none; cursor:pointer; transition:all 0.15s ease; }
+    .scryBtnConfirm { background:rgba(59,130,246,0.8); color:#fff; }
+    .scryBtnConfirm:hover { background:rgba(59,130,246,1); }
+    .scryBtnCancel { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); }
+    .scryBtnCancel:hover { background:rgba(255,255,255,0.15); }
     .ptBuffed { color:#22c55e; }
     .phaseBar { display:flex; gap:4px; align-items:center; }
     .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:var(--w06); color:rgba(255,255,255,0.35); border:1px solid var(--w06); }
@@ -1819,6 +1837,29 @@ function getClientHtml() {
         };
         menu.appendChild(actItem);
       }
+      // Scry / look at top: context menu option
+      if (/scry\\s+\\d+/i.test(ctxOracle) || /look\\s+at\\s+the\\s+top/i.test(ctxOracle)) {
+        var dividerScry = document.createElement('div');
+        dividerScry.className = 'ctxDivider';
+        menu.appendChild(dividerScry);
+        var scryItem = document.createElement('div');
+        scryItem.className = 'ctxItem';
+        var scryLabel = 'Scry';
+        var scryAmtMatch = /scry\\s+(\\d+)/i.exec(ctxOracle);
+        var lookTopAmtMatch = /look\\s+at\\s+the\\s+top\\s+(\\w+)\\s+cards?/i.exec(ctxOracle);
+        if (scryAmtMatch) scryLabel = 'Scry ' + scryAmtMatch[1];
+        else if (lookTopAmtMatch) scryLabel = 'Look at top ' + lookTopAmtMatch[1];
+        scryItem.textContent = scryLabel;
+        scryItem.onclick = async function() {
+          menu.remove();
+          var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'ACTIVATE_ABILITY', cardId: cardId } });
+          if (!res.ok) { toast('Scry failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+          await refreshMatch();
+          // After refreshMatch, scryPending is set — renderGame will show the overlay
+          setSelected(null);
+        };
+        menu.appendChild(scryItem);
+      }
       // Equipment: Equip option
       if (clientIsEquipment(cardId)) {
         var equipCost = clientParseEquipCost(cardId);
@@ -3112,6 +3153,11 @@ function getClientHtml() {
       existingOverlay.remove();
     }
 
+    // Scry overlay: show if scryPending is set for viewer
+    if (match.game?.scryPending && match.game.scryPending.seat === mySeat) {
+      showScryOverlay(match);
+    }
+
     renderCombatLines();
     renderEventLog(match);
   }
@@ -4005,6 +4051,9 @@ function getClientHtml() {
     var putAllGyRe = /put\\s+all\\s+(creatures?)\\s+with\\s+mana\\s+value\\s+(\\d+)\\s+or\\s+(less|greater)\\s+into/gi;
     var pag;
     while ((pag = putAllGyRe.exec(oracleText)) !== null) { effects.push({ type: 'destroyAll', targetType: 'creature', cmcFilter: { value: parseInt(pag[2], 10), direction: pag[3].toLowerCase() } }); }
+    var scryClientRe = /scry\\s+(\\d+)/gi;
+    var scm;
+    while ((scm = scryClientRe.exec(oracleText)) !== null) { effects.push({ type: 'scry', amount: parseInt(scm[1], 10) }); }
     return effects;
   }
 
@@ -4228,6 +4277,123 @@ function getClientHtml() {
     setSelected(null);
   }
 
+  function showScryOverlay(match) {
+    var scry = match.game?.scryPending;
+    if (!scry) return;
+    var mySeat = match.viewerSeat;
+    if (scry.seat !== mySeat) return; // Not our scry
+    var board = document.getElementById('gameBoard');
+    if (!board) return;
+    var existing = board.querySelector('.scryOverlay');
+    if (existing) return; // Already showing
+    var overlay = document.createElement('div');
+    overlay.className = 'scryOverlay';
+    var panel = document.createElement('div');
+    panel.className = 'scryPanel';
+    var title = document.createElement('div');
+    title.className = 'scryPanelTitle';
+    title.textContent = 'Scry ' + scry.count;
+    panel.appendChild(title);
+    var subtitle = document.createElement('div');
+    subtitle.className = 'scryPanelSubtitle';
+    subtitle.textContent = 'Click cards to move between zones. Top cards are drawn first.';
+    panel.appendChild(subtitle);
+    // "Keep on top" zone
+    var topLabel = document.createElement('div');
+    topLabel.className = 'scryZoneLabel';
+    topLabel.textContent = 'Keep on top (drawn first \u2192 last)';
+    panel.appendChild(topLabel);
+    var topZone = document.createElement('div');
+    topZone.className = 'scryZone top';
+    topZone.id = 'scryTopZone';
+    panel.appendChild(topZone);
+    // "Send to bottom" zone
+    var botLabel = document.createElement('div');
+    botLabel.className = 'scryZoneLabel';
+    botLabel.textContent = 'Send to bottom';
+    panel.appendChild(botLabel);
+    var botZone = document.createElement('div');
+    botZone.className = 'scryZone bottom';
+    botZone.id = 'scryBottomZone';
+    panel.appendChild(botZone);
+    // Track which zone each card is in
+    var cardZones = {}; // cardId -> 'top' | 'bottom'
+    for (var i = 0; i < scry.cardIds.length; i++) {
+      cardZones[scry.cardIds[i]] = 'top'; // Start all on top
+    }
+    function renderScryCards() {
+      topZone.innerHTML = '';
+      botZone.innerHTML = '';
+      var topOrder = 0;
+      for (var ci = 0; ci < scry.cardIds.length; ci++) {
+        var cid = scry.cardIds[ci];
+        var zone = cardZones[cid];
+        var card = document.createElement('div');
+        card.className = 'scryCard';
+        var meta = cardMeta(cid);
+        var img = document.createElement('img');
+        img.src = meta?.imageSmall || meta?.imageNormal || '';
+        img.alt = meta?.name || cid;
+        card.appendChild(img);
+        if (zone === 'top') {
+          topOrder++;
+          var orderBadge = document.createElement('div');
+          orderBadge.className = 'scryOrder';
+          orderBadge.textContent = String(topOrder);
+          card.appendChild(orderBadge);
+        }
+        (function(cardId) {
+          card.addEventListener('click', function() {
+            cardZones[cardId] = cardZones[cardId] === 'top' ? 'bottom' : 'top';
+            renderScryCards();
+          });
+        })(cid);
+        if (zone === 'top') topZone.appendChild(card);
+        else botZone.appendChild(card);
+      }
+    }
+    renderScryCards();
+    // Controls
+    var controls = document.createElement('div');
+    controls.className = 'scryControls';
+    var confirmBtn = document.createElement('button');
+    confirmBtn.className = 'scryBtnConfirm';
+    confirmBtn.textContent = 'Confirm';
+    confirmBtn.addEventListener('click', function() { confirmScryReorder(scry.cardIds, cardZones); });
+    controls.appendChild(confirmBtn);
+    // "All to bottom" shortcut
+    var allBottomBtn = document.createElement('button');
+    allBottomBtn.className = 'scryBtnCancel';
+    allBottomBtn.textContent = 'All to Bottom';
+    allBottomBtn.addEventListener('click', function() {
+      for (var ai = 0; ai < scry.cardIds.length; ai++) cardZones[scry.cardIds[ai]] = 'bottom';
+      renderScryCards();
+    });
+    controls.appendChild(allBottomBtn);
+    panel.appendChild(controls);
+    overlay.appendChild(panel);
+    board.appendChild(overlay);
+  }
+
+  async function confirmScryReorder(cardIds, cardZones) {
+    var topIds = [];
+    var bottomIds = [];
+    for (var i = 0; i < cardIds.length; i++) {
+      if (cardZones[cardIds[i]] === 'top') topIds.push(cardIds[i]);
+      else bottomIds.push(cardIds[i]);
+    }
+    var board = document.getElementById('gameBoard');
+    var ov = board?.querySelector('.scryOverlay');
+    if (ov) ov.remove();
+    var res = await supExec('api_matchAction', {
+      matchId: state.activeMatchId,
+      action: { type: 'SCRY_REORDER', topIds: topIds, bottomIds: bottomIds }
+    });
+    if (!res.ok) { toast('Scry failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    toast('Scry resolved!', { type: 'success', ms: 1200 });
+    await refreshMatch();
+  }
+
   async function activateAbility() {
     var sel = state.selected;
     if (!state.activeMatchId || !sel?.id) return;
@@ -4239,6 +4405,7 @@ function getClientHtml() {
     if (!res.ok) { toast('Activate failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     toast((cardMeta(sel.id)?.name || 'Card') + ' ability activated!', { type: 'success', ms: 1500 });
     await refreshMatch();
+    // After refreshMatch, if scryPending is set, renderGame will show the scry overlay
     setSelected(null);
   }
 
@@ -5129,6 +5296,37 @@ function engineApplyAction(match, user, action) {
         // Resume: advance bot turn and continue
         engineAdvanceTurn(match, { by: "bot" });
         engineRunBotsIfActive(match);
+        return { ok: true, match };
+    }
+
+    if (action.type === "SCRY_REORDER") {
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
+        var seat = player.seat;
+        var scry = match.game?.scryPending;
+        if (!scry || scry.seat !== seat) return { ok: false, error: "no scry pending for you" };
+        var topIds = Array.isArray(action.topIds) ? action.topIds : [];
+        var bottomIds = Array.isArray(action.bottomIds) ? action.bottomIds : [];
+        // Validate that all scry card IDs are accounted for
+        var allScryIds = scry.cardIds.slice();
+        var providedIds = topIds.concat(bottomIds);
+        if (providedIds.length !== allScryIds.length) return { ok: false, error: "must assign all scried cards" };
+        for (var sci = 0; sci < providedIds.length; sci++) {
+            if (allScryIds.indexOf(providedIds[sci]) < 0) return { ok: false, error: "invalid card ID in scry reorder" };
+        }
+        engineEnsureZones(match, seat);
+        var lib = match.game.zones[seat].library;
+        // Remove the top N cards (they were the scried cards)
+        lib.splice(0, scry.count);
+        // Put top cards back on top in the order specified
+        for (var sti = topIds.length - 1; sti >= 0; sti--) {
+            lib.unshift(topIds[sti]);
+        }
+        // Put bottom cards on the bottom
+        for (var sbi = 0; sbi < bottomIds.length; sbi++) {
+            lib.push(bottomIds[sbi]);
+        }
+        delete match.game.scryPending;
+        match.log.push({ t: Date.now(), type: "SCRY_RESOLVE", by: user.username, seat: seat, keptOnTop: topIds.length, sentToBottom: bottomIds.length });
         return { ok: true, match };
     }
 
@@ -6094,6 +6292,12 @@ function engineParseSpellEffects(oracleText) {
     while ((pag = putAllGyRe.exec(oracleText)) !== null) {
         effects.push({ type: 'destroyAll', targetType: 'creature', cmcFilter: { value: parseInt(pag[2], 10), direction: pag[3].toLowerCase() } });
     }
+    // "Scry N"
+    var scryRe = /scry\s+(\d+)/gi;
+    var scm;
+    while ((scm = scryRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'scry', amount: parseInt(scm[1], 10) });
+    }
     return effects;
 }
 
@@ -6292,6 +6496,15 @@ function engineApplyEffect(match, casterSeat, effect, targetId) {
         var milledCards = lib.splice(0, millCount);
         for (var mci = 0; mci < milledCards.length; mci++) { gy.push(milledCards[mci]); }
         match.log.push({ t: Date.now(), type: "MILL", seat: millSeat, amount: millCount, cardIds: milledCards });
+    } else if (effect.type === 'scry') {
+        engineEnsureZones(match, casterSeat);
+        var scryLib = match.game.zones[casterSeat].library;
+        var scryN = Math.min(effect.amount, scryLib.length);
+        if (scryN > 0) {
+            var scryCards = scryLib.slice(0, scryN);
+            match.game.scryPending = { seat: casterSeat, count: scryN, cardIds: scryCards };
+            match.log.push({ t: Date.now(), type: "SCRY", seat: casterSeat, count: scryN });
+        }
     }
 }
 
@@ -6335,6 +6548,24 @@ function engineActivateAbility(match, seat, cardId, oracleText) {
         if (!match.game.manaBySeat[seat]) match.game.manaBySeat[seat] = { current: 0, max: 0 };
         match.game.manaBySeat[seat].current += 1;
         return { ok: true, ability: 'sacrifice_for_mana' };
+    }
+    // Scry / look at top N
+    var scryMatch = /scry\s+(\d+)/i.exec(oracleText);
+    var lookTopMatch = /look\s+at\s+the\s+top\s+(\w+)\s+cards?\s+of\s+your\s+library/i.exec(oracleText);
+    var scryCount = 0;
+    if (scryMatch) scryCount = parseInt(scryMatch[1], 10);
+    else if (lookTopMatch) {
+        var wtn = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 };
+        scryCount = parseInt(lookTopMatch[1], 10);
+        if (isNaN(scryCount)) scryCount = wtn[lookTopMatch[1].toLowerCase()] || 1;
+    }
+    if (scryCount > 0) {
+        engineEnsureZones(match, seat);
+        var lib = match.game.zones[seat].library;
+        var topCards = lib.slice(0, Math.min(scryCount, lib.length));
+        if (!topCards.length) return { ok: false, error: "library is empty" };
+        match.game.scryPending = { seat: seat, count: scryCount, cardIds: topCards };
+        return { ok: true, ability: 'scry', scryCount: scryCount, cardIds: topCards };
     }
     return { ok: false, error: "no recognized activated ability" };
 }
@@ -6821,6 +7052,8 @@ function engineBotTakeTurn(match, botPlayer) {
             match.log.push({ t: Date.now(), type: "BOT_EQUIP", by: "bot", seat: seat, cardId: eqCid, targetId: bestEqTarget });
         }
     }
+    // Bot scry auto-resolve: if a spell/ETB triggered scry for the bot, resolve it
+    engineBotResolveScry(match, seat);
     // Bot combat phase
     var didAttack = engineBotDeclareAttackers(match, botPlayer);
     if (didAttack) {
@@ -6857,6 +7090,57 @@ function engineBotTakeTurn(match, botPlayer) {
             engineAdvanceTurn(match, { by: "bot" });
         }
     }
+}
+
+function engineBotResolveScry(match, seat) {
+    var scry = match.game?.scryPending;
+    if (!scry || scry.seat !== seat) return;
+    // Score each card: creatures and spells by CMC (higher = better to keep on top for bot), lands are low priority
+    engineEnsureZones(match, seat);
+    var lib = match.game.zones[seat].library;
+    var topIds = [];
+    var bottomIds = [];
+    var scored = [];
+    for (var i = 0; i < scry.cardIds.length; i++) {
+        var cid = scry.cardIds[i];
+        var meta = engineCardMeta(match, seat, cid);
+        var score = 0;
+        if (meta) {
+            var tl = String(meta.typeLine || '').toLowerCase();
+            if (tl.includes('land')) {
+                // Lands: keep if bot has few lands on battlefield
+                var botBfCheck = match.game.zones[seat].battlefield || [];
+                var landCount = 0;
+                for (var li = 0; li < botBfCheck.length; li++) {
+                    if (engineBotIsLand(match, seat, botBfCheck[li])) landCount++;
+                }
+                score = landCount < 4 ? 5 : -1; // Keep lands if few on board
+            } else {
+                score = Number(meta.cmc) || 1; // Higher CMC cards scored higher
+                if (tl.includes('creature')) score += 2;
+                // Removal spells get bonus
+                var oracle = String(meta.oracleText || '').toLowerCase();
+                if (/destroy|exile|damage/.test(oracle)) score += 3;
+            }
+        }
+        scored.push({ id: cid, score: score });
+    }
+    // Sort by score descending — best cards kept on top
+    scored.sort(function(a, b) { return b.score - a.score; });
+    for (var si = 0; si < scored.length; si++) {
+        if (scored[si].score >= 0) topIds.push(scored[si].id);
+        else bottomIds.push(scored[si].id);
+    }
+    // Apply reorder
+    lib.splice(0, scry.count);
+    for (var sti = topIds.length - 1; sti >= 0; sti--) {
+        lib.unshift(topIds[sti]);
+    }
+    for (var sbi = 0; sbi < bottomIds.length; sbi++) {
+        lib.push(bottomIds[sbi]);
+    }
+    delete match.game.scryPending;
+    match.log.push({ t: Date.now(), type: "BOT_SCRY_RESOLVE", by: "bot", seat: seat, keptOnTop: topIds.length, sentToBottom: bottomIds.length });
 }
 
 function engineBotDeclareAttackers(match, botPlayer) {
