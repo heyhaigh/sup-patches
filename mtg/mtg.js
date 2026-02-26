@@ -272,6 +272,11 @@ function getClientHtml() {
     .cardWrap.targetSelected { box-shadow:0 0 10px 3px rgba(168,85,247,0.7); border-radius:12px; transform:translateY(-6px); }
     .cardWrap.targetIneligible .cardImg { opacity:0.35; filter:saturate(0.2); }
     .targetBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; }
+    .atkTargetBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:6px 14px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:10px; color:rgba(255,255,255,0.9); font-size:13px; font-weight:700; }
+    .seatPanel.atkTargetable { outline:2px dashed rgba(239,68,68,0.6); outline-offset:-2px; cursor:pointer; transition:outline 0.15s ease, background 0.15s ease; }
+    .seatPanel.atkTargetable:hover { outline:3px solid rgba(239,68,68,1); background:rgba(239,68,68,0.08); }
+    .quickToggle { display:flex; align-items:center; gap:5px; font-size:11px; color:rgba(255,255,255,0.5); cursor:pointer; user-select:none; }
+    .quickToggle input[type="checkbox"] { accent-color:#fbbf24; width:14px; height:14px; cursor:pointer; }
     .auraBadge { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(168,85,247,0.85); color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.2); }
     .ptBuffed { color:#22c55e; }
     .phaseBar { display:flex; gap:4px; align-items:center; }
@@ -494,8 +499,9 @@ function getClientHtml() {
               <div class="label">Format</div>
               <select id="playFormat" class="select" style="margin-bottom:10px;">
                 <option value="standard">Standard (1v1)</option>
-                <option value="commander">Commander (3-5 players)</option>
+                <option value="commander" id="cmdFormatOpt">Commander (3-5 players)</option>
               </select>
+              <div id="cmdDesktopHint" style="display:none;font-size:11px;color:var(--muted);margin:-6px 0 8px 2px;">Commander requires desktop \u2014 too many players for mobile.</div>
               <div class="label">Opponent</div>
               <select id="playOpponent" class="select" style="margin-bottom:10px;">
                 <option value="human">Another Sup user</option>
@@ -747,6 +753,7 @@ function getClientHtml() {
     targetingMode: null,
     lastLogIndex: 0, eventLogCollapsed: false,
     _suppressTurnOverlay: false, prevHandCounts: {}, oppHandHighlight: {},
+    _atkTargetPending: null, quickMode: true,
   };
 
   /* Tab buttons work immediately via event delegation — no boot() needed */
@@ -1371,6 +1378,7 @@ function getClientHtml() {
   async function validateAndCreateMatch() {
     const config = getPlayConfig();
     devLog('playConfig', config);
+    if (config.format === 'commander' && state.isMobile) { toast('Commander is desktop only.', { type: 'warn' }); return; }
     if (!config.deckId) { $('#createResult').textContent = 'No deck selected.'; toast('No deck selected.', { type: 'warn' }); return; }
     if (config.opponentType === 'bot' && config.format === 'standard' && !config.botDifficulty) { $('#createResult').textContent = 'Bot difficulty not set.'; toast('Bot difficulty not set.', { type: 'warn' }); return; }
     if (config.opponentType === 'bot' && config.format !== 'standard' && (!config.bots || !config.bots.length)) { $('#createResult').textContent = 'No bots configured.'; toast('No bots configured.', { type: 'warn' }); return; }
@@ -2504,6 +2512,15 @@ function getClientHtml() {
       }
     }
 
+    // Attack target selection highlighting (Commander multiplayer)
+    if (state._atkTargetPending && !isViewer) {
+      var losers = match?.game?.losers || [];
+      if (losers.indexOf(seat) < 0) {
+        el.classList.add('atkTargetable');
+        (function(capturedSeat) { el.onclick = function(e) { e.stopPropagation(); selectAttackTarget(capturedSeat); }; })(seat);
+      }
+    }
+
     return el;
   }
 
@@ -2527,7 +2544,7 @@ function getClientHtml() {
     for (var pbk in state.pendingBlockers) { var pbArr = state.pendingBlockers[pbk]; pendingBlkCount += Array.isArray(pbArr) ? pbArr.length : 1; }
 
     const mana = match.game?.manaBySeat?.[match.viewerSeat] || { current: 0, max: 0 };
-    const cacheKey = (match.game?.turn || '?') + ':' + activeSeat + ':' + step + ':' + seats.length + ':' + mana.current + '/' + mana.max + ':' + pendingAtkCount + ':' + pendingBlkCount + ':' + (state.combatMode || 'none');
+    const cacheKey = (match.game?.turn || '?') + ':' + activeSeat + ':' + step + ':' + seats.length + ':' + mana.current + '/' + mana.max + ':' + pendingAtkCount + ':' + pendingBlkCount + ':' + (state.combatMode || 'none') + ':q' + (state.quickMode ? '1' : '0');
     if (bar.dataset.cacheKey === cacheKey) return;
     bar.dataset.cacheKey = cacheKey;
 
@@ -2573,11 +2590,15 @@ function getClientHtml() {
       buttonsHtml = '<button id="btnGameEndTurn" class="btn btnPrimary" disabled>End Turn</button>';
     }
 
+    var hasBot = (match.players || []).some(function(p) { return p.isBot; });
+    var quickToggleHtml = hasBot ? '<label class="quickToggle"><input type="checkbox" id="chkQuickMode"' + (state.quickMode ? ' checked' : '') + '> Quick bot turns</label>' : '';
+
     bar.innerHTML = '<div class="turnInfo">Turn <span class="turnHighlight">' + (match.game?.turn || '?') + '</span></div>'
       + '<div class="turnInfo">' + (isMyTurn ? '<span class="turnHighlight">Your turn</span>' : escapeHtml(activeName) + "'s turn") + '</div>'
       + phaseHtml
       + turnOrderHtml
       + buttonsHtml
+      + quickToggleHtml
       + '<button id="btnConcede" class="btn" style="color:rgba(239,68,68,0.7);border-color:rgba(239,68,68,0.2);background:transparent;margin-left:auto;">Concede</button>';
 
     var endTurnBtn = bar.querySelector('#btnGameEndTurn');
@@ -2594,6 +2615,8 @@ function getClientHtml() {
     if (noBlocksBtn) noBlocksBtn.onclick = noBlocks;
     var concedeBtn = bar.querySelector('#btnConcede');
     if (concedeBtn) concedeBtn.onclick = concede;
+    var quickChk = bar.querySelector('#chkQuickMode');
+    if (quickChk) quickChk.onchange = function() { state.quickMode = quickChk.checked; };
   }
 
   function buildSeatCacheKey(match, seat) {
@@ -2676,7 +2699,7 @@ function getClientHtml() {
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const oppSeats = seats.filter(s => s !== mySeat);
 
-    var oppCacheKey = oppSeats.map(function(s) { return buildSeatCacheKey(match, s); }).join('||');
+    var oppCacheKey = oppSeats.map(function(s) { return buildSeatCacheKey(match, s); }).join('||') + '||atk:' + (state._atkTargetPending || 'n');
     const oppEl = $('#oppSide');
     if (oppEl.dataset.cacheKey !== oppCacheKey) {
       oppEl.innerHTML = '';
@@ -2707,6 +2730,23 @@ function getClientHtml() {
         var cc = document.getElementById('btnTargetCancel');
         if (cb) cb.onclick = function() { confirmTarget(); };
         if (cc) cc.onclick = function() { cancelTargeting(); };
+      }, 0);
+    }
+
+    // Attack target selection banner (Commander multiplayer)
+    var existingATB = document.querySelector('#gameBoard .atkTargetBanner');
+    if (existingATB) existingATB.remove();
+    if (state._atkTargetPending) {
+      var atkCardName = cardMeta(state._atkTargetPending)?.name || 'Creature';
+      var atbDiv = document.createElement('div');
+      atbDiv.className = 'atkTargetBanner';
+      atbDiv.innerHTML = '\u2694\uFE0F Select which player <strong>' + escapeHtml(atkCardName) + '</strong> attacks'
+        + '<button id="btnAtkTargetCancel" class="btn" style="margin-left:8px;padding:4px 12px;font-size:12px;">Cancel</button>';
+      var turnBarEl2 = document.getElementById('turnBar');
+      if (turnBarEl2 && turnBarEl2.parentNode) turnBarEl2.parentNode.insertBefore(atbDiv, turnBarEl2.nextSibling);
+      setTimeout(function() {
+        var cancelBtn = document.getElementById('btnAtkTargetCancel');
+        if (cancelBtn) cancelBtn.onclick = function() { cancelAttackTarget(); };
       }, 0);
     }
 
@@ -3077,89 +3117,119 @@ function getClientHtml() {
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'END_TURN' } });
     if (!res.ok) { toast('End turn failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     if (hasBot) {
-      // Suppress TURN_START overlays — we'll trigger them manually for proper sequencing
-      state._suppressTurnOverlay = true;
-
-      // 1. Show bot's turn overlay
       var botPlayers = (state.lastMatch?.players || []).filter(function(p) { return p.isBot; });
-      var botLabel = botPlayers.length > 1 ? 'Bots' : (botPlayers[0] ? botPlayers[0].username : 'Bot');
-      showTurnOverlay(botLabel, false);
 
-      // 2. Show "Bot is thinking..." in turn bar
-      var bar = $('#turnBar');
-      var thinkLabel = botPlayers.length > 1 ? 'Bots are thinking' : 'Bot is thinking';
-      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + thinkLabel + '\u2026</div>';
-
-      // 3. Wait for overlay to hold (1.6s overlay + a bit of thinking time)
-      await new Promise(function(r) { setTimeout(r, 2000); });
-
-      // 4. Refresh to get the bot's plays — board updates here
-      await refreshMatch();
-
-      // 5. Animate bot plays — show each card with reveal animation
-      var log = state.lastMatch?.log || [];
-      var botNameBySeat = {};
-      for (var bni = 0; bni < botPlayers.length; bni++) {
-        botNameBySeat[botPlayers[bni].seat] = botPlayers[bni].username || 'Bot';
-      }
-      var multiBot = botPlayers.length > 1;
-
-      // Collect all bot events in order
-      var botEvents = [];
-      for (var lei = 0; lei < log.length; lei++) {
-        var le = log[lei];
-        if (le.t < Date.now() - 10000) continue;
-        if (le.type === 'BOT_PLAY' || le.type === 'BOT_CAST_SPELL') {
-          botEvents.push({ kind: 'play', entry: le });
-        } else if (le.type === 'ATTACKERS_DECLARED' && le.by === 'bot' && le.count > 0) {
-          botEvents.push({ kind: 'attack', entry: le });
-        } else if (le.type === 'BOT_PASS') {
-          botEvents.push({ kind: 'pass', entry: le });
+      if (state.quickMode) {
+        // Quick mode — skip animations, just refresh and show summary toast
+        state._suppressTurnOverlay = true;
+        var bar = $('#turnBar');
+        var thinkLabel = botPlayers.length > 1 ? 'Bots are thinking' : 'Bot is thinking';
+        if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + thinkLabel + '\u2026</div>';
+        await refreshMatch();
+        // Count bot events for summary
+        var log = state.lastMatch?.log || [];
+        var playCount = 0; var atkCount = 0; var passCount = 0;
+        for (var qli = 0; qli < log.length; qli++) {
+          var ql = log[qli];
+          if (ql.t < Date.now() - 10000) continue;
+          if (ql.type === 'BOT_PLAY' || ql.type === 'BOT_CAST_SPELL') playCount++;
+          else if (ql.type === 'ATTACKERS_DECLARED' && ql.by === 'bot' && ql.count > 0) atkCount++;
+          else if (ql.type === 'BOT_PASS') passCount++;
         }
-      }
+        var parts = [];
+        if (playCount) parts.push(playCount + ' card' + (playCount > 1 ? 's' : '') + ' played');
+        if (atkCount) parts.push('attacked');
+        if (passCount && !playCount) parts.push('passed');
+        if (parts.length) toast('Bot: ' + parts.join(', '), { type: 'info', ms: 2500 });
+        state._suppressTurnOverlay = false;
+        if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
+          showTurnOverlay('', true);
+        }
+      } else {
+        // Full animation mode
+        // Suppress TURN_START overlays — we'll trigger them manually for proper sequencing
+        state._suppressTurnOverlay = true;
 
-      if (botEvents.length) {
-        var revealGap = 1600;
-        var revealDelay = 0;
-        var hasPlays = false;
-        for (var bei = 0; bei < botEvents.length; bei++) {
-          var be = botEvents[bei];
-          if (be.kind === 'play') {
-            hasPlays = true;
-            (function(entry, delay, names) {
-              setTimeout(function() {
-                var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
-                var isSpell = entry.type === 'BOT_CAST_SPELL';
-                showBotPlayReveal(entry.cardId, who, isSpell);
-              }, delay);
-            })(be.entry, revealDelay, botNameBySeat);
-            revealDelay += revealGap;
-          } else if (be.kind === 'attack') {
-            (function(entry, delay, names) {
-              setTimeout(function() {
-                var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
-                showBotAttackOverlay(who, entry.count);
-              }, delay);
-            })(be.entry, revealDelay, botNameBySeat);
-            revealDelay += 1400;
-          } else if (be.kind === 'pass' && (multiBot || !hasPlays)) {
-            (function(entry, delay, names) {
-              setTimeout(function() {
-                var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
-                toast(who + ' passed.', { type: 'info', ms: 2000 });
-              }, delay);
-            })(be.entry, revealDelay, botNameBySeat);
-            revealDelay += 1200;
+        // 1. Show bot's turn overlay
+        var botLabel = botPlayers.length > 1 ? 'Bots' : (botPlayers[0] ? botPlayers[0].username : 'Bot');
+        showTurnOverlay(botLabel, false);
+
+        // 2. Show "Bot is thinking..." in turn bar
+        var bar = $('#turnBar');
+        var thinkLabel = botPlayers.length > 1 ? 'Bots are thinking' : 'Bot is thinking';
+        if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + thinkLabel + '\u2026</div>';
+
+        // 3. Wait for overlay to hold (1.6s overlay + a bit of thinking time)
+        await new Promise(function(r) { setTimeout(r, 2000); });
+
+        // 4. Refresh to get the bot's plays — board updates here
+        await refreshMatch();
+
+        // 5. Animate bot plays — show each card with reveal animation
+        var log = state.lastMatch?.log || [];
+        var botNameBySeat = {};
+        for (var bni = 0; bni < botPlayers.length; bni++) {
+          botNameBySeat[botPlayers[bni].seat] = botPlayers[bni].username || 'Bot';
+        }
+        var multiBot = botPlayers.length > 1;
+
+        // Collect all bot events in order
+        var botEvents = [];
+        for (var lei = 0; lei < log.length; lei++) {
+          var le = log[lei];
+          if (le.t < Date.now() - 10000) continue;
+          if (le.type === 'BOT_PLAY' || le.type === 'BOT_CAST_SPELL') {
+            botEvents.push({ kind: 'play', entry: le });
+          } else if (le.type === 'ATTACKERS_DECLARED' && le.by === 'bot' && le.count > 0) {
+            botEvents.push({ kind: 'attack', entry: le });
+          } else if (le.type === 'BOT_PASS') {
+            botEvents.push({ kind: 'pass', entry: le });
           }
         }
-        // Wait for all reveal animations to finish before showing YOUR TURN
-        await new Promise(function(r) { setTimeout(r, revealDelay + 200); });
-      }
 
-      // 6. Show "YOUR TURN" — unless game ended or it's blocker phase
-      state._suppressTurnOverlay = false;
-      if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
-        showTurnOverlay('', true);
+        if (botEvents.length) {
+          var revealGap = 1600;
+          var revealDelay = 0;
+          var hasPlays = false;
+          for (var bei = 0; bei < botEvents.length; bei++) {
+            var be = botEvents[bei];
+            if (be.kind === 'play') {
+              hasPlays = true;
+              (function(entry, delay, names) {
+                setTimeout(function() {
+                  var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
+                  var isSpell = entry.type === 'BOT_CAST_SPELL';
+                  showBotPlayReveal(entry.cardId, who, isSpell);
+                }, delay);
+              })(be.entry, revealDelay, botNameBySeat);
+              revealDelay += revealGap;
+            } else if (be.kind === 'attack') {
+              (function(entry, delay, names) {
+                setTimeout(function() {
+                  var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
+                  showBotAttackOverlay(who, entry.count);
+                }, delay);
+              })(be.entry, revealDelay, botNameBySeat);
+              revealDelay += 1400;
+            } else if (be.kind === 'pass' && (multiBot || !hasPlays)) {
+              (function(entry, delay, names) {
+                setTimeout(function() {
+                  var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
+                  toast(who + ' passed.', { type: 'info', ms: 2000 });
+                }, delay);
+              })(be.entry, revealDelay, botNameBySeat);
+              revealDelay += 1200;
+            }
+          }
+          // Wait for all reveal animations to finish before showing YOUR TURN
+          await new Promise(function(r) { setTimeout(r, revealDelay + 200); });
+        }
+
+        // 6. Show "YOUR TURN" — unless game ended or it's blocker phase
+        state._suppressTurnOverlay = false;
+        if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
+          showTurnOverlay('', true);
+        }
       }
     } else {
       await refreshMatch();
@@ -3300,16 +3370,35 @@ function getClientHtml() {
     if (eligible.indexOf(cardId) < 0) return;
     if (state.pendingAttackers[cardId]) {
       delete state.pendingAttackers[cardId];
+      state._atkTargetPending = null;
     } else {
-      // Target the first opponent seat
       var mySeat = state.lastMatch.viewerSeat;
-      var allSeats = (state.lastMatch.players || []).map(function(p) { return p.seat; }).sort(function(a,b) { return a - b; });
-      var targetSeat = null;
-      for (var i = 0; i < allSeats.length; i++) {
-        if (allSeats[i] !== mySeat) { targetSeat = allSeats[i]; break; }
+      var losers = state.lastMatch.game?.losers || [];
+      var opponents = (state.lastMatch.players || []).filter(function(p) {
+        return p.seat !== mySeat && losers.indexOf(p.seat) < 0;
+      });
+      if (opponents.length <= 1) {
+        // Standard or only 1 opponent — auto-target
+        if (opponents.length) state.pendingAttackers[cardId] = opponents[0].seat;
+      } else {
+        // Commander multiplayer — enter attack target selection
+        state._atkTargetPending = cardId;
+        renderGame(state.lastMatch);
+        return;
       }
-      if (targetSeat) state.pendingAttackers[cardId] = targetSeat;
     }
+    renderGame(state.lastMatch);
+  }
+
+  function selectAttackTarget(seat) {
+    if (!state._atkTargetPending) return;
+    state.pendingAttackers[state._atkTargetPending] = seat;
+    state._atkTargetPending = null;
+    renderGame(state.lastMatch);
+  }
+
+  function cancelAttackTarget() {
+    state._atkTargetPending = null;
     renderGame(state.lastMatch);
   }
 
@@ -3876,6 +3965,13 @@ function getClientHtml() {
     state.booting = true;
     // Always bind events early so tabs work even if boot fails
     bindEvents(); initDevPanel();
+    // Detect mobile — disable Commander for match creation
+    state.isMobile = window.innerWidth <= 768;
+    if (state.isMobile) {
+      var cmdOpt = $('#cmdFormatOpt');
+      if (cmdOpt) { cmdOpt.disabled = true; cmdOpt.textContent = 'Commander \u2014 desktop only'; }
+      $('#cmdDesktopHint').style.display = '';
+    }
     setStatus('Waiting for Sup context\u2026');
     try {
       const boot = await supExec('api_boot');
