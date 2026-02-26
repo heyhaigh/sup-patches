@@ -232,6 +232,18 @@ function getClientHtml() {
     @keyframes fadeIn { to{opacity:1} }
     .botAttackOverlay { background:rgba(239,68,68,0.12) !important; }
     .botAttackOverlay .turnOverlayText { color:rgba(239,68,68,0.95) !important; text-shadow:0 0 30px rgba(239,68,68,0.4) !important; }
+    .millOverlay { position:fixed; top:0; left:0; width:100%; height:100%; z-index:110; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.7); }
+    .millOverlay .millTitle { color:#fff; font-size:16px; font-weight:700; margin-bottom:14px; text-shadow:0 2px 8px rgba(0,0,0,0.6); }
+    .millOverlay .millCards { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; max-width:90%; }
+    .millOverlay .millCard { width:120px; height:168px; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,0.4); animation:millCardIn 0.35s ease-out forwards; opacity:0; }
+    .millOverlay .millCard:nth-child(2) { animation-delay:0.15s; }
+    .millOverlay .millCard:nth-child(3) { animation-delay:0.3s; }
+    .millOverlay .millCard:nth-child(4) { animation-delay:0.45s; }
+    .millOverlay .millCard:nth-child(5) { animation-delay:0.6s; }
+    .millOverlay .millCardName { color:rgba(255,255,255,0.8); font-size:11px; text-align:center; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px; }
+    .millOverlay .millOk { margin-top:18px; padding:10px 28px; border-radius:12px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.15); color:#fff; font-size:14px; font-weight:700; cursor:pointer; transition:background 120ms ease; }
+    .millOverlay .millOk:hover { background:rgba(255,255,255,0.25); }
+    @keyframes millCardIn { from { transform:translateY(-20px) scale(0.8); opacity:0; } to { transform:translateY(0) scale(1); opacity:1; } }
     .cardWrap.tapped .cardImg { transform:rotate(90deg); }
     .cardWrap.tapped { margin:10px 6px; }
     .cardWrap.canAttack { box-shadow:0 0 8px 2px rgba(34,197,94,0.5); border-radius:12px; cursor:pointer; }
@@ -3446,6 +3458,41 @@ function getClientHtml() {
     }, 1000);
   }
 
+  function showMillReveal(cardIds) {
+    return new Promise(function(resolve) {
+      var overlay = document.createElement('div');
+      overlay.className = 'millOverlay';
+      var title = document.createElement('div');
+      title.className = 'millTitle';
+      title.textContent = 'Milled ' + cardIds.length + ' card' + (cardIds.length !== 1 ? 's' : '');
+      overlay.appendChild(title);
+      var row = document.createElement('div');
+      row.className = 'millCards';
+      for (var i = 0; i < cardIds.length; i++) {
+        var wrap = document.createElement('div');
+        wrap.style.textAlign = 'center';
+        var c = cardMeta(cardIds[i]);
+        var img = document.createElement('img');
+        img.className = 'millCard';
+        img.src = (c && (c.imageSmall || c.imageNormal)) || '';
+        img.alt = (c && c.name) || cardIds[i];
+        wrap.appendChild(img);
+        var nameEl = document.createElement('div');
+        nameEl.className = 'millCardName';
+        nameEl.textContent = (c && c.name) || 'Unknown';
+        wrap.appendChild(nameEl);
+        row.appendChild(wrap);
+      }
+      overlay.appendChild(row);
+      var btn = document.createElement('button');
+      btn.className = 'millOk';
+      btn.textContent = 'OK';
+      btn.onclick = function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); resolve(); };
+      overlay.appendChild(btn);
+      document.body.appendChild(overlay);
+    });
+  }
+
   function getGameBoardRelativeRect(el) {
     var board = document.getElementById('gameBoard');
     if (!board || !el) return null;
@@ -3477,6 +3524,10 @@ function getClientHtml() {
       }
       if (entry.type === 'CREATURE_DIED') {
         showDeathOverlay(entry.cardId);
+      }
+      if (entry.type === 'MILL' && entry.seat === newMatch?.viewerSeat && Array.isArray(entry.cardIds) && entry.cardIds.length) {
+        // Queue mill reveal — needs to be shown after render
+        (function(ids) { setTimeout(function() { showMillReveal(ids); }, 300); })(entry.cardIds);
       }
       if (entry.type === 'TURN_START' && !state._suppressTurnOverlay) {
         // Don't show turn overlay during blocker phase — it's not actually a turn change
@@ -3603,10 +3654,21 @@ function getClientHtml() {
       if (tType === 'target opponent') tType = 'target player';
       effects.push({ type: 'damage', amount: parseInt(dm[1], 10), targetType: tType });
     }
-    var destRe = /destroy\\s+target\\s+(creature|permanent)/gi;
+    var destRe = /destroy\\s+target\\s+(creature|permanent|enchantment|artifact|nonland permanent)/gi;
     var de;
     while ((de = destRe.exec(oracleText)) !== null) { effects.push({ type: 'destroy', targetType: de[1].toLowerCase() }); }
-    var exileRe = /exile\\s+target\\s+(creature|permanent)/gi;
+    if (!effects.some(function(e) { return e.type === 'destroy'; })) {
+      var compDestRe = /destroy\\s+target\\s+[\\w\\s]+(?:,\\s*or\\s+|\\s+or\\s+)(?:creature|permanent|enchantment|artifact)/gi;
+      if (compDestRe.test(oracleText)) {
+        var destOracleLc = oracleText.toLowerCase();
+        if (/destroy\\s+target\\s+[\\w\\s,]*creature/i.test(destOracleLc) || /or\\s+creature/i.test(destOracleLc)) {
+          effects.push({ type: 'destroy', targetType: 'creature' });
+        } else {
+          effects.push({ type: 'destroy', targetType: 'permanent' });
+        }
+      }
+    }
+    var exileRe = /exile\\s+target\\s+(creature|permanent|nonland permanent)/gi;
     var ex;
     while ((ex = exileRe.exec(oracleText)) !== null) { effects.push({ type: 'exile', targetType: ex[1].toLowerCase() }); }
     var bounceRe = /return\\s+target\\s+(creature|permanent)\\s+to\\s+its\\s+owner'?s\\s+hand/gi;
@@ -3631,6 +3693,9 @@ function getClientHtml() {
     var creatureTokenRe = /create\\s+(?:a|(\\d+))\\s+(\\d+)\\/(\\d+)\\s+[\\w\\s]*?([\\w]+)\\s+creature\\s+tokens?(?:\\s+with\\s+([\\w\\s]+))?/gi;
     var ctr;
     while ((ctr = creatureTokenRe.exec(oracleText)) !== null) { effects.push({ type: 'createToken', tokenType: 'creature', count: ctr[1] ? parseInt(ctr[1], 10) : 1, power: parseInt(ctr[2], 10), toughness: parseInt(ctr[3], 10), subtype: ctr[4], keywords: ctr[5] ? ctr[5].split(/\\s+and\\s+|\\s*,\\s*/) : [] }); }
+    var millRe = /mill\\s+(\\w+)\\s+cards?/gi;
+    var ml;
+    while ((ml = millRe.exec(oracleText)) !== null) { var mNum = parseInt(ml[1], 10); if (isNaN(mNum)) mNum = wordToNum[ml[1].toLowerCase()] || 1; effects.push({ type: 'mill', amount: mNum, target: 'self' }); }
     return effects;
   }
 
@@ -5323,14 +5388,27 @@ function engineParseSpellEffects(oracleText) {
         if (tType === 'target opponent') tType = 'target player';
         effects.push({ type: 'damage', amount: parseInt(dm[1], 10), targetType: tType });
     }
-    // "destroy target creature/permanent"
-    var destRe = /destroy\s+target\s+(creature|permanent)/gi;
+    // "destroy target creature/permanent" + compound forms like "destroy target enchantment, or creature with flying"
+    var destRe = /destroy\s+target\s+(creature|permanent|enchantment|artifact|nonland permanent)/gi;
     var de;
     while ((de = destRe.exec(oracleText)) !== null) {
         effects.push({ type: 'destroy', targetType: de[1].toLowerCase() });
     }
+    // Compound destroy: "destroy target X, or Y" / "destroy target X or Y"
+    if (!effects.some(function(e) { return e.type === 'destroy'; })) {
+        var compDestRe = /destroy\s+target\s+[\w\s]+(?:,\s*or\s+|\s+or\s+)(?:creature|permanent|enchantment|artifact)/gi;
+        if (compDestRe.test(oracleText)) {
+            // Check if the oracle text mentions creature as a valid target
+            var destOracleLc = oracleText.toLowerCase();
+            if (/destroy\s+target\s+[\w\s,]*creature/i.test(destOracleLc) || /or\s+creature/i.test(destOracleLc)) {
+                effects.push({ type: 'destroy', targetType: 'creature' });
+            } else {
+                effects.push({ type: 'destroy', targetType: 'permanent' });
+            }
+        }
+    }
     // "exile target creature/permanent"
-    var exileRe = /exile\s+target\s+(creature|permanent)/gi;
+    var exileRe = /exile\s+target\s+(creature|permanent|nonland permanent)/gi;
     var ex;
     while ((ex = exileRe.exec(oracleText)) !== null) {
         effects.push({ type: 'exile', targetType: ex[1].toLowerCase() });
@@ -5379,6 +5457,23 @@ function engineParseSpellEffects(oracleText) {
     var ctr;
     while ((ctr = creatureTokenRe.exec(oracleText)) !== null) {
         effects.push({ type: 'createToken', tokenType: 'creature', count: ctr[1] ? parseInt(ctr[1], 10) : 1, power: parseInt(ctr[2], 10), toughness: parseInt(ctr[3], 10), subtype: ctr[4], keywords: ctr[5] ? ctr[5].split(/\s+and\s+|\s*,\s*/) : [] });
+    }
+    // "mill N cards" / "put the top N cards of your library into your graveyard"
+    var millRe = /mill\s+(\w+)\s+cards?/gi;
+    var ml;
+    while ((ml = millRe.exec(oracleText)) !== null) {
+        var mNum = parseInt(ml[1], 10);
+        if (isNaN(mNum)) mNum = wordToNum[ml[1].toLowerCase()] || 1;
+        effects.push({ type: 'mill', amount: mNum, target: 'self' });
+    }
+    var millAltRe = /put the top\s+(\w+)\s+cards?\s+of\s+(?:your|their)\s+library\s+into\s+(?:your|their)\s+graveyard/gi;
+    var mla;
+    while ((mla = millAltRe.exec(oracleText)) !== null) {
+        var maNum = parseInt(mla[1], 10);
+        if (isNaN(maNum)) maNum = wordToNum[mla[1].toLowerCase()] || 1;
+        if (!effects.some(function(e) { return e.type === 'mill'; })) {
+            effects.push({ type: 'mill', amount: maNum, target: 'self' });
+        }
     }
     return effects;
 }
@@ -5502,6 +5597,17 @@ function engineApplyEffect(match, casterSeat, effect, targetId) {
                 match.log.push({ t: Date.now(), type: "SPELL_BOUNCE", target: targetId });
             }
         }
+    } else if (effect.type === 'mill') {
+        var millSeat = (effect.target === 'self') ? casterSeat : (targetId ? Number(String(targetId).replace('seat:', '')) : casterSeat);
+        engineEnsureZones(match, millSeat);
+        var lib = match.game.zones[millSeat].library;
+        var gy = match.game.zones[millSeat].graveyard;
+        if (!Array.isArray(lib)) lib = [];
+        if (!Array.isArray(gy)) { gy = []; match.game.zones[millSeat].graveyard = gy; }
+        var millCount = Math.min(effect.amount, lib.length);
+        var milledCards = lib.splice(0, millCount);
+        for (var mci = 0; mci < milledCards.length; mci++) { gy.push(milledCards[mci]); }
+        match.log.push({ t: Date.now(), type: "MILL", seat: millSeat, amount: millCount, cardIds: milledCards });
     }
 }
 
@@ -5575,6 +5681,24 @@ function enginePlayCard(match, seat, cardId, targetId) {
         if (!targetId) return { ok: false, error: "aura requires a target creature" };
         if (!match.game.auraAttachments) match.game.auraAttachments = {};
         match.game.auraAttachments[cardId] = targetId;
+    }
+    // ETB (enters-the-battlefield) triggers
+    if (result.ok) {
+        var etbMeta = engineCardMeta(match, seat, cardId);
+        var etbOracle = String(etbMeta?.oracleText || '');
+        // Detect ETB text: "When ~ enters the battlefield" / "When ~ enters," / "When this creature enters,"
+        var hasEtb = /when\s+(?:this\s+creature|[\w,\s]+)\s+enters/i.test(etbOracle);
+        if (hasEtb) {
+            var etbEffects = engineParseSpellEffects(etbOracle);
+            if (etbEffects.length) {
+                for (var etbi = 0; etbi < etbEffects.length; etbi++) {
+                    engineApplyEffect(match, seat, etbEffects[etbi], targetId);
+                }
+                match.log.push({ t: Date.now(), type: "ETB_TRIGGER", seat: seat, cardId: cardId, effectCount: etbEffects.length });
+                engineCheckLethalDamage(match);
+                engineCheckGameOver(match);
+            }
+        }
     }
     return result;
 }
