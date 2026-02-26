@@ -1993,6 +1993,8 @@ function getClientHtml() {
   function clientCanPlay(id, match) {
     if (!match || match.game?.status === 'finished') return false;
     var mySeat = match.viewerSeat;
+    // Block all plays while scry is pending — must resolve first
+    if (match.game?.scryPending && match.game.scryPending.seat === mySeat) return false;
     var mana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
     var cmc = Number(cardMeta(id)?.cmc) || 0;
     if (cmc > mana.current) return false;
@@ -2102,13 +2104,14 @@ function getClientHtml() {
   }
 
   function clientMatchesTypeFilter(id, filterType) {
-    var type = clientCardType(id);
-    if (filterType === 'creature') return type === 'creature';
-    if (filterType === 'artifact') return type === 'artifact';
-    if (filterType === 'enchantment') return type === 'enchantment';
+    // Check typeLine directly — multi-type cards (Artifact Creature, Enchantment Creature) match all their types
+    var tl = String(cardMeta(id)?.typeLine || '').toLowerCase();
+    if (filterType === 'creature') return tl.includes('creature');
+    if (filterType === 'artifact') return tl.includes('artifact');
+    if (filterType === 'enchantment') return tl.includes('enchantment');
     if (filterType === 'permanent') return true;
-    if (filterType === 'nonland permanent') return type !== 'land';
-    return type === filterType;
+    if (filterType === 'nonland permanent') return !tl.includes('land') || tl.includes('creature') || tl.includes('artifact') || tl.includes('enchantment');
+    return tl.includes(filterType);
   }
 
   function getTargetablePermanents(match, casterSeat, typeFilter) {
@@ -5142,6 +5145,12 @@ function engineApplyAction(match, user, action) {
         return { ok: true, match };
     }
 
+    // Block game actions while scry is pending — must resolve scry first
+    var _scryBlockActions = ["PLAY_FROM_HAND", "MOVE_BATTLEFIELD_TO_GRAVEYARD", "ACTIVATE_ABILITY", "EQUIP", "END_TURN"];
+    if (match.game?.scryPending && match.game.scryPending.seat === player?.seat && _scryBlockActions.indexOf(action.type) >= 0) {
+        return { ok: false, error: "resolve scry first" };
+    }
+
     if (action.type === "PLAY_FROM_HAND") {
         var _v; if (_v = engineRequirePlaying(match)) return _v;
         const seat = player.seat;
@@ -6338,13 +6347,14 @@ function engineEffectNeedsTarget(effects) {
 }
 
 function engineMatchesTypeFilter(match, seat, cardId, filterType) {
-    var type = engineCardType(match, seat, cardId);
-    if (filterType === 'creature') return type === 'creature';
-    if (filterType === 'artifact') return type === 'artifact';
-    if (filterType === 'enchantment') return type === 'enchantment';
+    // Check typeLine directly — multi-type cards (Artifact Creature, Enchantment Creature) match all their types
+    var tl = String(engineCardMeta(match, seat, cardId)?.typeLine || "").toLowerCase();
+    if (filterType === 'creature') return tl.includes('creature');
+    if (filterType === 'artifact') return tl.includes('artifact');
+    if (filterType === 'enchantment') return tl.includes('enchantment');
     if (filterType === 'permanent') return true;
-    if (filterType === 'nonland permanent') return type !== 'land';
-    return type === filterType;
+    if (filterType === 'nonland permanent') return !tl.includes('land') || tl.includes('creature') || tl.includes('artifact') || tl.includes('enchantment');
+    return tl.includes(filterType);
 }
 
 function engineApplyMassEffect(match, casterSeat, effect) {
@@ -6578,7 +6588,7 @@ function enginePlayCard(match, seat, cardId, targetId, selectedModes) {
             var oracleText = meta?.oracleText;
             var effectsToApply = [];
             // Modal spell: only apply selected modes' effects
-            if (selectedModes && Array.isArray(selectedModes)) {
+            if (selectedModes && Array.isArray(selectedModes) && selectedModes.length > 0) {
                 var modalInfo = engineParseModalModes(oracleText);
                 if (modalInfo) {
                     for (var mi = 0; mi < selectedModes.length; mi++) {
@@ -6592,7 +6602,7 @@ function enginePlayCard(match, seat, cardId, targetId, selectedModes) {
                 }
             }
             // Non-modal: apply all effects
-            if (!effectsToApply.length && !selectedModes) {
+            if (!effectsToApply.length && (!selectedModes || !selectedModes.length)) {
                 effectsToApply = engineParseSpellEffects(oracleText);
             }
             for (var ei = 0; ei < effectsToApply.length; ei++) {
@@ -6962,6 +6972,8 @@ function engineBotTakeTurn(match, botPlayer) {
         } else {
             enginePlayCard(match, seat, cardId);
         }
+        // Auto-resolve scry if a spell/ETB triggered it
+        engineBotResolveScry(match, seat);
         return true;
     };
 
@@ -7467,6 +7479,10 @@ function getMatchViewForUser(match, userId) {
         if (!out.viewerSeat || Number(seatStr) === out.viewerSeat) continue;
         z.library = { count: Array.isArray(z.library) ? z.library.length : 0 };
         z.hand = { count: Array.isArray(z.hand) ? z.hand.length : 0 };
+    }
+    // Hide scryPending card IDs from non-scrying players
+    if (out.game?.scryPending && out.game.scryPending.seat !== out.viewerSeat) {
+        out.game.scryPending = { seat: out.game.scryPending.seat, count: out.game.scryPending.count };
     }
     return out;
 }
