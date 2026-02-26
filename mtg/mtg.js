@@ -3101,7 +3101,7 @@ function getClientHtml() {
               }, delay);
             })(be.entry, revealDelay, botNameBySeat);
             revealDelay += 1400;
-          } else if (be.kind === 'pass' && !hasPlays) {
+          } else if (be.kind === 'pass' && (multiBot || !hasPlays)) {
             (function(entry, delay, names) {
               setTimeout(function() {
                 var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
@@ -4863,13 +4863,14 @@ function enginePickWeakestOpponent(match, seat) {
         var life = match.game.lifeBySeat?.[allSeats[i]] ?? 40;
         if (life < bestLife) { bestLife = life; best = allSeats[i]; }
     }
-    return best || allSeats.find(function(s) { return s !== seat; });
+    return best || null;
 }
 
 function engineRunBotsIfActive(match) {
     var guard = 0;
     while (guard++ < 6) {
         if (match.game?.status === "finished") break;
+        if (match.game?.step === "combat_blockers") break;
         var botPlayer = (match.players || []).find(function(p) { return p.isBot && p.seat === match.game?.activePlayerSeat; });
         if (!botPlayer) break;
         engineBotTakeTurn(match, botPlayer);
@@ -5620,10 +5621,26 @@ function engineBotCardImpactScore(match, seat, cardId) {
         if (/vigilance/i.test(oracle)) kwBonus += 6;
         score += kwBonus;
     }
-    // Buff auras — valuable only if we have creatures to enchant
+    // Auras — buff vs debuff awareness
     if (engineIsAura(match, seat, cardId)) {
-        var hasCr = (match.game.zones?.[seat]?.battlefield || []).some(function(id) { return engineIsCreature(match, seat, id); });
-        score += hasCr ? 60 : 5;
+        var auraMods = engineParseAuraMods(match, seat, cardId);
+        var auraOr = String(meta?.oracleText || '');
+        var auraIsDebuff = (auraMods.power < 0 || auraMods.toughness < 0) || /can't attack|can't block|doesn't untap|gets\s*-/i.test(auraOr);
+        if (auraIsDebuff) {
+            // Debuff aura — valuable if opponents have creatures
+            var hasOppCr = false;
+            var auraSeats = engineSeatOrder(match);
+            for (var asi = 0; asi < auraSeats.length; asi++) {
+                if (auraSeats[asi] === seat) continue;
+                var aoBf = match.game.zones?.[auraSeats[asi]]?.battlefield || [];
+                if (aoBf.some(function(id) { return engineIsCreature(match, auraSeats[asi], id); })) { hasOppCr = true; break; }
+            }
+            score += hasOppCr ? 70 : 5;
+        } else {
+            // Buff aura — valuable if we have creatures
+            var hasCr = (match.game.zones?.[seat]?.battlefield || []).some(function(id) { return engineIsCreature(match, seat, id); });
+            score += hasCr ? 60 : 5;
+        }
     }
     // Enchantments/artifacts (non-aura) — moderate value
     if ((type === 'enchantment' || type === 'artifact') && !engineIsAura(match, seat, cardId)) score += 40;
@@ -5652,7 +5669,8 @@ function engineBotTakeTurn(match, botPlayer) {
         var m = engineCardMeta(match, seat, id);
         return m && /sacrifice.*add.*mana/i.test(m.oracleText || '');
     });
-    var cheapestInHand = hand.length ? Math.min.apply(null, hand.map(getCmc)) : 999;
+    var nonLandHand = hand.filter(function(id) { return engineCardType(match, seat, id) !== "land"; });
+    var cheapestInHand = nonLandHand.length ? Math.min.apply(null, nonLandHand.map(getCmc)) : 999;
     while (treasuresOnBf.length && mana.current < cheapestInHand) {
         var tid = treasuresOnBf.shift();
         engineActivateAbility(match, seat, tid, String(engineCardMeta(match, seat, tid)?.oracleText || ''));
@@ -5661,12 +5679,12 @@ function engineBotTakeTurn(match, botPlayer) {
 
     const affordable = hand.filter(id => getCmc(id) <= mana.current);
 
-    if (!affordable.length || (diff === "easy" && sup.random.integer(0, 6) < 1)) {
+    var skipCardPlay = !affordable.length || (diff === "easy" && sup.random.integer(0, 6) < 1);
+    if (skipCardPlay) {
         match.log.push({ t: Date.now(), type: "BOT_PASS", by: "bot", seat, difficulty: diff });
-        engineAdvanceTurn(match, { by: "bot" });
-        return;
     }
 
+    if (!skipCardPlay) {
     // Helper: find best aura target for bot (detects buff vs debuff)
     var botAuraTarget = function(cardId) {
         var allSeats = engineSeatOrder(match);
@@ -5722,10 +5740,10 @@ function engineBotTakeTurn(match, botPlayer) {
                     }
                 }
                 if (bestTarget) return bestTarget;
-                if (eff.targetType === 'any target') return 'seat:' + enginePickWeakestOpponent(match, seat);
+                if (eff.targetType === 'any target') { var wkSeat = enginePickWeakestOpponent(match, seat); return wkSeat != null ? 'seat:' + wkSeat : null; }
             }
             if (eff.type === 'damage' && eff.targetType === 'target player') {
-                return 'seat:' + enginePickWeakestOpponent(match, seat);
+                var wkSeat2 = enginePickWeakestOpponent(match, seat); return wkSeat2 != null ? 'seat:' + wkSeat2 : null;
             }
             if (eff.type === 'destroy') {
                 // Pick strongest opponent creature
@@ -5804,7 +5822,8 @@ function engineBotTakeTurn(match, botPlayer) {
 
     if (diff === "easy") {
         // Easy: shuffle hand, try to play 1-2 cards (retry on failure instead of giving up)
-        var easyShuffled = affordable.slice().sort(function() { return sup.random.integer(0, 1) ? 1 : -1; });
+        var easyShuffled = affordable.slice();
+        for (var esi = easyShuffled.length - 1; esi > 0; esi--) { var eri = sup.random.integer(0, esi); var etmp = easyShuffled[esi]; easyShuffled[esi] = easyShuffled[eri]; easyShuffled[eri] = etmp; }
         var easyPlayed = 0;
         var easyMax = sup.random.integer(1, 2);
         for (var ei = 0; ei < easyShuffled.length && easyPlayed < easyMax; ei++) {
@@ -5844,7 +5863,7 @@ function engineBotTakeTurn(match, botPlayer) {
         });
         for (const cardId of sorted) {
             if (getCmc(cardId) > mana.current) continue;
-            if (bf.length + played.length >= 6) break;
+            if (bf.length >= 6) break;
             if (botIsLand(cardId) && (match.game.landsPlayedThisTurn || 0) >= 1) continue;
             if (botPlayCard(cardId)) {
                 if (botIsLand(cardId)) match.game.landsPlayedThisTurn = (match.game.landsPlayedThisTurn || 0) + 1;
@@ -5859,9 +5878,10 @@ function engineBotTakeTurn(match, botPlayer) {
             var logType = engineIsSpell(match, seat, cardId) ? "BOT_CAST_SPELL" : "BOT_PLAY";
             match.log.push({ t: Date.now(), type: logType, by: "bot", seat, difficulty: diff, cardId });
         }
-    } else {
+    } else if (!skipCardPlay) {
         match.log.push({ t: Date.now(), type: "BOT_PASS", by: "bot", seat, difficulty: diff });
     }
+    } // end if (!skipCardPlay)
     // Bot combat phase
     var didAttack = engineBotDeclareAttackers(match, botPlayer);
     if (didAttack) {
