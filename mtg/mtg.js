@@ -223,6 +223,15 @@ function getClientHtml() {
     .spellOverlay { position:fixed; top:0; left:0; width:100%; height:100%; z-index:100; display:flex; align-items:center; justify-content:center; background:var(--b5); pointer-events:none; }
     .spellOverlay img { width:240px; height:336px; border-radius:16px; box-shadow:0 0 60px rgba(124,58,237,0.5),0 20px 60px rgba(0,0,0,0.4); animation:spellCast 1.6s ease-out forwards; }
     @keyframes spellCast { 0%{transform:scale(0.3) rotate(-8deg);opacity:0} 15%{transform:scale(1.05) rotate(0deg);opacity:1} 70%{transform:scale(1) rotate(0deg);opacity:1} 100%{transform:scale(0.4) translateY(60vh) rotate(12deg);opacity:0} }
+    .botPlayReveal { position:fixed; top:0; left:0; width:100%; height:100%; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.55); pointer-events:none; animation:botRevealBg 1.4s ease-out forwards; }
+    .botPlayReveal img { width:200px; height:280px; border-radius:14px; box-shadow:0 0 40px rgba(239,68,68,0.35),0 16px 48px rgba(0,0,0,0.5); animation:botRevealCard 1.3s ease-out forwards; }
+    .botPlayReveal .botRevealLabel { color:#fff; font-size:15px; font-weight:700; margin-top:12px; text-shadow:0 2px 8px rgba(0,0,0,0.6); opacity:0; animation:fadeIn 0.25s ease 0.1s forwards; letter-spacing:0.5px; }
+    .botPlayReveal .botRevealSub { color:rgba(255,255,255,0.6); font-size:12px; font-weight:600; margin-top:4px; text-shadow:0 1px 4px rgba(0,0,0,0.5); opacity:0; animation:fadeIn 0.25s ease 0.2s forwards; }
+    @keyframes botRevealCard { 0%{transform:scale(0.4) translateY(-30px);opacity:0} 10%{transform:scale(1.03);opacity:1} 70%{transform:scale(1);opacity:1} 100%{transform:scale(0.5) translateY(40px);opacity:0} }
+    @keyframes botRevealBg { 0%{opacity:0} 8%{opacity:1} 75%{opacity:1} 100%{opacity:0} }
+    @keyframes fadeIn { to{opacity:1} }
+    .botAttackOverlay { background:rgba(239,68,68,0.12) !important; }
+    .botAttackOverlay .turnOverlayText { color:rgba(239,68,68,0.95) !important; text-shadow:0 0 30px rgba(239,68,68,0.4) !important; }
     .cardWrap.tapped .cardImg { transform:rotate(90deg); }
     .cardWrap.tapped { margin:10px 6px; }
     .cardWrap.canAttack { box-shadow:0 0 8px 2px rgba(34,197,94,0.5); border-radius:12px; cursor:pointer; }
@@ -3046,75 +3055,67 @@ function getClientHtml() {
       // 4. Refresh to get the bot's plays — board updates here
       await refreshMatch();
 
-      // 5. Stagger bot play toasts so user can read each one
+      // 5. Animate bot plays — show each card with reveal animation
       var log = state.lastMatch?.log || [];
-      var botPlays = log.filter(function(e) {
-        return (e.type === 'BOT_PLAY' || e.type === 'BOT_CAST_SPELL') && e.t > Date.now() - 10000;
-      });
-      var botAttacked = log.find(function(e) {
-        return e.type === 'ATTACKERS_DECLARED' && e.by === 'bot' && e.count > 0 && e.t > Date.now() - 10000;
-      });
-      var botDamage = log.filter(function(e) {
-        return (e.type === 'PLAYER_DAMAGE' || e.type === 'TRAMPLE_DAMAGE') && e.t > Date.now() - 10000;
-      });
-      var toastDuration = 3500;
-      var toastGap = 1000;
-      var totalWait = 0;
-      var toastIdx = 0;
-
       var botNameBySeat = {};
       for (var bni = 0; bni < botPlayers.length; bni++) {
         botNameBySeat[botPlayers[bni].seat] = botPlayers[bni].username || 'Bot';
       }
       var multiBot = botPlayers.length > 1;
 
-      if (botPlays.length) {
-        for (var bpi = 0; bpi < botPlays.length; bpi++) {
-          (function(entry, delay) {
-            setTimeout(function() {
-              var cName = cardMeta(entry.cardId)?.name || 'a card';
-              var verb = entry.type === 'BOT_CAST_SPELL' ? 'cast' : 'played';
-              var who = multiBot ? (botNameBySeat[entry.seat] || 'Bot') : 'Bot';
-              toast(who + ' ' + verb + ' ' + cName + '.', { type: 'info', ms: toastDuration });
-            }, delay);
-          })(botPlays[bpi], bpi * toastGap);
+      // Collect all bot events in order
+      var botEvents = [];
+      for (var lei = 0; lei < log.length; lei++) {
+        var le = log[lei];
+        if (le.t < Date.now() - 10000) continue;
+        if (le.type === 'BOT_PLAY' || le.type === 'BOT_CAST_SPELL') {
+          botEvents.push({ kind: 'play', entry: le });
+        } else if (le.type === 'ATTACKERS_DECLARED' && le.by === 'bot' && le.count > 0) {
+          botEvents.push({ kind: 'attack', entry: le });
+        } else if (le.type === 'BOT_PASS') {
+          botEvents.push({ kind: 'pass', entry: le });
         }
-        toastIdx = botPlays.length;
-        totalWait = (botPlays.length - 1) * toastGap + toastDuration;
-      } else {
-        var botPasses = log.filter(function(e) { return e.type === 'BOT_PASS' && e.t > Date.now() - 10000; });
-        if (botPasses.length) {
-          if (multiBot && botPasses.length > 1) {
-            toast('All bots passed.', { type: 'info', ms: 2500 });
-          } else {
-            var passWho = multiBot ? (botNameBySeat[botPasses[0].seat] || 'Bot') : 'Bot';
-            toast(passWho + ' passed.', { type: 'info', ms: 2500 });
+      }
+
+      if (botEvents.length) {
+        var revealGap = 1600;
+        var revealDelay = 0;
+        var hasPlays = false;
+        for (var bei = 0; bei < botEvents.length; bei++) {
+          var be = botEvents[bei];
+          if (be.kind === 'play') {
+            hasPlays = true;
+            (function(entry, delay, names) {
+              setTimeout(function() {
+                var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
+                var isSpell = entry.type === 'BOT_CAST_SPELL';
+                showBotPlayReveal(entry.cardId, who, isSpell);
+              }, delay);
+            })(be.entry, revealDelay, botNameBySeat);
+            revealDelay += revealGap;
+          } else if (be.kind === 'attack') {
+            (function(entry, delay, names) {
+              setTimeout(function() {
+                var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
+                showBotAttackOverlay(who, entry.count);
+              }, delay);
+            })(be.entry, revealDelay, botNameBySeat);
+            revealDelay += 1400;
+          } else if (be.kind === 'pass' && !hasPlays) {
+            (function(entry, delay, names) {
+              setTimeout(function() {
+                var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
+                toast(who + ' passed.', { type: 'info', ms: 2000 });
+              }, delay);
+            })(be.entry, revealDelay, botNameBySeat);
+            revealDelay += 1200;
           }
-          totalWait = 2500;
-          toastIdx = 1;
-        } else {
-          totalWait = 1000;
         }
+        // Wait for all reveal animations to finish before showing YOUR TURN
+        await new Promise(function(r) { setTimeout(r, revealDelay + 200); });
       }
 
-      var botAttacks = log.filter(function(e) {
-        return e.type === 'ATTACKERS_DECLARED' && e.by === 'bot' && e.count > 0 && e.t > Date.now() - 10000;
-      });
-      if (botAttacks.length) {
-        var atkDelay = toastIdx * toastGap;
-        var totalDmg = 0;
-        for (var di = 0; di < botDamage.length; di++) totalDmg += (botDamage[di].damage || 0);
-        (function(delay, dmg, attacks) {
-          setTimeout(function() {
-            var dmgStr = dmg > 0 ? ' for ' + dmg + ' damage!' : '!';
-            var who = (multiBot && attacks.length === 1) ? (botNameBySeat[attacks[0].seat] || 'Bot') : (multiBot ? 'Bots' : 'Bot');
-            toast(who + ' attacked' + dmgStr, { type: 'info', ms: toastDuration });
-          }, delay);
-        })(atkDelay, totalDmg, botAttacks);
-        totalWait = Math.max(totalWait, atkDelay + toastDuration);
-      }
-
-      // 6. Show "YOUR TURN" immediately (don't wait for toasts) — unless game ended or it's blocker phase
+      // 6. Show "YOUR TURN" — unless game ended or it's blocker phase
       state._suppressTurnOverlay = false;
       if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
         showTurnOverlay('', true);
@@ -3404,6 +3405,45 @@ function getClientHtml() {
     overlay.appendChild(animImg);
     document.body.appendChild(overlay);
     setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 1700);
+  }
+
+  function showBotPlayReveal(cardId, botName, isSpell) {
+    var c = cardMeta(cardId);
+    if (!c) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'botPlayReveal';
+    var animImg = document.createElement('img');
+    animImg.src = c.imageNormal || c.imageSmall || '';
+    animImg.alt = c.name || cardId;
+    overlay.appendChild(animImg);
+    var label = document.createElement('div');
+    label.className = 'botRevealLabel';
+    label.textContent = (botName || 'Bot') + (isSpell ? ' cast' : ' played');
+    overlay.appendChild(label);
+    var sub = document.createElement('div');
+    sub.className = 'botRevealSub';
+    sub.textContent = c.name || 'Unknown card';
+    overlay.appendChild(sub);
+    document.body.appendChild(overlay);
+    setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 1500);
+  }
+
+  function showBotAttackOverlay(botName, count) {
+    var board = document.getElementById('gameBoard');
+    if (!board) return;
+    var existing = board.querySelector('.turnOverlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.className = 'turnOverlay botAttackOverlay';
+    var text = document.createElement('div');
+    text.className = 'turnOverlayText';
+    text.textContent = (botName || 'Bot') + ' attacks' + (count > 1 ? ' with ' + count + ' creatures!' : '!');
+    overlay.appendChild(text);
+    board.appendChild(overlay);
+    setTimeout(function() {
+      overlay.classList.add('fadeOut');
+      setTimeout(function() { if (overlay.isConnected) overlay.remove(); }, 400);
+    }, 1000);
   }
 
   function getGameBoardRelativeRect(el) {
