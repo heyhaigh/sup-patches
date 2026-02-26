@@ -232,6 +232,112 @@ The key clue was: creature shows **5/6 with no damage styling** on the battlefie
 
 When investigating state bugs, always compare **what the display renders** (which reads current state) against **what the log says happened** (which is append-only). A mismatch means the state was modified after the log was written.
 
+## Bot Logic: Common Bug Patterns
+
+### Early Return Skips Downstream Phases
+
+The most critical bug found in the bot audit: a function that handles multiple sequential phases (card play → combat → end turn) used `return` to skip card play, which also skipped combat entirely.
+
+```javascript
+// BAD — bot with creatures but empty hand never attacks
+if (!affordable.length) {
+    match.log.push({ type: "BOT_PASS" });
+    engineAdvanceTurn(match);
+    return; // Skips combat phase below!
+}
+// ... card play logic ...
+// ... combat phase (never reached) ...
+```
+
+```javascript
+// GOOD — skip card play without skipping combat
+var skipCardPlay = !affordable.length;
+if (skipCardPlay) {
+    match.log.push({ type: "BOT_PASS" });
+}
+if (!skipCardPlay) {
+    // ... card play logic ...
+}
+// Combat phase always runs
+engineBotDeclareAttackers(match, botPlayer);
+```
+
+**Rule**: When a function has sequential phases, never `return` to skip one phase — use a flag and conditionals so downstream phases still execute.
+
+### Zero-CMC Items Poison Min() Calculations
+
+Lands have CMC 0. Any `Math.min()` over a hand containing lands returns 0, making conditions like `mana.current < cheapestInHand` always false.
+
+```javascript
+// BAD — treasures never sacrifice because cheapest = 0 (a land)
+var cheapestInHand = Math.min.apply(null, hand.map(getCmc)); // = 0
+
+// GOOD — filter to the relevant subset first
+var nonLandHand = hand.filter(id => cardType(id) !== "land");
+var cheapestInHand = nonLandHand.length ? Math.min.apply(null, nonLandHand.map(getCmc)) : 999;
+```
+
+**Rule**: Before using `Math.min/max` on game objects, filter out items that aren't relevant to the decision (lands for mana cost, dead players for life totals, etc.).
+
+### Live Array References Cause Double-Counting
+
+When a variable references a live array (like `battlefield`) and a loop both mutates that array and tracks changes in a separate counter, the count is effectively doubled.
+
+```javascript
+// BAD — bf.length already includes cards played this turn
+var bf = match.game.zones[seat].battlefield; // live reference
+var played = [];
+// ... in loop: enginePlayCard pushes to bf, then played.push(cardId)
+if (bf.length + played.length >= 6) break; // double-counts!
+
+// GOOD — use only the live array length
+if (bf.length >= 6) break;
+```
+
+**Rule**: When checking array size limits, decide whether to use the live reference OR a separate counter — never both.
+
+### Buff/Debuff Symmetry in Scoring vs Targeting
+
+The bot's targeting code correctly distinguished buff auras (target own creatures) from debuff auras (target opponent creatures). But the scoring/prioritization code treated all auras identically, leading to situations where debuffs were deprioritized when the bot had no creatures (the opposite of correct).
+
+**Rule**: When a system has targeting logic that distinguishes buff vs debuff, the scoring/evaluation logic must use the same distinction. Audit both together.
+
+### Fallback Values Should Match the Function's Contract
+
+`enginePickWeakestOpponent` was designed to find a living opponent, but its fallback returned any non-self seat — potentially a dead player. The callers concatenated the result into a string (`'seat:' + result`), producing `'seat:null'` or a dead player reference.
+
+**Rule**: If a function can legitimately have no valid result, return `null` and handle it at call sites. A wrong fallback is worse than no fallback.
+
+### Fisher-Yates vs Sort-Based Shuffle
+
+`array.sort(() => random() ? 1 : -1)` produces biased results because comparison-based sorts require consistent ordering. Use Fisher-Yates:
+
+```javascript
+for (var i = arr.length - 1; i > 0; i--) {
+    var j = randomInt(0, i);
+    var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+}
+```
+
+### Guard Loop Efficiency
+
+When a loop waits for a condition that can only be resolved externally (human input), break immediately on that condition rather than re-entering the loop body and returning early from the called function each iteration.
+
+```javascript
+// BAD — loops 5 extra times, each calling engineBotTakeTurn which returns immediately
+while (guard++ < 6) {
+    if (match.game?.status === "finished") break;
+    engineBotTakeTurn(match, botPlayer); // returns early if combat_blockers
+}
+
+// GOOD — check before entering the function
+while (guard++ < 6) {
+    if (match.game?.status === "finished") break;
+    if (match.game?.step === "combat_blockers") break;
+    engineBotTakeTurn(match, botPlayer);
+}
+```
+
 ## Workflow: Always Commit & Push After Plan Completion
 
 Every completed phase/plan improvement must be committed and pushed to git before considering it done. Don't wait for the user to ask — commit and push immediately after verifying the changes (syntax check, etc.).
