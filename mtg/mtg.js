@@ -3360,113 +3360,115 @@ function getClientHtml() {
     if (hasBot) {
       var botPlayers = (state.lastMatch?.players || []).filter(function(p) { return p.isBot; });
 
-      if (state.quickMode) {
-        // Quick mode — skip animations, just refresh and show summary toast
-        state._suppressTurnOverlay = true;
-        var bar = $('#turnBar');
-        var thinkLabel = botPlayers.length > 1 ? 'Bots are thinking' : 'Bot is thinking';
-        if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + thinkLabel + '\u2026</div>';
-        await refreshMatch();
-        // Count bot events for summary
-        var log = state.lastMatch?.log || [];
-        var playCount = 0; var atkCount = 0; var passCount = 0;
-        for (var qli = 0; qli < log.length; qli++) {
-          var ql = log[qli];
-          if (ql.t < Date.now() - 10000) continue;
-          if (ql.type === 'BOT_PLAY' || ql.type === 'BOT_CAST_SPELL') playCount++;
-          else if (ql.type === 'ATTACKERS_DECLARED' && ql.by === 'bot' && ql.count > 0) atkCount++;
-          else if (ql.type === 'BOT_PASS') passCount++;
+      // Shared helper: collect recent bot events grouped by seat
+      state._suppressTurnOverlay = true;
+      await refreshMatch();
+      var log = state.lastMatch?.log || [];
+      var botNameBySeat = {};
+      for (var bni = 0; bni < botPlayers.length; bni++) {
+        botNameBySeat[botPlayers[bni].seat] = botPlayers[bni].username || 'Bot';
+      }
+      // Derive turn order from log (preserves actual execution order)
+      var seenSeats = {};
+      var botTurnOrder = [];
+      var eventsBySeat = {};
+      for (var lei = 0; lei < log.length; lei++) {
+        var le = log[lei];
+        if (le.t < Date.now() - 10000) continue;
+        var isBotEvt = (le.type === 'BOT_PLAY' || le.type === 'BOT_CAST_SPELL' ||
+          (le.type === 'ATTACKERS_DECLARED' && le.by === 'bot' && le.count > 0) ||
+          le.type === 'BOT_PASS');
+        if (!isBotEvt) continue;
+        if (!seenSeats[le.seat]) { seenSeats[le.seat] = true; botTurnOrder.push(le.seat); }
+        if (!eventsBySeat[le.seat]) eventsBySeat[le.seat] = [];
+        if (le.type === 'BOT_PLAY' || le.type === 'BOT_CAST_SPELL') {
+          eventsBySeat[le.seat].push({ kind: 'play', entry: le });
+        } else if (le.type === 'ATTACKERS_DECLARED') {
+          eventsBySeat[le.seat].push({ kind: 'attack', entry: le });
+        } else {
+          eventsBySeat[le.seat].push({ kind: 'pass', entry: le });
         }
-        var parts = [];
-        if (playCount) parts.push(playCount + ' card' + (playCount > 1 ? 's' : '') + ' played');
-        if (atkCount) parts.push('attacked');
-        if (passCount && !playCount) parts.push('passed');
-        if (parts.length) toast('Bot: ' + parts.join(', '), { type: 'info', ms: 2500 });
+      }
+
+      if (state.quickMode) {
+        // Quick mode — per-bot summaries, minimal delay
+        for (var bti = 0; bti < botTurnOrder.length; bti++) {
+          var botSeat = botTurnOrder[bti];
+          var botName = botNameBySeat[botSeat] || 'Bot';
+          var seatEvents = eventsBySeat[botSeat] || [];
+          var bar = $('#turnBar');
+          if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + botName + ' is thinking\u2026</div>';
+          await new Promise(function(r) { setTimeout(r, 400); });
+          var playCount = 0; var atkCount = 0; var passCount = 0;
+          for (var si = 0; si < seatEvents.length; si++) {
+            if (seatEvents[si].kind === 'play') playCount++;
+            else if (seatEvents[si].kind === 'attack') atkCount++;
+            else if (seatEvents[si].kind === 'pass') passCount++;
+          }
+          var parts = [];
+          if (playCount) parts.push(playCount + ' card' + (playCount > 1 ? 's' : '') + ' played');
+          if (atkCount) parts.push('attacked');
+          if (passCount && !playCount) parts.push('passed');
+          if (parts.length) toast(botName + ': ' + parts.join(', '), { type: 'info', ms: 2500 });
+        }
         state._suppressTurnOverlay = false;
         if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
           showTurnOverlay('', true);
         }
       } else {
-        // Full animation mode
-        // Suppress TURN_START overlays — we'll trigger them manually for proper sequencing
-        state._suppressTurnOverlay = true;
+        // Full animation mode — show each bot's turn individually
+        for (var bti = 0; bti < botTurnOrder.length; bti++) {
+          var botSeat = botTurnOrder[bti];
+          var botName = botNameBySeat[botSeat] || 'Bot';
+          var seatEvents = eventsBySeat[botSeat] || [];
+          if (state.lastMatch?.game?.status === 'finished') break;
 
-        // 1. Show bot's turn overlay
-        var botLabel = botPlayers.length > 1 ? 'Bots' : (botPlayers[0] ? botPlayers[0].username : 'Bot');
-        showTurnOverlay(botLabel, false);
+          // Show "Bot N's Turn" overlay
+          showTurnOverlay(botName, false);
 
-        // 2. Show "Bot is thinking..." in turn bar
-        var bar = $('#turnBar');
-        var thinkLabel = botPlayers.length > 1 ? 'Bots are thinking' : 'Bot is thinking';
-        if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + thinkLabel + '\u2026</div>';
+          // Show "Bot N is thinking..." in turn bar
+          var bar = $('#turnBar');
+          if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + botName + ' is thinking\u2026</div>';
 
-        // 3. Wait for overlay to hold (1.6s overlay + a bit of thinking time)
-        await new Promise(function(r) { setTimeout(r, 2000); });
+          // Wait for overlay hold + thinking time
+          await new Promise(function(r) { setTimeout(r, 1800); });
 
-        // 4. Refresh to get the bot's plays — board updates here
-        await refreshMatch();
-
-        // 5. Animate bot plays — show each card with reveal animation
-        var log = state.lastMatch?.log || [];
-        var botNameBySeat = {};
-        for (var bni = 0; bni < botPlayers.length; bni++) {
-          botNameBySeat[botPlayers[bni].seat] = botPlayers[bni].username || 'Bot';
-        }
-        var multiBot = botPlayers.length > 1;
-
-        // Collect all bot events in order
-        var botEvents = [];
-        for (var lei = 0; lei < log.length; lei++) {
-          var le = log[lei];
-          if (le.t < Date.now() - 10000) continue;
-          if (le.type === 'BOT_PLAY' || le.type === 'BOT_CAST_SPELL') {
-            botEvents.push({ kind: 'play', entry: le });
-          } else if (le.type === 'ATTACKERS_DECLARED' && le.by === 'bot' && le.count > 0) {
-            botEvents.push({ kind: 'attack', entry: le });
-          } else if (le.type === 'BOT_PASS') {
-            botEvents.push({ kind: 'pass', entry: le });
-          }
-        }
-
-        if (botEvents.length) {
-          var revealGap = 1600;
-          var revealDelay = 0;
-          var hasPlays = false;
-          for (var bei = 0; bei < botEvents.length; bei++) {
-            var be = botEvents[bei];
-            if (be.kind === 'play') {
-              hasPlays = true;
-              (function(entry, delay, names) {
-                setTimeout(function() {
-                  var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
-                  var isSpell = entry.type === 'BOT_CAST_SPELL';
-                  showBotPlayReveal(entry.cardId, who, isSpell);
-                }, delay);
-              })(be.entry, revealDelay, botNameBySeat);
-              revealDelay += revealGap;
-            } else if (be.kind === 'attack') {
-              (function(entry, delay, names) {
-                setTimeout(function() {
-                  var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
-                  showBotAttackOverlay(who, entry.count);
-                }, delay);
-              })(be.entry, revealDelay, botNameBySeat);
-              revealDelay += 1400;
-            } else if (be.kind === 'pass' && (multiBot || !hasPlays)) {
-              (function(entry, delay, names) {
-                setTimeout(function() {
-                  var who = multiBot ? (names[entry.seat] || 'Bot') : 'Bot';
-                  toast(who + ' passed.', { type: 'info', ms: 2000 });
-                }, delay);
-              })(be.entry, revealDelay, botNameBySeat);
-              revealDelay += 1200;
+          // Animate this bot's card plays, attacks, passes
+          if (seatEvents.length) {
+            var revealGap = 1600;
+            var revealDelay = 0;
+            for (var sei = 0; sei < seatEvents.length; sei++) {
+              var se = seatEvents[sei];
+              if (se.kind === 'play') {
+                (function(entry, delay, name) {
+                  setTimeout(function() {
+                    var isSpell = entry.type === 'BOT_CAST_SPELL';
+                    showBotPlayReveal(entry.cardId, name, isSpell);
+                  }, delay);
+                })(se.entry, revealDelay, botName);
+                revealDelay += revealGap;
+              } else if (se.kind === 'attack') {
+                (function(entry, delay, name) {
+                  setTimeout(function() {
+                    showBotAttackOverlay(name, entry.count);
+                  }, delay);
+                })(se.entry, revealDelay, botName);
+                revealDelay += 1400;
+              } else if (se.kind === 'pass') {
+                (function(entry, delay, name) {
+                  setTimeout(function() {
+                    toast(name + ' passed.', { type: 'info', ms: 2000 });
+                  }, delay);
+                })(se.entry, revealDelay, botName);
+                revealDelay += 1200;
+              }
             }
+            // Wait for this bot's animations to complete
+            await new Promise(function(r) { setTimeout(r, revealDelay + 200); });
           }
-          // Wait for all reveal animations to finish before showing YOUR TURN
-          await new Promise(function(r) { setTimeout(r, revealDelay + 200); });
         }
 
-        // 6. Show "YOUR TURN" — unless game ended or it's blocker phase
+        // Show "YOUR TURN" — unless game ended or it's blocker phase
         state._suppressTurnOverlay = false;
         if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
           showTurnOverlay('', true);
