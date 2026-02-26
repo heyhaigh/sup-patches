@@ -478,10 +478,12 @@ function getClientHtml() {
               </select>
               <div id="botOptions" style="display:none;margin-bottom:10px;">
                 <div class="label">Bot difficulty</div>
-                <select id="playBotDifficulty" class="select">
+                <select id="playBotDifficulty" class="select" style="margin-bottom:10px;">
                   <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
                 </select>
-                <div class="small" style="margin-top:8px;color:var(--muted2);">v1 bot is for testing flow. It can draw/play simple random cards depending on difficulty.</div>
+                <div class="label">Bot deck</div>
+                <select id="playBotDeck" class="select"></select>
+                <div class="small" style="margin-top:8px;color:var(--muted2);">Pick a deck for the bot, or leave on "Same as mine" to mirror your deck.</div>
               </div>
               <div class="label">Deck</div>
               <select id="playDeck" class="select"></select>
@@ -1017,9 +1019,10 @@ function getClientHtml() {
     const opponentRaw = $('#playOpponent').value || 'human';
     const opponentType = format !== 'standard' ? 'human' : opponentRaw;
     const botDifficulty = opponentType === 'bot' ? ($('#playBotDifficulty').value || 'easy') : null;
+    const botDeckId = opponentType === 'bot' ? ($('#playBotDeck').value || null) : null;
     const deckId = $('#playDeck').value || null;
     const deckName = deckId ? ($('#playDeck').selectedOptions[0]?.textContent || null) : null;
-    return { format, opponentType, botDifficulty, deckId, deckName };
+    return { format, opponentType, botDifficulty, botDeckId, deckId, deckName };
   }
 
   const _devState = { clicks: 0, clickTimer: null, active: false, lastPayload: null, lastResponse: null, lastValidate: null };
@@ -1088,6 +1091,22 @@ function getClientHtml() {
     }
     $('#playNoDeckHint').style.display = playableDecks.length ? 'none' : '';
     if (!playableDecks.length) { const opt = document.createElement('option'); opt.value = ''; opt.textContent = 'No decks available'; playSel.appendChild(opt); }
+    const botDeckSel = $('#playBotDeck');
+    if (botDeckSel) {
+      const prevBotDeck = botDeckSel.value;
+      botDeckSel.innerHTML = '';
+      const mirrorOpt = document.createElement('option');
+      mirrorOpt.value = '';
+      mirrorOpt.textContent = 'Same as mine';
+      botDeckSel.appendChild(mirrorOpt);
+      for (const deck of playableDecks) {
+        const opt = document.createElement('option');
+        opt.value = deck.id;
+        opt.textContent = deck.name || 'Untitled';
+        botDeckSel.appendChild(opt);
+      }
+      if (prevBotDeck && playableDecks.some(d => d.id === prevBotDeck)) botDeckSel.value = prevBotDeck;
+    }
     updateOpponentUI();
     if (builderSel.value) setActiveDeck(builderSel.value);
     const popSel = $('#qsPopularCommander');
@@ -1289,7 +1308,7 @@ function getClientHtml() {
     devLog('validateResult', v);
     if (!v.ok) { $('#createResult').textContent = 'Invalid deck: ' + v.errors.join(' | '); toast('Deck validation failed.', { type: 'error', title: 'Invalid deck' }); return; }
     $('#createResult').textContent = 'Creating match\u2026';
-    const opponent = config.opponentType === 'bot' ? { type: 'bot', difficulty: config.botDifficulty } : { type: 'human' };
+    const opponent = config.opponentType === 'bot' ? { type: 'bot', difficulty: config.botDifficulty, deckId: config.botDeckId || null } : { type: 'human' };
     const payload = { format: config.format, hostDeckId: config.deckId, opponent };
     devLog('createPayload', payload);
     const res = await supExec('api_createMatch', payload);
@@ -1350,7 +1369,9 @@ function getClientHtml() {
       const ready = !!readyBy[p.userId]; const deckAssigned = !!(match.decks && match.decks[p.seat]); const isBot = !!p.isBot;
       const who = isBot ? (escapeHtml(p.username) + ' <span class="pill" style="border-color:rgba(11,116,255,0.25);color:#0a4db3;background:rgba(11,116,255,0.10);">Bot</span>') : ('@' + escapeHtml(p.username));
       const hostBadge = (p.userId === match.hostUserId) ? ' <span class="pill" style="border-color:rgba(245,158,11,0.3);color:#9a5a00;background:rgba(245,158,11,0.10);">Host</span>' : '';
-      row.innerHTML = '<div style="min-width:0; flex: 1;"><div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Seat ' + p.seat + ': ' + who + hostBadge + '</div><div class="small">' + (deckAssigned ? 'Deck assigned' : 'No deck') + (isBot && p.difficulty ? (' \u2022 ' + escapeHtml(p.difficulty)) : '') + ' \u2022 ' + (ready ? '<span style="color:var(--success);font-weight:700;">Ready</span>' : '<span style="color:var(--muted);">Not ready</span>') + '</div></div>';
+      const deckName = (deckAssigned && match.decks[p.seat]?.name) ? escapeHtml(match.decks[p.seat].name) : null;
+      const deckLabel = deckAssigned ? (deckName || 'Deck assigned') : 'No deck';
+      row.innerHTML = '<div style="min-width:0; flex: 1;"><div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Seat ' + p.seat + ': ' + who + hostBadge + '</div><div class="small">' + deckLabel + (isBot && p.difficulty ? (' \u2022 ' + escapeHtml(p.difficulty)) : '') + ' \u2022 ' + (ready ? '<span style="color:var(--success);font-weight:700;">Ready</span>' : '<span style="color:var(--muted);">Not ready</span>') + '</div></div>';
       list.appendChild(row);
     }
     // Turn order display for multiplayer lobbies
@@ -3605,6 +3626,7 @@ function getClientHtml() {
     $('#playFormat').onchange = () => { renderDeckSelectors(); updateOpponentUI(); if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#playOpponent').onchange = () => { updateOpponentUI(); if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#playBotDifficulty').onchange = () => { if (typeof updateDevPanel === 'function') updateDevPanel(); };
+    $('#playBotDeck').onchange = () => { if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#playDeck').onchange = () => { if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#btnValidateAndCreate').onclick = validateAndCreateMatch;
     $('#btnJoin').onclick = joinMatch;
@@ -3748,8 +3770,16 @@ function api_createMatch(event) {
     if (deck.format !== format) throw new Error("deck format mismatch");
     const v = validateDeck(deck);
     if (!v.ok) return { ok: false, error: "invalid deck", errors: v.errors };
+    var botDeck = null;
+    if (opponentType === "bot" && opp.deckId) {
+        botDeck = getUserDecks().find((d) => d.id === opp.deckId);
+        if (!botDeck) return { ok: false, error: "bot deck not found" };
+        if (botDeck.format !== format) return { ok: false, error: "bot deck format mismatch" };
+        const bv = validateDeck(botDeck);
+        if (!bv.ok) return { ok: false, error: "bot deck invalid", errors: bv.errors };
+    }
     const matchId = sup.uuid().slice(0, 8);
-    const match = createInitialMatchState({ matchId, format, hostUser: sup.user, hostDeck: deck, opponentType, botDifficulty: difficulty });
+    const match = createInitialMatchState({ matchId, format, hostUser: sup.user, hostDeck: deck, opponentType, botDifficulty: difficulty, botDeck });
     sup.chat.set(matchStoreKey(matchId), match);
     return { ok: true, matchId };
 }
@@ -4080,7 +4110,7 @@ function matchStoreKey(matchId) { return `mtg.match.${matchId}`; }
 function botDifficultyNormalize(x) { const d = String(x || "").trim().toLowerCase(); if (d === "medium" || d === "hard") return d; return "easy"; }
 function matchHasBot(match) { return !!(match?.players || []).find((p) => p && p.isBot); }
 
-function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponentType, botDifficulty }) {
+function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponentType, botDifficulty, botDeck }) {
     const now = Date.now();
     const match = {
         v: 1, matchId, format, createdAt: now, phase: "lobby",
@@ -4093,11 +4123,12 @@ function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponent
     };
     if (format === "standard" && opponentType === "bot") {
         const botId = `bot:${matchId}`;
+        const useDeck = botDeck || hostDeck;
         match.players.push({ userId: botId, username: "MTG Bot", joinedAt: now, seat: 2, isBot: true, difficulty: botDifficultyNormalize(botDifficulty) });
         match.readyByUserId[botId] = true;
         match.botsBySeat[2] = { difficulty: botDifficultyNormalize(botDifficulty) };
-        match.decks[2] = { deckId: hostDeck.id, format: hostDeck.format, name: `${hostDeck.name} (Bot)`, commander: hostDeck.commander, cards: hostDeck.cards, cardMeta: hostDeck.cardMeta || {} };
-        match.log.push({ t: now, type: "BOT_ADDED", by: "engine", seat: 2, difficulty: botDifficultyNormalize(botDifficulty) });
+        match.decks[2] = { deckId: useDeck.id, format: useDeck.format, name: `${useDeck.name} (Bot)`, commander: useDeck.commander, cards: useDeck.cards, cardMeta: useDeck.cardMeta || {} };
+        match.log.push({ t: now, type: "BOT_ADDED", by: "engine", seat: 2, difficulty: botDifficultyNormalize(botDifficulty), deckName: useDeck.name });
     }
     return match;
 }
