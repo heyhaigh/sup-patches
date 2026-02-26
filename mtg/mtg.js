@@ -294,6 +294,10 @@ function getClientHtml() {
     .modeBtnConfirm:disabled { opacity:0.4; cursor:not-allowed; }
     .modeBtnCancel { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); }
     .modeBtnCancel:hover { background:rgba(255,255,255,0.15); }
+    .responseBanner { display:flex; align-items:center; justify-content:center; gap:8px; padding:8px 16px; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.4); border-radius:10px; color:rgba(255,255,255,0.95); font-size:14px; font-weight:700; animation:responsePulse 2s ease-in-out infinite; }
+    @keyframes responsePulse { 0%,100%{border-color:rgba(168,85,247,0.4)} 50%{border-color:rgba(168,85,247,0.8)} }
+    .cardImg.instantGlow { box-shadow:0 0 12px rgba(168,85,247,0.7), 0 0 24px rgba(168,85,247,0.3); animation:instantGlowPulse 1.5s ease-in-out infinite; }
+    @keyframes instantGlowPulse { 0%,100%{box-shadow:0 0 12px rgba(168,85,247,0.7),0 0 24px rgba(168,85,247,0.3)} 50%{box-shadow:0 0 18px rgba(168,85,247,1),0 0 36px rgba(168,85,247,0.5)} }
     .equipBadge { position:absolute; bottom:20px; right:4px; background:rgba(251,191,36,0.85); color:#000; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.2); }
     .equipPeek { position:absolute; top:-14px; left:50%; transform:translateX(-50%); width:56px; height:14px; border-radius:4px 4px 0 0; overflow:hidden; border:1px solid rgba(251,191,36,0.5); border-bottom:none; cursor:pointer; z-index:4; }
     .equipPeek img { width:56px; height:80px; object-fit:cover; object-position:top; pointer-events:none; }
@@ -1948,12 +1952,19 @@ function getClientHtml() {
   function clientCanPlay(id, match) {
     if (!match || match.game?.status === 'finished') return false;
     var mySeat = match.viewerSeat;
+    var mana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
+    var cmc = Number(cardMeta(id)?.cmc) || 0;
+    if (cmc > mana.current) return false;
+    // Instants: playable during own main phases OR during response window
+    if (clientCardType(id) === 'instant') {
+      var rw = match.game?.responseWindow;
+      if (rw && rw.seat === mySeat) return true;
+    }
+    // All cards: playable during own main phase
     if (match.game?.activePlayerSeat !== mySeat) return false;
     var step = match.game?.step || '';
     if (step !== 'main1' && step !== 'main2') return false;
-    var mana = match.game?.manaBySeat?.[mySeat] || { current: 0, max: 0 };
-    var cmc = Number(cardMeta(id)?.cmc) || 0;
-    return cmc <= mana.current;
+    return true;
   }
 
   var CLIENT_SUPPORTED_KEYWORDS = ['Flying','Reach','First Strike','Double Strike','Trample','Deathtouch','Lifelink','Haste','Vigilance','Defender','Menace','Indestructible','Hexproof'];
@@ -2902,6 +2913,27 @@ function getClientHtml() {
       }, 0);
     }
 
+    // Response window banner (instant-speed casting)
+    var existingRWB = document.querySelector('#gameBoard .responseBanner');
+    if (existingRWB) existingRWB.remove();
+    var rw = match?.game?.responseWindow;
+    if (rw && rw.seat === mySeat) {
+      var rwDiv = document.createElement('div');
+      rwDiv.className = 'responseBanner';
+      rwDiv.innerHTML = '\u26A1 Respond with an instant or '
+        + '<button id="btnPassResponse" class="btn" style="margin-left:8px;padding:4px 14px;font-size:12px;background:rgba(168,85,247,0.7);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;">Pass</button>';
+      var turnBarEl3 = document.getElementById('turnBar');
+      if (turnBarEl3 && turnBarEl3.parentNode) turnBarEl3.parentNode.insertBefore(rwDiv, turnBarEl3.nextSibling);
+      setTimeout(function() {
+        var passBtn = document.getElementById('btnPassResponse');
+        if (passBtn) passBtn.onclick = async function() {
+          var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PASS_RESPONSE' } });
+          if (!res.ok) { toast('Pass failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+          await refreshMatch();
+        };
+      }, 0);
+    }
+
     var mySeatCacheKey = buildSeatCacheKey(match, mySeat) + '||' + buildHandCacheKey(match, mySeat);
     const myEl = $('#mySide');
     if (myEl.dataset.cacheKey !== mySeatCacheKey) {
@@ -2940,6 +2972,7 @@ function getClientHtml() {
             }
           });
           if (!clientCanPlay(id, match)) img.classList.add('unplayable');
+          else if (rw && rw.seat === mySeat && clientCardType(id) === 'instant') img.classList.add('instantGlow');
           handTray.appendChild(img);
         }
       }
@@ -4945,8 +4978,15 @@ function engineApplyAction(match, user, action) {
     if (action.type === "PLAY_FROM_HAND") {
         var _v; if (_v = engineRequirePlaying(match)) return _v;
         const seat = player.seat;
-        if (_v = engineRequireTurn(match, seat)) return _v;
-        if (_v = engineRequireMainPhase(match)) return _v;
+        var isInstantSpeed = engineCardType(match, seat, action.cardId) === "instant";
+        var rw = match.game?.responseWindow;
+        // Instants: playable during response window for the responding seat, or normal turn rules
+        if (isInstantSpeed && rw && rw.seat === seat) {
+            // Valid: playing instant during response window — skip turn/phase checks
+        } else {
+            if (_v = engineRequireTurn(match, seat)) return _v;
+            if (_v = engineRequireMainPhase(match)) return _v;
+        }
         const cardId = action.cardId; if (!cardId) return { ok: false, error: "cardId is required" };
         const cmc = Number(engineCardMeta(match, seat, cardId)?.cmc) || 0;
         const mana = match.game.manaBySeat?.[seat] || { current: 0, max: 0 };
@@ -4998,6 +5038,16 @@ function engineApplyAction(match, user, action) {
         if (isSpell) match.game.stats[seat].spellsCast = (match.game.stats[seat].spellsCast || 0) + 1;
         match.game.stats[seat].manaSpent = (match.game.stats[seat].manaSpent || 0) + cmc;
         match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId, targetId: targetId, selectedModes: selectedModes });
+        // After playing an instant during a response window, check if we should auto-close
+        if (isInstantSpeed && match.game?.responseWindow) {
+            var stillHas = engineHumanHasInstants(match);
+            if (!stillHas || stillHas.seat !== seat) {
+                // No more instants: close response window and advance bot turn
+                delete match.game.responseWindow;
+                engineAdvanceTurn(match, { by: "bot" });
+                engineRunBotsIfActive(match);
+            }
+        }
         return { ok: true, match };
     }
 
@@ -5066,6 +5116,19 @@ function engineApplyAction(match, user, action) {
             match.log.push({ t: Date.now(), type: "COMBAT_SKIPPED", by: user.username, seat: seat });
         }
         engineAdvanceTurn(match, { by: user.username }); engineRunBotsIfActive(match);
+        return { ok: true, match };
+    }
+
+    if (action.type === "PASS_RESPONSE") {
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
+        var seat = player.seat;
+        var rw = match.game?.responseWindow;
+        if (!rw || rw.seat !== seat) return { ok: false, error: "no response window for you" };
+        delete match.game.responseWindow;
+        match.log.push({ t: Date.now(), type: "PASS_RESPONSE", by: user.username, seat: seat });
+        // Resume: advance bot turn and continue
+        engineAdvanceTurn(match, { by: "bot" });
+        engineRunBotsIfActive(match);
         return { ok: true, match };
     }
 
@@ -5414,11 +5477,30 @@ function enginePickWeakestOpponent(match, seat) {
     return best || null;
 }
 
+function engineHumanHasInstants(match) {
+    // Check if any human player has castable instants (for response window)
+    var humans = (match.players || []).filter(function(p) { return !p.isBot; });
+    for (var hi = 0; hi < humans.length; hi++) {
+        var hSeat = humans[hi].seat;
+        if ((match.game.losers || []).indexOf(hSeat) >= 0) continue;
+        var hHand = match.game.zones?.[hSeat]?.hand || [];
+        var hMana = match.game.manaBySeat?.[hSeat] || { current: 0, max: 0 };
+        for (var ci = 0; ci < hHand.length; ci++) {
+            if (engineCardType(match, hSeat, hHand[ci]) === "instant") {
+                var cmc = Number(engineCardMeta(match, hSeat, hHand[ci])?.cmc) || 0;
+                if (cmc <= hMana.current) return { seat: hSeat, hasInstants: true };
+            }
+        }
+    }
+    return null;
+}
+
 function engineRunBotsIfActive(match) {
     var guard = 0;
     while (guard++ < 6) {
         if (match.game?.status === "finished") break;
         if (match.game?.step === "combat_blockers") break;
+        if (match.game?.responseWindow) break; // paused for human response
         var botPlayer = (match.players || []).find(function(p) { return p.isBot && p.seat === match.game?.activePlayerSeat; });
         if (!botPlayer) break;
         engineBotTakeTurn(match, botPlayer);
@@ -6765,7 +6847,16 @@ function engineBotTakeTurn(match, botPlayer) {
             engineResolveCombatDamage(match);
         }
     }
-    if (match.game?.status !== "finished") engineAdvanceTurn(match, { by: "bot" });
+    if (match.game?.status !== "finished") {
+        // Check if any human has castable instants before ending bot turn
+        var instantCheck = engineHumanHasInstants(match);
+        if (instantCheck) {
+            match.game.responseWindow = { seat: instantCheck.seat, reason: 'bot_turn_end' };
+            match.log.push({ t: Date.now(), type: "RESPONSE_WINDOW", seat: instantCheck.seat });
+        } else {
+            engineAdvanceTurn(match, { by: "bot" });
+        }
+    }
 }
 
 function engineBotDeclareAttackers(match, botPlayer) {
