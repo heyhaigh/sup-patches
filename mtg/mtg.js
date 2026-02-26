@@ -2459,12 +2459,13 @@ function getClientHtml() {
       wrap.dataset.cardId = id;
       return wrap;
     }
-    if (options.zone === 'battlefield' && c?.isToken && !typeLine.includes('creature')) {
-      var tWrap = document.createElement('div');
-      tWrap.className = 'cardWrap tokenWrap';
-      tWrap.dataset.cardId = id;
-      tWrap.appendChild(img);
-      return tWrap;
+    if (options.zone === 'battlefield') {
+      // Wrap ALL battlefield permanents in .cardWrap so targeting mode can find them
+      var bfWrap = document.createElement('div');
+      bfWrap.className = 'cardWrap' + (c?.isToken ? ' tokenWrap' : '');
+      bfWrap.dataset.cardId = id;
+      bfWrap.appendChild(img);
+      return bfWrap;
     }
     return img;
   }
@@ -2612,7 +2613,7 @@ function getClientHtml() {
     } else if (!tokenBf.length) {
       bfArea.innerHTML = '<div class="emptyZone">No permanents</div>';
     }
-    // Apply targeting mode CSS classes
+    // Apply targeting mode CSS classes + click handlers
     if (state.targetingMode && visibleBf.length) {
       var tgtCardEls = bfArea.querySelectorAll('.cardWrap');
       for (var tci = 0; tci < tgtCardEls.length; tci++) {
@@ -2622,8 +2623,14 @@ function getClientHtml() {
         if (state.targetingMode.validTargets.indexOf(tCid) >= 0) {
           tWrap.classList.add('canTarget');
           if (state.targetingMode.selectedTarget === tCid) tWrap.classList.add('targetSelected');
-          (function(capturedId) { tWrap.onclick = function() { handleTargetClick(capturedId); }; })(tCid);
-        } else if (clientCardType(tCid) === 'creature') {
+          // Override click at wrapper level — prevent default setSelected/inspector from firing
+          (function(capturedId) {
+            tWrap.onclick = function(ev) { ev.stopPropagation(); handleTargetClick(capturedId); };
+            // Also override the inner img click to prevent setSelected
+            var innerImg = tWrap.querySelector('img');
+            if (innerImg) innerImg.onclick = function(ev) { ev.stopPropagation(); handleTargetClick(capturedId); };
+          })(tCid);
+        } else {
           tWrap.classList.add('targetIneligible');
         }
       }
