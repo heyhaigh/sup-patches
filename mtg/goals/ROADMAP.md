@@ -127,9 +127,20 @@ Turn the card viewer into an actual game. Three pillars:
 - ~~Combat AI improvements (keyword awareness)~~ ✅ (integrated with keyword abilities)
 - Visual polish (damage numbers, death animations, spell overlays)
 
-### Phase 3: The Game Is Polished
+### Phase 3: The Game Is Polished ✅
 
-- Multiple blockers, commander damage tracking
-- Simple parseable oracle text effects (damage, destroy, draw, life gain)
-- Mobile UX polish, undo, context menus
-- Game over experience with stats
+- ~~Multiple blockers, commander damage tracking~~ ✅
+- ~~Simple parseable oracle text effects (damage, destroy, draw, life gain, exile, bounce, tokens)~~ ✅
+- ~~Mobile UX polish, undo, context menus, event log~~ ✅
+- ~~Game over experience with stats~~ ✅
+
+### Phase 5: Card Mechanics Expansion 🔜
+
+> Full plan: [`GAMEPLAY_PLAN.md`](./GAMEPLAY_PLAN.md) — Phase 5 section
+
+Fixes broken cards and expands supported mechanics:
+
+- **5A: Modal Spells + Board Sweeps + Expanded Targeting** — "Choose one/two" spells (Austere Command), "destroy all artifacts/creatures", target artifacts/enchantments not just creatures (Untimely Malfunction). Mode selection UI overlay.
+- **5B: Equipment Artifacts** — Play to battlefield, equip to creature via activated ability, +N/+N mods, stacked visual (peek strip above creature), equipment stays on battlefield when creature dies.
+- **5C: Instant-Speed Casting** — Lightweight response windows (not full stack/priority). Human can play instants during bot's turn. 15s auto-timeout. Purple flash banner + glow on playable instants.
+- **5D: Scry / Top-Card-View** — "Scry N" and "look at top N" abilities. Click-to-reorder UI overlay. Sensei's Divining Top support.

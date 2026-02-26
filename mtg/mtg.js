@@ -278,6 +278,22 @@ function getClientHtml() {
     .quickToggle { display:flex; align-items:center; gap:5px; font-size:11px; color:rgba(255,255,255,0.5); cursor:pointer; user-select:none; }
     .quickToggle input[type="checkbox"] { accent-color:#fbbf24; width:14px; height:14px; cursor:pointer; }
     .auraBadge { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(168,85,247,0.85); color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.2); }
+    .modeOverlay { position:absolute; inset:0; z-index:50; background:rgba(0,0,0,0.8); backdrop-filter:blur(6px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; animation:modeOverlayIn 0.3s ease; }
+    @keyframes modeOverlayIn { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
+    .modePanel { background:rgba(30,30,50,0.95); border:1px solid rgba(168,85,247,0.4); border-radius:16px; padding:24px; max-width:480px; width:90%; display:flex; flex-direction:column; gap:14px; box-shadow:0 8px 40px rgba(0,0,0,0.5); }
+    .modePanelTitle { font-size:20px; font-weight:900; color:#fff; text-align:center; letter-spacing:-0.02em; }
+    .modePanelSubtitle { font-size:13px; color:rgba(255,255,255,0.55); text-align:center; margin-top:-8px; }
+    .modeOption { padding:12px 16px; border-radius:10px; background:rgba(255,255,255,0.06); border:2px solid rgba(255,255,255,0.1); cursor:pointer; transition:all 0.15s ease; color:rgba(255,255,255,0.8); font-size:13px; line-height:1.4; }
+    .modeOption:hover { background:rgba(168,85,247,0.12); border-color:rgba(168,85,247,0.35); }
+    .modeOption.selected { background:rgba(168,85,247,0.2); border-color:rgba(168,85,247,0.7); color:#fff; box-shadow:0 0 12px rgba(168,85,247,0.2); }
+    .modeOption.disabled { opacity:0.35; cursor:not-allowed; pointer-events:none; }
+    .modeControls { display:flex; gap:10px; justify-content:center; margin-top:4px; }
+    .modeControls button { padding:8px 20px; border-radius:8px; font-weight:700; font-size:13px; border:none; cursor:pointer; transition:all 0.15s ease; }
+    .modeBtnConfirm { background:rgba(168,85,247,0.8); color:#fff; }
+    .modeBtnConfirm:hover { background:rgba(168,85,247,1); }
+    .modeBtnConfirm:disabled { opacity:0.4; cursor:not-allowed; }
+    .modeBtnCancel { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); }
+    .modeBtnCancel:hover { background:rgba(255,255,255,0.15); }
     .ptBuffed { color:#22c55e; }
     .phaseBar { display:flex; gap:4px; align-items:center; }
     .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:var(--w06); color:rgba(255,255,255,0.35); border:1px solid var(--w06); }
@@ -750,7 +766,7 @@ function getClientHtml() {
     activeMatchId: null, lastMatch: null, lastSearchResults: [], booting: false, booted: false,
     cardIndex: {}, selected: { id: null, zone: null, seat: null }, qsCommanderChosen: null,
     combatMode: null, pendingAttackers: {}, pendingBlockers: {}, selectedBlocker: null,
-    targetingMode: null,
+    targetingMode: null, modalSelection: null,
     lastLogIndex: 0, eventLogCollapsed: false,
     _suppressTurnOverlay: false, prevHandCounts: {}, oppHandHighlight: {},
     _atkTargetPending: null, quickMode: true,
@@ -1964,7 +1980,17 @@ function getClientHtml() {
     return { power: pw, toughness: tw, count: auraIds.length };
   }
 
-  function getTargetableCreatures(match, casterSeat) {
+  function clientMatchesTypeFilter(id, filterType) {
+    var type = clientCardType(id);
+    if (filterType === 'creature') return type === 'creature';
+    if (filterType === 'artifact') return type === 'artifact';
+    if (filterType === 'enchantment') return type === 'enchantment';
+    if (filterType === 'permanent') return true;
+    if (filterType === 'nonland permanent') return type !== 'land';
+    return type === filterType;
+  }
+
+  function getTargetablePermanents(match, casterSeat, typeFilter) {
     var targets = [];
     var seats = (match.players || []).map(function(p) { return p.seat; });
     for (var si = 0; si < seats.length; si++) {
@@ -1972,13 +1998,16 @@ function getClientHtml() {
       var bf = match?.game?.zones?.[s]?.battlefield || [];
       for (var ci = 0; ci < bf.length; ci++) {
         var cid = bf[ci];
-        if (clientCardType(cid) !== 'creature') continue;
-        // Hexproof: opponent's Hexproof creatures can't be targeted
+        if (typeFilter && !clientMatchesTypeFilter(cid, typeFilter)) continue;
         if (s !== casterSeat && clientHasKeyword(cid, 'Hexproof')) continue;
         targets.push(cid);
       }
     }
     return targets;
+  }
+
+  function getTargetableCreatures(match, casterSeat) {
+    return getTargetablePermanents(match, casterSeat, 'creature');
   }
 
   function enterTargetingMode(cardId) {
@@ -2006,9 +2035,12 @@ function getClientHtml() {
     var cardId = state.targetingMode.cardId;
     var targetId = state.targetingMode.selectedTarget;
     var isSpellTarget = !!state.targetingMode.isSpell;
+    var selectedModes = state.targetingMode.selectedModes || null;
     state.targetingMode = null;
     if (isSpellTarget) { showSpellCastAnimation(cardId); } else { showCardFlyAnimation(cardId); }
-    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: cardId, targetId: targetId } });
+    var actionPayload = { type: 'PLAY_FROM_HAND', cardId: cardId, targetId: targetId };
+    if (selectedModes) actionPayload.selectedModes = selectedModes;
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: actionPayload });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     await refreshMatch();
     setSelected(null);
@@ -3817,7 +3849,36 @@ function getClientHtml() {
     var millRe = /mill\\s+(\\w+)\\s+cards?/gi;
     var ml;
     while ((ml = millRe.exec(oracleText)) !== null) { var mNum = parseInt(ml[1], 10); if (isNaN(mNum)) mNum = wordToNum[ml[1].toLowerCase()] || 1; effects.push({ type: 'mill', amount: mNum, target: 'self' }); }
+    var destroyAllRe = /destroy\\s+all\\s+(artifacts?|enchantments?|creatures?|nonland permanents?|permanents?)/gi;
+    var da;
+    while ((da = destroyAllRe.exec(oracleText)) !== null) { effects.push({ type: 'destroyAll', targetType: da[1].toLowerCase().replace(/s$/, '') }); }
+    var putAllGyRe = /put\\s+all\\s+(creatures?)\\s+with\\s+mana\\s+value\\s+(\\d+)\\s+or\\s+(less|greater)\\s+into/gi;
+    var pag;
+    while ((pag = putAllGyRe.exec(oracleText)) !== null) { effects.push({ type: 'destroyAll', targetType: 'creature', cmcFilter: { value: parseInt(pag[2], 10), direction: pag[3].toLowerCase() } }); }
     return effects;
+  }
+
+  function clientParseModalModes(oracleText) {
+    if (!oracleText) return null;
+    var chooseRe = /choose\\s+(one|two|three|four|one\\s+or\\s+both|one\\s+or\\s+more)\\s*(?:\u2014|-)/i;
+    var chooseMatch = chooseRe.exec(oracleText);
+    if (!chooseMatch) return null;
+    var choiceWord = chooseMatch[1].toLowerCase().replace(/\\s+/g, ' ');
+    var wordToNum2 = { one: 1, two: 2, three: 3, four: 4 };
+    var minChoices, maxChoices;
+    if (choiceWord === 'one or both') { minChoices = 1; maxChoices = 2; }
+    else if (choiceWord === 'one or more') { minChoices = 1; maxChoices = 99; }
+    else { minChoices = wordToNum2[choiceWord] || 1; maxChoices = minChoices; }
+    var bulletParts = oracleText.split('\u2022');
+    var modes = [];
+    for (var i = 1; i < bulletParts.length; i++) {
+      var mText = bulletParts[i].trim();
+      if (!mText) continue;
+      var mEffects = clientParseSpellEffects(mText);
+      modes.push({ text: mText, effects: mEffects });
+    }
+    if (modes.length < 2) return null;
+    return { minChoices: minChoices, maxChoices: Math.min(maxChoices, modes.length), modes: modes };
   }
 
   function clientSpellNeedsTarget(effects) {
@@ -3833,27 +3894,28 @@ function getClientHtml() {
     return false;
   }
 
-  function enterSpellTargetingMode(cardId, effects) {
+  function enterSpellTargetingMode(cardId, effects, selectedModes) {
     var match = state.lastMatch;
     if (!match) return;
     var mySeat = match.viewerSeat;
     var validTargets = [];
-    var needsCreature = false; var needsPlayer = false;
+    var needsPlayer = false;
+    var permFilter = null;
     for (var i = 0; i < effects.length; i++) {
       var e = effects[i];
       if (e.type === 'damage') {
-        if (e.targetType === 'target creature') needsCreature = true;
+        if (e.targetType === 'target creature') { if (!permFilter) permFilter = 'creature'; }
         else if (e.targetType === 'target player') needsPlayer = true;
-        else if (e.targetType === 'any target') { needsCreature = true; needsPlayer = true; }
-      } else if (e.type === 'destroy') { needsCreature = true; }
-      else if (e.type === 'exile') { needsCreature = true; }
-      else if (e.type === 'bounce') { needsCreature = true; }
-      else if (e.type === 'tempBuff') { needsCreature = true; }
-      else if (e.type === 'tempKeyword') { needsCreature = true; }
+        else if (e.targetType === 'any target') { if (!permFilter) permFilter = 'creature'; needsPlayer = true; }
+      } else if (e.type === 'destroy' || e.type === 'exile' || e.type === 'bounce') {
+        if (!permFilter) permFilter = e.targetType || 'creature';
+      } else if (e.type === 'tempBuff' || e.type === 'tempKeyword') {
+        if (!permFilter) permFilter = 'creature';
+      }
     }
-    if (needsCreature) {
-      var creatures = getTargetableCreatures(match, mySeat);
-      for (var ci = 0; ci < creatures.length; ci++) validTargets.push(creatures[ci]);
+    if (permFilter) {
+      var perms = getTargetablePermanents(match, mySeat, permFilter);
+      for (var pi = 0; pi < perms.length; pi++) validTargets.push(perms[pi]);
     }
     if (needsPlayer) {
       var seats = (match.players || []).map(function(p) { return p.seat; });
@@ -3866,6 +3928,7 @@ function getClientHtml() {
       return;
     }
     state.targetingMode = { cardId: cardId, validTargets: validTargets, selectedTarget: null, isSpell: true };
+    if (selectedModes) state.targetingMode.selectedModes = selectedModes;
     renderGame(match);
   }
 
@@ -3879,9 +3942,15 @@ function getClientHtml() {
       return;
     }
     var isSpell = (clientCardType(sel.id) === 'instant' || clientCardType(sel.id) === 'sorcery');
-    // Spell with targeted effects: enter spell targeting mode
+    // Modal spell: show mode selection overlay first
     if (isSpell) {
       var oracle = String(cardMeta(sel.id)?.oracleText || '');
+      var modalInfo = clientParseModalModes(oracle);
+      if (modalInfo) {
+        showModeSelectionOverlay(sel.id, modalInfo);
+        return;
+      }
+      // Spell with targeted effects: enter spell targeting mode
       var effects = clientParseSpellEffects(oracle);
       if (clientSpellNeedsTarget(effects)) {
         enterSpellTargetingMode(sel.id, effects);
@@ -3892,6 +3961,119 @@ function getClientHtml() {
     const res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: sel.id } });
     if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     if (isSpell) showSpellCastAnimation(sel.id);
+    await refreshMatch();
+    setSelected(null);
+  }
+
+  function showModeSelectionOverlay(cardId, modalInfo) {
+    state.modalSelection = { cardId: cardId, modalInfo: modalInfo, selectedIndices: [] };
+    var match = state.lastMatch;
+    var board = document.getElementById('gameBoard');
+    if (!board) return;
+    var existing = board.querySelector('.modeOverlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.className = 'modeOverlay';
+    var panel = document.createElement('div');
+    panel.className = 'modePanel';
+    var meta = cardMeta(cardId);
+    var title = document.createElement('div');
+    title.className = 'modePanelTitle';
+    title.textContent = meta?.name || 'Modal Spell';
+    panel.appendChild(title);
+    var subtitle = document.createElement('div');
+    subtitle.className = 'modePanelSubtitle';
+    var chooseLabel = modalInfo.minChoices === modalInfo.maxChoices
+      ? 'Choose ' + modalInfo.maxChoices
+      : 'Choose ' + modalInfo.minChoices + ' to ' + modalInfo.maxChoices;
+    subtitle.textContent = chooseLabel;
+    panel.appendChild(subtitle);
+    for (var i = 0; i < modalInfo.modes.length; i++) {
+      (function(idx) {
+        var opt = document.createElement('div');
+        opt.className = 'modeOption';
+        opt.textContent = '\u2022 ' + modalInfo.modes[idx].text;
+        // Check if this mode can apply (for destroyAll, check if matching permanents exist)
+        var canApply = clientCheckModeApplicable(modalInfo.modes[idx], match);
+        if (!canApply) opt.classList.add('disabled');
+        opt.addEventListener('click', function() {
+          if (opt.classList.contains('disabled')) return;
+          var selIdx = state.modalSelection.selectedIndices;
+          var pos = selIdx.indexOf(idx);
+          if (pos >= 0) { selIdx.splice(pos, 1); opt.classList.remove('selected'); }
+          else if (selIdx.length < modalInfo.maxChoices) { selIdx.push(idx); opt.classList.add('selected'); }
+          var confirmBtn = panel.querySelector('.modeBtnConfirm');
+          if (confirmBtn) confirmBtn.disabled = selIdx.length < modalInfo.minChoices;
+        });
+        panel.appendChild(opt);
+      })(i);
+    }
+    var controls = document.createElement('div');
+    controls.className = 'modeControls';
+    var confirmBtn = document.createElement('button');
+    confirmBtn.className = 'modeBtnConfirm';
+    confirmBtn.textContent = 'Cast';
+    confirmBtn.disabled = true;
+    confirmBtn.addEventListener('click', function() { confirmModalAndPlay(); });
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'modeBtnCancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', function() {
+      state.modalSelection = null;
+      var ov = board.querySelector('.modeOverlay');
+      if (ov) ov.remove();
+    });
+    controls.appendChild(confirmBtn);
+    controls.appendChild(cancelBtn);
+    panel.appendChild(controls);
+    overlay.appendChild(panel);
+    board.appendChild(overlay);
+  }
+
+  function clientCheckModeApplicable(mode, match) {
+    if (!mode.effects || !mode.effects.length) return true;
+    for (var i = 0; i < mode.effects.length; i++) {
+      var e = mode.effects[i];
+      if (e.type === 'destroyAll') {
+        var found = false;
+        var seats = (match.players || []).map(function(p) { return p.seat; });
+        for (var si = 0; si < seats.length; si++) {
+          var bf = match?.game?.zones?.[seats[si]]?.battlefield || [];
+          for (var ci = 0; ci < bf.length; ci++) {
+            if (clientMatchesTypeFilter(bf[ci], e.targetType)) { found = true; break; }
+          }
+          if (found) break;
+        }
+        if (!found) return false;
+      }
+    }
+    return true;
+  }
+
+  async function confirmModalAndPlay() {
+    var ms = state.modalSelection;
+    if (!ms) return;
+    var cardId = ms.cardId;
+    var selectedModes = ms.selectedIndices.slice();
+    state.modalSelection = null;
+    var board = document.getElementById('gameBoard');
+    var ov = board?.querySelector('.modeOverlay');
+    if (ov) ov.remove();
+    // Collect all effects from selected modes
+    var allEffects = [];
+    for (var i = 0; i < selectedModes.length; i++) {
+      var mode = ms.modalInfo.modes[selectedModes[i]];
+      for (var j = 0; j < mode.effects.length; j++) allEffects.push(mode.effects[j]);
+    }
+    // If any selected mode needs a target, enter targeting mode
+    if (clientSpellNeedsTarget(allEffects)) {
+      enterSpellTargetingMode(cardId, allEffects, selectedModes);
+      return;
+    }
+    // All mass/non-targeted: send directly
+    showSpellCastAnimation(cardId);
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'PLAY_FROM_HAND', cardId: cardId, selectedModes: selectedModes } });
+    if (!res.ok) { toast('Play failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     await refreshMatch();
     setSelected(null);
   }
@@ -4690,14 +4872,15 @@ function engineApplyAction(match, user, action) {
                 }
             }
         }
-        const ok = enginePlayCard(match, seat, cardId, targetId); if (!ok.ok) return ok;
+        var selectedModes = (action.selectedModes && Array.isArray(action.selectedModes)) ? action.selectedModes : null;
+        const ok = enginePlayCard(match, seat, cardId, targetId, selectedModes); if (!ok.ok) return ok;
         if (isLand) match.game.landsPlayedThisTurn = (match.game.landsPlayedThisTurn || 0) + 1;
         mana.current = Math.max(0, mana.current - cmc);
         if (!match.game.stats) match.game.stats = {};
         if (!match.game.stats[seat]) match.game.stats[seat] = { damageDealt: 0, creaturesKilled: 0 };
         if (isSpell) match.game.stats[seat].spellsCast = (match.game.stats[seat].spellsCast || 0) + 1;
         match.game.stats[seat].manaSpent = (match.game.stats[seat].manaSpent || 0) + cmc;
-        match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId, targetId: targetId });
+        match.log.push({ t: Date.now(), type: isSpell ? "CAST_SPELL" : "PLAY", by: user.username, seat, cardId, targetId: targetId, selectedModes: selectedModes });
         return { ok: true, match };
     }
 
@@ -5620,7 +5803,42 @@ function engineParseSpellEffects(oracleText) {
             effects.push({ type: 'mill', amount: maNum, target: 'self' });
         }
     }
+    // "Destroy all artifacts/enchantments/creatures"
+    var destroyAllRe = /destroy\s+all\s+(artifacts?|enchantments?|creatures?|nonland permanents?|permanents?)/gi;
+    var da;
+    while ((da = destroyAllRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'destroyAll', targetType: da[1].toLowerCase().replace(/s$/, '') });
+    }
+    // "put all creatures with mana value N or less/greater into graveyard"
+    var putAllGyRe = /put\s+all\s+(creatures?)\s+with\s+mana\s+value\s+(\d+)\s+or\s+(less|greater)\s+into/gi;
+    var pag;
+    while ((pag = putAllGyRe.exec(oracleText)) !== null) {
+        effects.push({ type: 'destroyAll', targetType: 'creature', cmcFilter: { value: parseInt(pag[2], 10), direction: pag[3].toLowerCase() } });
+    }
     return effects;
+}
+
+function engineParseModalModes(oracleText) {
+    if (!oracleText) return null;
+    var chooseRe = /choose\s+(one|two|three|four|one\s+or\s+both|one\s+or\s+more)\s*(?:\u2014|-)/i;
+    var chooseMatch = chooseRe.exec(oracleText);
+    if (!chooseMatch) return null;
+    var choiceWord = chooseMatch[1].toLowerCase().replace(/\s+/g, ' ');
+    var wordToNum2 = { one: 1, two: 2, three: 3, four: 4 };
+    var minChoices, maxChoices;
+    if (choiceWord === 'one or both') { minChoices = 1; maxChoices = 2; }
+    else if (choiceWord === 'one or more') { minChoices = 1; maxChoices = 99; }
+    else { minChoices = wordToNum2[choiceWord] || 1; maxChoices = minChoices; }
+    var bulletParts = oracleText.split('\u2022');
+    var modes = [];
+    for (var i = 1; i < bulletParts.length; i++) {
+        var mText = bulletParts[i].trim();
+        if (!mText) continue;
+        var mEffects = engineParseSpellEffects(mText);
+        modes.push({ text: mText, effects: mEffects });
+    }
+    if (modes.length < 2) return null;
+    return { minChoices: minChoices, maxChoices: Math.min(maxChoices, modes.length), modes: modes };
 }
 
 function engineEffectNeedsTarget(effects) {
@@ -5636,7 +5854,49 @@ function engineEffectNeedsTarget(effects) {
     return false;
 }
 
+function engineMatchesTypeFilter(match, seat, cardId, filterType) {
+    var type = engineCardType(match, seat, cardId);
+    if (filterType === 'creature') return type === 'creature';
+    if (filterType === 'artifact') return type === 'artifact';
+    if (filterType === 'enchantment') return type === 'enchantment';
+    if (filterType === 'permanent') return true;
+    if (filterType === 'nonland permanent') return type !== 'land';
+    return type === filterType;
+}
+
+function engineApplyMassEffect(match, casterSeat, effect) {
+    var seats = engineSeatOrder(match);
+    var destroyed = 0;
+    for (var si = 0; si < seats.length; si++) {
+        var s = seats[si];
+        engineEnsureZones(match, s);
+        var bf = match.game.zones[s].battlefield.slice(); // copy — we'll mutate
+        for (var ci = 0; ci < bf.length; ci++) {
+            var cid = bf[ci];
+            if (!engineMatchesTypeFilter(match, s, cid, effect.targetType)) continue;
+            // CMC filter (e.g., "mana value 3 or less")
+            if (effect.cmcFilter) {
+                var cardCmc = Number(engineCardMeta(match, s, cid)?.cmc) || 0;
+                if (effect.cmcFilter.direction === 'less' && cardCmc > effect.cmcFilter.value) continue;
+                if (effect.cmcFilter.direction === 'greater' && cardCmc < effect.cmcFilter.value) continue;
+            }
+            // Indestructible check
+            if (engineHasKeyword(match, s, cid, "Indestructible")) {
+                match.log.push({ t: Date.now(), type: "MASS_BLOCKED", target: cid, reason: "Indestructible" });
+                continue;
+            }
+            var moveOk = engineMoveCard(match, s, "battlefield", "graveyard", cid);
+            if (moveOk.ok) destroyed++;
+        }
+    }
+    match.log.push({ t: Date.now(), type: "MASS_DESTROY", by: casterSeat, targetType: effect.targetType, count: destroyed });
+    return destroyed;
+}
+
 function engineApplyEffect(match, casterSeat, effect, targetId) {
+    if (effect.type === 'destroyAll') {
+        return engineApplyMassEffect(match, casterSeat, effect);
+    }
     if (effect.type === 'damage') {
         if (effect.targetType === 'each opponent') {
             var seats = engineSeatOrder(match);
@@ -5800,16 +6060,35 @@ function engineActivateAbility(match, seat, cardId, oracleText) {
     return { ok: false, error: "no recognized activated ability" };
 }
 
-function enginePlayCard(match, seat, cardId, targetId) {
+function enginePlayCard(match, seat, cardId, targetId, selectedModes) {
     if (engineIsSpell(match, seat, cardId)) {
         var moveRes = engineMoveCard(match, seat, "hand", "graveyard", cardId);
         if (moveRes.ok) {
             var meta = engineCardMeta(match, seat, cardId);
-            var effects = engineParseSpellEffects(meta?.oracleText);
-            for (var ei = 0; ei < effects.length; ei++) {
-                engineApplyEffect(match, seat, effects[ei], targetId);
+            var oracleText = meta?.oracleText;
+            var effectsToApply = [];
+            // Modal spell: only apply selected modes' effects
+            if (selectedModes && Array.isArray(selectedModes)) {
+                var modalInfo = engineParseModalModes(oracleText);
+                if (modalInfo) {
+                    for (var mi = 0; mi < selectedModes.length; mi++) {
+                        var modeIdx = selectedModes[mi];
+                        if (modeIdx >= 0 && modeIdx < modalInfo.modes.length) {
+                            var modeEffects = modalInfo.modes[modeIdx].effects;
+                            for (var mei = 0; mei < modeEffects.length; mei++) effectsToApply.push(modeEffects[mei]);
+                        }
+                    }
+                    match.log.push({ t: Date.now(), type: "MODAL_CAST", seat: seat, cardId: cardId, modes: selectedModes });
+                }
             }
-            if (effects.length) {
+            // Non-modal: apply all effects
+            if (!effectsToApply.length && !selectedModes) {
+                effectsToApply = engineParseSpellEffects(oracleText);
+            }
+            for (var ei = 0; ei < effectsToApply.length; ei++) {
+                engineApplyEffect(match, seat, effectsToApply[ei], targetId);
+            }
+            if (effectsToApply.length) {
                 engineCheckLethalDamage(match);
                 engineCheckGameOver(match);
             }
@@ -5857,13 +6136,15 @@ function engineBotCardImpactScore(match, seat, cardId) {
     // Removal spells (destroy/exile/damage) — highest priority
     if ((type === 'instant' || type === 'sorcery') && /destroy|exile|deals?\s+\d+\s+damage/i.test(oracle)) {
         score += 100;
-        // Extra value if opponents have creatures to remove
+        // Extra value for board sweeps ("destroy all")
+        if (/destroy\s+all/i.test(oracle)) score += 50;
+        // Extra value if opponents have permanents to remove
         var allSeats = engineSeatOrder(match);
         var hasTargets = false;
         for (var si = 0; si < allSeats.length; si++) {
             if (allSeats[si] === seat) continue;
             var oBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
-            for (var ci = 0; ci < oBf.length; ci++) { if (engineIsCreature(match, allSeats[si], oBf[ci])) { hasTargets = true; break; } }
+            if (oBf.length > 0) hasTargets = true;
             if (hasTargets) break;
         }
         if (hasTargets) score += 30;
@@ -6013,31 +6294,34 @@ function engineBotTakeTurn(match, botPlayer) {
                 var wkSeat2 = enginePickWeakestOpponent(match, seat); return wkSeat2 != null ? 'seat:' + wkSeat2 : null;
             }
             if (eff.type === 'destroy') {
-                // Pick strongest opponent creature
+                // Pick best opponent permanent matching targetType
+                var destType = eff.targetType || 'creature';
                 var bestDest = null; var bestPow = -1;
                 for (var si2 = 0; si2 < allSeats.length; si2++) {
                     if (allSeats[si2] === seat) continue;
                     var oBf2 = match.game.zones?.[allSeats[si2]]?.battlefield || [];
                     for (var ci2 = 0; ci2 < oBf2.length; ci2++) {
-                        if (!engineIsCreature(match, allSeats[si2], oBf2[ci2])) continue;
+                        if (!engineMatchesTypeFilter(match, allSeats[si2], oBf2[ci2], destType)) continue;
                         if (engineHasKeyword(match, allSeats[si2], oBf2[ci2], "Hexproof")) continue;
                         if (engineHasKeyword(match, allSeats[si2], oBf2[ci2], "Indestructible")) continue;
-                        var p = engineGetCreaturePower(match, allSeats[si2], oBf2[ci2]);
+                        // Score: creatures by power, non-creatures by CMC
+                        var p = engineIsCreature(match, allSeats[si2], oBf2[ci2]) ? engineGetCreaturePower(match, allSeats[si2], oBf2[ci2]) : (Number(engineCardMeta(match, allSeats[si2], oBf2[ci2])?.cmc) || 1);
                         if (p > bestPow) { bestPow = p; bestDest = oBf2[ci2]; }
                     }
                 }
                 return bestDest;
             }
             if (eff.type === 'exile' || eff.type === 'bounce') {
-                // Pick strongest opponent creature (no Indestructible check — exile/bounce bypass it)
+                // Pick best opponent permanent (no Indestructible check — exile/bounce bypass it)
+                var remType = eff.targetType || 'creature';
                 var bestRemoval = null; var bestRp = -1;
                 for (var si3 = 0; si3 < allSeats.length; si3++) {
                     if (allSeats[si3] === seat) continue;
                     var oBf3 = match.game.zones?.[allSeats[si3]]?.battlefield || [];
                     for (var ci3 = 0; ci3 < oBf3.length; ci3++) {
-                        if (!engineIsCreature(match, allSeats[si3], oBf3[ci3])) continue;
+                        if (!engineMatchesTypeFilter(match, allSeats[si3], oBf3[ci3], remType)) continue;
                         if (engineHasKeyword(match, allSeats[si3], oBf3[ci3], "Hexproof")) continue;
-                        var rp = engineGetCreaturePower(match, allSeats[si3], oBf3[ci3]);
+                        var rp = engineIsCreature(match, allSeats[si3], oBf3[ci3]) ? engineGetCreaturePower(match, allSeats[si3], oBf3[ci3]) : (Number(engineCardMeta(match, allSeats[si3], oBf3[ci3])?.cmc) || 1);
                         if (rp > bestRp) { bestRp = rp; bestRemoval = oBf3[ci3]; }
                     }
                 }
@@ -6068,17 +6352,103 @@ function engineBotTakeTurn(match, botPlayer) {
         return null;
     };
 
+    var botSelectModes = function(cardId) {
+        var meta = engineBotCardMeta(match, seat, cardId);
+        var modalInfo = engineParseModalModes(meta?.oracleText);
+        if (!modalInfo) return null;
+        // Score each mode by board impact
+        var modeScores = [];
+        var allSeats = engineSeatOrder(match);
+        for (var mi = 0; mi < modalInfo.modes.length; mi++) {
+            var score = 0;
+            var mode = modalInfo.modes[mi];
+            for (var ei = 0; ei < mode.effects.length; ei++) {
+                var eff = mode.effects[ei];
+                if (eff.type === 'destroyAll') {
+                    // Count how many opponent permanents this would destroy
+                    for (var si = 0; si < allSeats.length; si++) {
+                        if (allSeats[si] === seat) continue;
+                        var oBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
+                        for (var ci = 0; ci < oBf.length; ci++) {
+                            if (engineMatchesTypeFilter(match, allSeats[si], oBf[ci], eff.targetType)) {
+                                if (eff.cmcFilter) {
+                                    var cc = Number(engineCardMeta(match, allSeats[si], oBf[ci])?.cmc) || 0;
+                                    if (eff.cmcFilter.direction === 'less' && cc > eff.cmcFilter.value) continue;
+                                    if (eff.cmcFilter.direction === 'greater' && cc < eff.cmcFilter.value) continue;
+                                }
+                                score += eff.targetType === 'creature' ? 25 : 15;
+                            }
+                        }
+                    }
+                    // Penalty for destroying own stuff
+                    var ownBf = match.game.zones?.[seat]?.battlefield || [];
+                    for (var oi = 0; oi < ownBf.length; oi++) {
+                        if (engineMatchesTypeFilter(match, seat, ownBf[oi], eff.targetType)) {
+                            if (eff.cmcFilter) {
+                                var oc = Number(engineCardMeta(match, seat, ownBf[oi])?.cmc) || 0;
+                                if (eff.cmcFilter.direction === 'less' && oc > eff.cmcFilter.value) continue;
+                                if (eff.cmcFilter.direction === 'greater' && oc < eff.cmcFilter.value) continue;
+                            }
+                            score -= eff.targetType === 'creature' ? 20 : 10;
+                        }
+                    }
+                } else if (eff.type === 'destroy' || eff.type === 'exile') { score += 30; }
+                else if (eff.type === 'draw') { score += 20 * (eff.amount || 1); }
+                else if (eff.type === 'gainLife') { score += 5; }
+                else if (eff.type === 'damage') { score += 15; }
+                else { score += 5; }
+            }
+            modeScores.push({ idx: mi, score: score });
+        }
+        modeScores.sort(function(a, b) { return b.score - a.score; });
+        var selected = [];
+        for (var pi = 0; pi < modeScores.length && selected.length < modalInfo.maxChoices; pi++) {
+            if (modeScores[pi].score > 0 || selected.length < modalInfo.minChoices) {
+                selected.push(modeScores[pi].idx);
+            }
+        }
+        if (selected.length < modalInfo.minChoices) {
+            // Must pick at least minChoices even if scores are negative
+            for (var fi = 0; fi < modeScores.length && selected.length < modalInfo.minChoices; fi++) {
+                if (selected.indexOf(modeScores[fi].idx) < 0) selected.push(modeScores[fi].idx);
+            }
+        }
+        return selected.length >= modalInfo.minChoices ? selected : null;
+    };
+
     var botPlayCard = function(cardId) {
         if (engineIsAura(match, seat, cardId)) {
             var target = botAuraTarget(cardId);
             if (!target) return false;
             enginePlayCard(match, seat, cardId, target);
         } else if (engineIsSpell(match, seat, cardId)) {
-            var spellTarget = botPickSpellTarget(cardId);
             var meta = engineBotCardMeta(match, seat, cardId);
-            var effects = engineParseSpellEffects(meta?.oracleText);
-            if (engineEffectNeedsTarget(effects) && !spellTarget) return false; // no valid target
-            enginePlayCard(match, seat, cardId, spellTarget);
+            // Check for modal spell first
+            var modalModes = botSelectModes(cardId);
+            if (modalModes) {
+                // Modal spell: check if any selected mode needs a target
+                var modalInfo = engineParseModalModes(meta?.oracleText);
+                var modalEffects = [];
+                for (var mmi = 0; mmi < modalModes.length; mmi++) {
+                    var mIdx = modalModes[mmi];
+                    if (modalInfo && mIdx < modalInfo.modes.length) {
+                        var me = modalInfo.modes[mIdx].effects;
+                        for (var mej = 0; mej < me.length; mej++) modalEffects.push(me[mej]);
+                    }
+                }
+                var modalTarget = null;
+                if (engineEffectNeedsTarget(modalEffects)) {
+                    modalTarget = botPickSpellTarget(cardId);
+                    if (!modalTarget) return false;
+                }
+                enginePlayCard(match, seat, cardId, modalTarget, modalModes);
+            } else {
+                // Non-modal spell
+                var spellTarget = botPickSpellTarget(cardId);
+                var effects = engineParseSpellEffects(meta?.oracleText);
+                if (engineEffectNeedsTarget(effects) && !spellTarget) return false;
+                enginePlayCard(match, seat, cardId, spellTarget);
+            }
         } else {
             enginePlayCard(match, seat, cardId);
         }

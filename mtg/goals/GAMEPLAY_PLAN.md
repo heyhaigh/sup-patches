@@ -211,67 +211,205 @@ All detected from Scryfall's `keywords` array — no oracle text parsing needed.
 
 ---
 
-## Phase 3: The Game Is Polished (Feel + Edge Cases)
+## ~~Phase 3: The Game Is Polished (Feel + Edge Cases)~~ ✅ COMPLETE
 
 **Goal:** The game feels good enough to share. Smooth, responsive, clear.
 
-### ~~3B. Simple Parseable Effects~~ ✅ COMPLETE (moved to Phase 2F/2G above)
+All Phase 3 items completed 2026-02-25: combat depth (multi-block, commander damage, combat lines), UX polish (mobile long-press, touch targets, context menus, event log, reconnection), game over experience (stats, elimination reasons), spell/token polish (exile, bounce, keyword tokens, 0-toughness death). See git history for details.
 
-All regex patterns implemented in Phase 2F + token creation in Phase 2G.
-
-### ~~3A. Remaining Combat Depth~~ ✅ COMPLETE (2026-02-25)
-- ~~Multiple blockers on one attacker (with even damage split)~~ ✅ (already implemented)
-- ~~Commander damage tracking (21+ from one commander = loss)~~ ✅ (already implemented)
-- ~~Damage vs. toughness distinction (damage marked on creature, separate from toughness, clears end of turn)~~ ✅ (already works — `cardState.damage` tracked separately, clears at EOT)
-- ~~SVG combat lines connecting blockers to attackers during blocking phase~~ ✅ (blue dashed lines with endpoint dots, `renderCombatLines()`)
-
-### 3C. UX Polish ✅ COMPLETE (2026-02-25)
-- ~~Mobile: long-press for floating inspector (no hover)~~ ✅ (2026-02-25) — 500ms long-press opens card modal
-- ~~Touch targets: minimum 44px (Apple HIG)~~ ✅ (2026-02-25) — buttons, zone badges, event log toggle all 44px+ on mobile
-- ~~Undo: deselect attackers/blockers before confirming, deselect card from hand before playing~~ ✅ (2026-02-25) — clicking a selected card again deselects it; toggleAttacker/blocker already toggled
-- ~~Right-click context menu~~ ✅ (2026-02-25) — Inspect, Activate Ability (for Treasures etc.), Send to Graveyard. Context-aware based on zone/ownership.
-- ~~Graveyard/exile zone inspection (click to see all cards)~~ ✅ (already implemented)
-- ~~Reconnection handling (polling failure → "Reconnecting..." → resume)~~ ✅ (2026-02-25) — `refreshMatch()` catches errors, shows banner, retries with exponential backoff
-- ~~Game event log~~ ✅ (2026-02-25) — collapsible panel at bottom-left showing last 25 events (plays, spells, combat, deaths, damage, tokens, game over). `renderEventLog(match)` called from `renderGame()`.
-
-### ~~3D. Game Over Experience~~ ✅ COMPLETE (2026-02-25)
-- ~~Victory/defeat screen with stats~~ ✅ (already implemented + added opponent stats section)
-- ~~Play Again / Change Decks / Main Menu buttons~~ ✅ (Play Again + Main Menu already existed, added "Change Decks" button)
-- ~~Elimination reason display~~ ✅ (tracks `loserReasons` — life/commander_damage/deck_out/concede — shown on overlay)
+**Remaining deferred items:**
 - Multiplayer elimination (Commander): removed player's permanents leave, game continues
+- Future spell patterns: `each player draws/discards N`, `+1/+1 counters`, `sacrifice a creature`
 
-### ~~3E. Spell & Token Polish~~ ✅ COMPLETE (2026-02-25)
+---
 
-These are remaining edge cases and polish items discovered during the Phase 2F/2G implementation:
+## Phase 5: Card Mechanics Expansion (Modal + Equipment + Instants + Scry)
 
-**Implemented (2026-02-25):**
-- ~~`exile target creature/permanent`~~ ✅ — moves target to exile zone, bypasses Indestructible (correct MTG rules)
-- ~~`return target creature/permanent to its owner's hand` (bounce)~~ ✅ — returns target to hand, bypasses Indestructible
-- ~~Creature tokens with keywords~~ ✅ — regex captures "with [keyword]" suffix, passes keywords to `engineCreateToken`
-- ~~0-toughness death bug~~ ✅ — creatures with 0 or less toughness from -N/-N debuffs now die immediately (state-based action check)
-- ~~`engineCheckLethalDamage` called after negative tempBuff~~ ✅
+**Goal:** Fix broken cards and expand supported mechanics. Many real cards fail because the engine lacks modal spells, expanded targeting, board sweeps, equipment, instant-speed casting, and scry.
 
-#### Testing needed (from 2026-02-25 session)
-- **Ancestors' Aid full flow**: Cast → target creature → creature gets +2/+0 and First Strike icon → Treasure token appears on battlefield → P/T badge shows green buffed values
-- **Treasure activation**: Click Treasure on battlefield → inspector shows "Activate ability" button → clicking sacrifices Treasure and adds 1 mana to pool
-- **End of turn cleanup**: Temp buffs and keywords clear when turn ends (creature reverts to base P/T, keyword icons disappear)
-- **Token lifecycle**: When a creature token dies in combat, it should NOT appear in graveyard
-- **Multi-effect spells**: Spells with both targeted effects (tempBuff) and non-targeted effects (createToken) should process all effects — the targeted ones use the selected target, non-targeted ones just fire
-- **Exile spell**: Cast exile spell on opponent's creature → creature moves to exile zone (not graveyard)
-- **Bounce spell**: Cast bounce spell on opponent's creature → creature returns to their hand
-- **0-toughness death**: Cast -2/-2 debuff on a 2/2 → creature dies immediately
-- **Event log**: Visible during gameplay, shows plays/spells/combat/deaths, collapse/expand works
+**Trigger:** Untimely Malfunction failing ("no valid targets" despite artifacts on field), Austere Command having no way to select modes.
 
-#### ~~Potential edge cases~~ ✅ REVIEWED (2026-02-25)
-- ~~Token rendering when `cardMeta` hasn't hydrated yet~~ ✅ No race condition — token meta comes from `match.decks[seat].cardMeta` (synchronous), not from Scryfall API. Added `tok_` prefix fallback for gold gradient in edge cases.
-- ~~Treasure token stacking~~ ✅ Each token has unique `tok_XXXX` ID — individually selectable and activatable. Bot AI now also sacrifices Treasures for mana when needed.
-- ~~`clientCardType` for tokens~~ ✅ Treasure has `typeLine: 'Token Artifact — Treasure'` which correctly returns `'artifact'` from `clientCardType`, routing to `tokenWrap` path (not creature wrap).
-- ~~Token count / battlefield overflow~~ ✅ Added `overflow-y:auto` to `.bfArea` so many permanents scroll instead of clipping.
+### Phase 5A: Modal Spells + Board Sweeps + Expanded Targeting
+**Impact: Highest — fixes the most broken cards**
 
-#### Future spell patterns to consider
-- `each player draws/discards N cards`
-- `put N +1/+1 counters on target creature` (requires counter system)
-- `sacrifice a creature` (requires sacrifice selection UI)
+#### 5A1. Modal/Choice Parsing (engine + client)
+
+New function `engineParseModalModes(oracleText)`:
+- Detects "Choose one/two/three/one or both" + bullet lines
+- Returns `{ minChoices, maxChoices, modes: [{ text, effects }] }`
+- Each mode's effects parsed via existing `engineParseSpellEffects` + new mass-effect patterns
+- Client mirror `clientParseModalModes()` with double-escaped regexes
+
+#### 5A2. Mass Destruction Effects
+
+New effect types in both parsers:
+- `destroyAll` — "Destroy all artifacts/enchantments/creatures"
+- With mana value filter: "creatures with mana value 3 or less"
+
+New engine function `engineApplyMassEffect(match, casterSeat, effect)`:
+- Iterates all seats' battlefields, filters by type + CMC, respects Indestructible
+- Logs `MASS_DESTROY` event
+
+New helper `engineMatchesTypeFilter(match, seat, cardId, filterType)`:
+- Handles: creature, artifact, enchantment, nonland permanent, permanent
+
+#### 5A3. Expanded Targeting (artifacts, enchantments, permanents)
+
+Replace `getTargetableCreatures()` with `getTargetablePermanents(match, casterSeat, typeFilter)`:
+- Accepts filter: 'creature', 'artifact', 'enchantment', 'permanent', 'nonland permanent'
+- Same Hexproof check for opponent's permanents
+- Used by spell targeting AND modal mode targeting
+
+Modify `enterSpellTargetingMode()` to detect target type from effect and call with correct filter.
+
+#### 5A4. Mode Selection UI
+
+New client state: `modalSelection: { cardId, modalInfo, selectedIndices: [] }`
+
+Flow:
+1. `playSelectedToBattlefield()` detects modal spell → calls `showModeSelectionOverlay()`
+2. Overlay shows card name, "Choose N" instruction, clickable mode options with effect descriptions
+3. Modes that can't apply (e.g., "Destroy all artifacts" when no artifacts exist) shown as disabled
+4. Confirm button → if selected modes need targeting, enter targeting mode with `selectedModes` stored; if all mass effects, send `PLAY_FROM_HAND` with `selectedModes` immediately
+
+New action payload: `{ type: 'PLAY_FROM_HAND', cardId, targetId, selectedModes: [0, 2] }`
+
+#### 5A5. Engine: PLAY_FROM_HAND Handler Changes
+
+Before calling `enginePlayCard`, check for `selectedModes`:
+- If present: move spell to graveyard, iterate selected modes, apply effects (mass or targeted)
+- If absent: existing flow unchanged
+
+#### 5A6. Bot AI
+
+New `botSelectModes()`: score each mode by board impact (destroyAll opponent creatures > targeted destroy > draw > gainLife), pick best N. Mass effects auto-target; targeted effects use `botPickTargetForEffect()`.
+
+#### Files/Functions Modified (5A)
+| Function | Approx Line | Change |
+|----------|-------------|--------|
+| CSS block | ~280 | Add `.modeOverlay`, `.modePanel`, `.modeOption` styles |
+| `state` | ~748 | Add `modalSelection: null` |
+| `getTargetableCreatures` | ~1967 | Replace with `getTargetablePermanents(match, seat, typeFilter)` |
+| `enterSpellTargetingMode` | ~3836 | Use target type from effect, call `getTargetablePermanents` |
+| `clientParseSpellEffects` | ~3768 | Add `destroyAll` pattern |
+| NEW `clientParseModalModes` | ~3768 | Parse "Choose N" + bullet modes |
+| `playSelectedToBattlefield` | ~3872 | Check for modal spell before targeting |
+| NEW `showModeSelectionOverlay` | ~3870 | Render mode selection UI |
+| NEW `confirmModalAndPlay` | ~3870 | Resolve modal selection → target or cast |
+| `confirmTarget` | ~2004 | Pass `selectedModes` if present |
+| PLAY_FROM_HAND handler | ~4646 | Handle `selectedModes`, route to mass/targeted effects |
+| NEW `engineParseModalModes` | ~5524 | Parse modal spell modes |
+| NEW `engineParseModeEffects` | ~5524 | Parse individual mode line |
+| `engineParseSpellEffects` | ~5524 | Add `destroyAll` regex |
+| NEW `engineApplyMassEffect` | ~5639 | Apply board-wide effects |
+| NEW `engineMatchesTypeFilter` | ~5639 | Type-matching helper |
+| `botPlayCard` area | ~6071 | Modal spell awareness + `botSelectModes` |
+
+---
+
+### Phase 5B: Equipment Artifacts
+**Impact: High — many Commander staples are equipment**
+
+#### 5B1. Data Structure
+`match.game.equipmentAttachments = { equipmentCardId: creatureCardId }`
+Parallel to `auraAttachments`, following proven pattern.
+
+#### 5B2. Engine Functions
+- `engineIsEquipment(match, seat, cardId)` — type_line includes "artifact" + "equipment"
+- `engineParseEquipCost(oracleText)` — extracts mana cost from "Equip {N}"
+- `engineParseEquipmentMods(match, seat, cardId)` — parse +N/+N like aura mods
+
+#### 5B3. New Action: EQUIP
+- Validates: equipment on your battlefield, target is your creature, enough mana
+- Pays equip cost, sets `equipmentAttachments[eqId] = creatureId`
+- Can re-equip (move equipment to different creature)
+
+#### 5B4. P/T Calculation
+Extend `engineGetCreaturePower/Toughness` to sum equipment mods (same loop pattern as auras).
+
+#### 5B5. Cleanup on Death
+Key difference from auras: when equipped creature dies, equipment **stays on battlefield** (becomes unattached). When equipment leaves battlefield, remove attachment entry.
+
+#### 5B6. Client Visual — Stacked Cards
+- Attached equipment hidden from visible battlefield (like auras)
+- Equipment rendered as a "peek" strip above the creature card (top slice of card art, 60px wide x 16px tall)
+- Equipment badge (gold, sword icon) similar to aura badge (purple, sparkle)
+- Hover/click on peek strip shows full equipment card in inspector
+
+#### 5B7. Equip UX
+- Context menu on equipment shows "Equip (N mana)" option
+- Enters targeting mode (own creatures only)
+- Confirm sends EQUIP action
+
+#### 5B8. Bot AI
+After playing cards each turn, bot tries to equip unattached equipment to strongest creature.
+
+---
+
+### Phase 5C: Instant-Speed Casting
+**Impact: High but architecturally complex**
+
+#### 5C1. Lightweight Priority (No Full Stack)
+Instead of MTG's full priority/stack, implement "response windows":
+- `match.game.responseWindow = { seat: N, reason: 'opponent_action' }`
+- Opens when a bot plays something impactful AND the human has instants + mana
+- Human sees banner: "Respond with an instant or [Pass]"
+- 15-second auto-timeout to prevent stalling
+
+#### 5C2. clientCanPlay Changes
+- Instants: playable during own main phases OR during response window
+- Non-instants: unchanged (own turn, main phase only)
+
+#### 5C3. PLAY_FROM_HAND Relaxation
+- For instants: skip `engineRequireTurn` and `engineRequireMainPhase`
+- Validate instead: response window active for this seat, or own main phase
+
+#### 5C4. New Action: PASS_RESPONSE
+- Clears response window, resumes bot turn via `engineRunBotsIfActive`
+
+#### 5C5. Bot Turn Pausing
+`engineBotTakeTurn` checks if human has castable instants after impactful plays. If so, sets response window and returns (bot turn paused until human responds or passes).
+
+#### 5C6. Response Banner UI
+Purple flash banner below turn bar, playable instants in hand get glow highlight.
+
+---
+
+### Phase 5D: Scry / Top-Card-View Abilities
+**Impact: Medium — enables Sensei's Divining Top, scry effects**
+
+#### 5D1. Scry State
+`match.game.scryPending = { seat, count, cardIds }` — set when scry triggers
+
+#### 5D2. Engine: Scry Patterns
+Extend `engineActivateAbility` to match:
+- "Look at the top N cards of your library, then put them back in any order"
+- "Scry N"
+
+Returns scry card IDs to client.
+
+#### 5D3. New Action: SCRY_REORDER
+Accepts `order` (card IDs to keep on top in order) + `bottomIds` (send to bottom).
+
+#### 5D4. Client: Scry Overlay
+Shows top N cards face-up. Click-to-select-then-click-to-place reordering (simpler than drag-and-drop in template literal context). "Keep on top" zone + "Send to bottom" zone. Confirm button resolves.
+
+#### 5D5. Bot Scry
+Auto-resolve: score cards by impact, keep best on top.
+
+---
+
+### Phase 5 Verification Plan
+
+After each sub-phase:
+1. `node -c mtg/mtg.js` — syntax check
+2. Add `<script>console.log('PHASE_5X_OK');</script>` sentinel before main script to detect template literal parse errors
+3. Test in SupChat:
+   - **5A**: Cast Austere Command (choose 2 modes), cast Untimely Malfunction (target artifact)
+   - **5B**: Play Lightning Greaves, equip to creature, verify P/T buff + visual
+   - **5C**: End turn, see response window during bot turn, cast instant in response
+   - **5D**: Activate Sensei's Divining Top, reorder top 3 cards
+4. Commit + push after each sub-phase passes
 
 ---
 
@@ -281,10 +419,9 @@ These are remaining edge cases and polish items discovered during the Phase 2F/2
 
 | Feature | Reason |
 |---------|--------|
-| **Stack / Priority** | Requires real-time response windows on every action. No WebSockets. |
 | **Planeswalkers** | Loyalty counters, multiple abilities, attackable permanents = entire subsystem per card |
 | **Mana colors / color identity** | Auto-mana removes color. Multicolor costs are just summed CMC. |
-| **Counterspells / instant-speed tricks** | Requires stack + priority |
+| **Counterspells** | Requires full stack + priority (Phase 5C adds lightweight response windows but not counterspells) |
 | **Sideboarding** | Requires best-of-3 match structure |
 | **Morph / Manifest / Disguise** | Face-down cards + hidden info tracking |
 | **Mutate / Meld** | Combining cards = state management nightmare |
@@ -293,7 +430,8 @@ These are remaining edge cases and polish items discovered during the Phase 2F/2
 | **Madness / Flashback / Escape** | Playing from non-hand zones |
 | **Phasing / Banding / Protection** | Deprecated, incomprehensible, or too niche |
 | ~~**Token generation**~~ | ~~No token system.~~ ✅ Implemented 2026-02-25 (Treasure + creature tokens) |
-| ~~**Activated abilities**~~ | ~~Tap/pay abilities.~~ ✅ Partially implemented 2026-02-25 (Treasure sacrifice-for-mana). Other activated abilities still skipped. |
+| ~~**Activated abilities**~~ | ~~Tap/pay abilities.~~ ✅ Partially implemented 2026-02-25 (Treasure sacrifice-for-mana). Equipment equip costs added in Phase 5B. |
+| ~~**Stack / Priority**~~ | ~~Requires real-time response windows.~~ Lightweight response windows added in Phase 5C (no full stack). |
 | **Triggered abilities** | ETB/death triggers require event system (stretch goal for a few patterns) |
 | **Network multiplayer (real-time)** | Entirely different project |
 
@@ -302,7 +440,7 @@ These are remaining edge cases and polish items discovered during the Phase 2F/2
 | Simplification | Real MTG | Our Behavior |
 |----------------|----------|-------------|
 | Mana | Tap lands for colored mana | Auto-increment, colorless, cap 10 |
-| Instants | Playable on opponent's turn | Main phase only |
+| ~~Instants~~ | ~~Playable on opponent's turn~~ | ~~Main phase only~~ → Phase 5C adds response windows |
 | Damage assignment | Attacker chooses order for multiple blockers | Even split |
 | Enchantment effects | Wildly diverse | Only +N/+N stat mods parsed |
 | Counters (+1/+1) | Persist, stack | Stretch goal, not at launch |
