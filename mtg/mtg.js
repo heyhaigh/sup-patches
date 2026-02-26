@@ -294,6 +294,9 @@ function getClientHtml() {
     .modeBtnConfirm:disabled { opacity:0.4; cursor:not-allowed; }
     .modeBtnCancel { background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); }
     .modeBtnCancel:hover { background:rgba(255,255,255,0.15); }
+    .equipBadge { position:absolute; bottom:20px; right:4px; background:rgba(251,191,36,0.85); color:#000; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.2); }
+    .equipPeek { position:absolute; top:-14px; left:50%; transform:translateX(-50%); width:56px; height:14px; border-radius:4px 4px 0 0; overflow:hidden; border:1px solid rgba(251,191,36,0.5); border-bottom:none; cursor:pointer; z-index:4; }
+    .equipPeek img { width:56px; height:80px; object-fit:cover; object-position:top; pointer-events:none; }
     .ptBuffed { color:#22c55e; }
     .phaseBar { display:flex; gap:4px; align-items:center; }
     .phasePill { padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; text-transform:uppercase; background:var(--w06); color:rgba(255,255,255,0.35); border:1px solid var(--w06); }
@@ -1812,6 +1815,28 @@ function getClientHtml() {
         };
         menu.appendChild(actItem);
       }
+      // Equipment: Equip option
+      if (clientIsEquipment(cardId)) {
+        var equipCost = clientParseEquipCost(cardId);
+        if (equipCost !== null) {
+          var match = state.lastMatch;
+          var mySeat = match?.viewerSeat;
+          var myMana = match?.game?.manaBySeat?.[mySeat] || { current: 0 };
+          var canAfford = myMana.current >= equipCost;
+          var dividerEq = document.createElement('div');
+          dividerEq.className = 'ctxDivider';
+          menu.appendChild(dividerEq);
+          var equipItem = document.createElement('div');
+          equipItem.className = 'ctxItem';
+          equipItem.textContent = 'Equip (' + equipCost + ' mana)';
+          if (!canAfford) { equipItem.style.opacity = '0.4'; equipItem.style.pointerEvents = 'none'; }
+          equipItem.onclick = function() {
+            menu.remove();
+            enterEquipTargetingMode(cardId, equipCost);
+          };
+          menu.appendChild(equipItem);
+        }
+      }
       var divider = document.createElement('div');
       divider.className = 'ctxDivider';
       menu.appendChild(divider);
@@ -1980,6 +2005,50 @@ function getClientHtml() {
     return { power: pw, toughness: tw, count: auraIds.length };
   }
 
+  function clientIsEquipment(id) {
+    var tl = String(cardMeta(id)?.typeLine || '').toLowerCase();
+    return tl.includes('equipment');
+  }
+
+  function clientParseEquipmentMods(id) {
+    var oracle = String(cardMeta(id)?.oracleText || '');
+    var pw = 0; var tw = 0;
+    var re = /equipped creature gets\\s+([+-]\\d+)\\/([+-]\\d+)/gi;
+    var m;
+    while ((m = re.exec(oracle)) !== null) { pw += parseInt(m[1], 10); tw += parseInt(m[2], 10); }
+    // Also match "Equip" static buffs like "+2/+0" without "equipped creature gets"
+    if (pw === 0 && tw === 0) {
+      var re2 = /([+-]\\d+)\\/([+-]\\d+)/g;
+      while ((m = re2.exec(oracle)) !== null) { pw += parseInt(m[1], 10); tw += parseInt(m[2], 10); }
+    }
+    return { power: pw, toughness: tw };
+  }
+
+  function clientParseEquipCost(id) {
+    var oracle = String(cardMeta(id)?.oracleText || '');
+    var re = /equip\\s*(?:\\{(\\d+)\\}|(\\d+))/i;
+    var m = re.exec(oracle);
+    if (m) return parseInt(m[1] || m[2], 10);
+    return null;
+  }
+
+  function clientGetEquipmentOnCreature(creatureId, match) {
+    var eqs = match?.game?.equipmentAttachments || {};
+    var result = [];
+    for (var eqId in eqs) { if (eqs[eqId] === creatureId) result.push(eqId); }
+    return result;
+  }
+
+  function clientGetEquipmentBuffs(creatureId, match) {
+    var eqIds = clientGetEquipmentOnCreature(creatureId, match);
+    var pw = 0; var tw = 0;
+    for (var i = 0; i < eqIds.length; i++) {
+      var mods = clientParseEquipmentMods(eqIds[i]);
+      pw += mods.power; tw += mods.toughness;
+    }
+    return { power: pw, toughness: tw, count: eqIds.length };
+  }
+
   function clientMatchesTypeFilter(id, filterType) {
     var type = clientCardType(id);
     if (filterType === 'creature') return type === 'creature';
@@ -2049,6 +2118,32 @@ function getClientHtml() {
   function cancelTargeting() {
     state.targetingMode = null;
     renderGame(state.lastMatch);
+  }
+
+  function enterEquipTargetingMode(equipmentId, equipCost) {
+    var match = state.lastMatch;
+    if (!match) return;
+    var mySeat = match.viewerSeat;
+    var myBf = match?.game?.zones?.[mySeat]?.battlefield || [];
+    var targets = [];
+    for (var i = 0; i < myBf.length; i++) {
+      if (clientCardType(myBf[i]) === 'creature') targets.push(myBf[i]);
+    }
+    if (!targets.length) { toast('No creatures to equip to.', { type: 'warn', ms: 2000 }); return; }
+    state.targetingMode = { cardId: equipmentId, validTargets: targets, selectedTarget: null, isEquip: true, equipCost: equipCost };
+    renderGame(match);
+  }
+
+  async function confirmEquip() {
+    if (!state.targetingMode || !state.targetingMode.isEquip || !state.targetingMode.selectedTarget) return;
+    var equipmentId = state.targetingMode.cardId;
+    var targetId = state.targetingMode.selectedTarget;
+    state.targetingMode = null;
+    var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'EQUIP', cardId: equipmentId, targetId: targetId } });
+    if (!res.ok) { toast('Equip failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
+    toast((cardMeta(equipmentId)?.name || 'Equipment') + ' equipped!', { type: 'success', ms: 1500 });
+    await refreshMatch();
+    setSelected(null);
   }
 
   function openZoneBrowser(seat, zoneName) {
@@ -2246,6 +2341,27 @@ function getClientHtml() {
         abadge.textContent = '\u2728' + auraBuffs.count;
         wrap.appendChild(abadge);
       }
+      // Equipment badge + peek strip
+      var equipBuffs = options.match ? clientGetEquipmentBuffs(id, options.match) : { power: 0, toughness: 0, count: 0 };
+      if (equipBuffs.count > 0) {
+        var eqbadge = document.createElement('div');
+        eqbadge.className = 'equipBadge';
+        eqbadge.textContent = '\u2694' + equipBuffs.count;
+        wrap.appendChild(eqbadge);
+        var eqIds = clientGetEquipmentOnCreature(id, options.match);
+        for (var eqi = 0; eqi < eqIds.length && eqi < 2; eqi++) {
+          var eqPeek = document.createElement('div');
+          eqPeek.className = 'equipPeek';
+          eqPeek.style.top = (-14 - eqi * 16) + 'px';
+          var eqImg = document.createElement('img');
+          eqImg.src = cardMeta(eqIds[eqi])?.imageUrl || '';
+          eqPeek.appendChild(eqImg);
+          (function(eqCardId) {
+            eqPeek.onclick = function() { openCardModal(eqCardId, 'battlefield'); };
+          })(eqIds[eqi]);
+          wrap.appendChild(eqPeek);
+        }
+      }
       if (c?.isToken) {
         var tokIcon = document.createElement('div');
         tokIcon.className = 'tokenIndicator';
@@ -2267,9 +2383,9 @@ function getClientHtml() {
           if (tempBuffs[tbi].cardId === id) { tbPw += tempBuffs[tbi].power; tbTw += tempBuffs[tbi].toughness; }
         }
       }
-      var buffedPw = basePw + auraBuffs.power + tbPw;
-      var buffedTw = baseTw + auraBuffs.toughness + tbTw;
-      var isBuffed = auraBuffs.power !== 0 || auraBuffs.toughness !== 0 || tbPw !== 0 || tbTw !== 0;
+      var buffedPw = basePw + auraBuffs.power + equipBuffs.power + tbPw;
+      var buffedTw = baseTw + auraBuffs.toughness + equipBuffs.toughness + tbTw;
+      var isBuffed = auraBuffs.power !== 0 || auraBuffs.toughness !== 0 || equipBuffs.power !== 0 || equipBuffs.toughness !== 0 || tbPw !== 0 || tbTw !== 0;
       var dmg = cs ? (Number(cs.damage) || 0) : 0;
       if (dmg > 0) {
         var remaining = buffedTw - dmg;
@@ -2404,9 +2520,10 @@ function getClientHtml() {
     bfArea.className = 'bfArea';
     // Determine which cards are attacking (from combat state or pending)
     var combatAttackers = match?.game?.combat?.attackers || {};
-    // Filter out attached auras — they render as badges on their target creature
+    // Filter out attached auras and attached equipment — they render as badges on their target creature
     var auraAttachments = match?.game?.auraAttachments || {};
-    var visibleBf = bf.filter(function(id) { return !auraAttachments[id]; });
+    var equipAttachments = match?.game?.equipmentAttachments || {};
+    var visibleBf = bf.filter(function(id) { return !auraAttachments[id] && !equipAttachments[id]; });
     // Pre-compute buff and aura maps for this seat's cards
     var buffMap = {}; var auraMap = {};
     var rawBuffs = match?.game?.tempBuffs || [];
@@ -2763,7 +2880,7 @@ function getClientHtml() {
       setTimeout(function() {
         var cb = document.getElementById('btnTargetConfirm');
         var cc = document.getElementById('btnTargetCancel');
-        if (cb) cb.onclick = function() { confirmTarget(); };
+        if (cb) cb.onclick = function() { if (state.targetingMode?.isEquip) confirmEquip(); else confirmTarget(); };
         if (cc) cc.onclick = function() { cancelTargeting(); };
       }, 0);
     }
@@ -4913,6 +5030,32 @@ function engineApplyAction(match, user, action) {
         return { ok: true, match };
     }
 
+    if (action.type === "EQUIP") {
+        var _v; if (_v = engineRequirePlaying(match)) return _v;
+        var seat = player.seat;
+        if (_v = engineRequireTurn(match, seat)) return _v;
+        if (_v = engineRequireMainPhase(match)) return _v;
+        var eqCardId = action.cardId; if (!eqCardId) return { ok: false, error: "cardId required" };
+        var eqTargetId = action.targetId; if (!eqTargetId) return { ok: false, error: "targetId required" };
+        engineEnsureZones(match, seat);
+        if (match.game.zones[seat].battlefield.indexOf(eqCardId) < 0) return { ok: false, error: "equipment not on your battlefield" };
+        if (!engineIsEquipment(match, seat, eqCardId)) return { ok: false, error: "card is not equipment" };
+        if (match.game.zones[seat].battlefield.indexOf(eqTargetId) < 0) return { ok: false, error: "target creature not on your battlefield" };
+        if (!engineIsCreature(match, seat, eqTargetId)) return { ok: false, error: "target must be a creature" };
+        var equipCost = engineParseEquipCost(match, seat, eqCardId);
+        if (equipCost === null) return { ok: false, error: "no equip cost found" };
+        var mana = match.game.manaBySeat?.[seat] || { current: 0, max: 0 };
+        if (equipCost > mana.current) return { ok: false, error: "not enough mana (" + equipCost + " needed, " + mana.current + " available)" };
+        mana.current = Math.max(0, mana.current - equipCost);
+        if (!match.game.equipmentAttachments) match.game.equipmentAttachments = {};
+        match.game.equipmentAttachments[eqCardId] = eqTargetId;
+        match.log.push({ t: Date.now(), type: "EQUIP", by: user.username, seat: seat, cardId: eqCardId, targetId: eqTargetId });
+        if (!match.game.stats) match.game.stats = {};
+        if (!match.game.stats[seat]) match.game.stats[seat] = { damageDealt: 0, creaturesKilled: 0 };
+        match.game.stats[seat].manaSpent = (match.game.stats[seat].manaSpent || 0) + equipCost;
+        return { ok: true, match };
+    }
+
     if (action.type === "END_TURN") {
         var _v; if (_v = engineRequirePlaying(match)) return _v;
         const seat = player.seat;
@@ -5180,6 +5323,20 @@ function engineMoveCard(match, seat, fromZone, toZone, cardId) {
             }
         }
     }
+    // Equipment cleanup when card leaves battlefield
+    if (fromZone === "battlefield" && match.game.equipmentAttachments) {
+        // If this card is equipment leaving battlefield, remove its attachment entry
+        if (match.game.equipmentAttachments[cardId]) {
+            delete match.game.equipmentAttachments[cardId];
+        }
+        // If this card is a creature, detach all equipment (equipment STAYS on battlefield, just becomes unattached)
+        for (var eqId in match.game.equipmentAttachments) {
+            if (match.game.equipmentAttachments[eqId] === cardId) {
+                delete match.game.equipmentAttachments[eqId];
+                // Equipment stays on battlefield — no zone move needed
+            }
+        }
+    }
     return { ok: true };
 }
 
@@ -5277,6 +5434,13 @@ function engineGetCreaturePower(match, seat, cardId) {
             if (auraSeat != null) base += engineParseAuraMods(match, auraSeat, auraId).power;
         }
     }
+    var equips = match.game?.equipmentAttachments || {};
+    for (var eqId in equips) {
+        if (equips[eqId] === cardId) {
+            var eqSeat = engineFindSeatForCard(match, eqId);
+            if (eqSeat != null) base += engineParseEquipmentMods(match, eqSeat, eqId).power;
+        }
+    }
     var buffs = match.game?.tempBuffs || [];
     for (var bi = 0; bi < buffs.length; bi++) { if (buffs[bi].cardId === cardId) base += buffs[bi].power; }
     return base;
@@ -5288,6 +5452,13 @@ function engineGetCreatureToughness(match, seat, cardId) {
         if (auras[auraId] === cardId) {
             var auraSeat = engineFindSeatForCard(match, auraId);
             if (auraSeat != null) base += engineParseAuraMods(match, auraSeat, auraId).toughness;
+        }
+    }
+    var equips = match.game?.equipmentAttachments || {};
+    for (var eqId in equips) {
+        if (equips[eqId] === cardId) {
+            var eqSeat = engineFindSeatForCard(match, eqId);
+            if (eqSeat != null) base += engineParseEquipmentMods(match, eqSeat, eqId).toughness;
         }
     }
     var buffs = match.game?.tempBuffs || [];
@@ -5343,6 +5514,32 @@ function engineParseAuraMods(match, seat, cardId) {
     var re = /([+-]\d+)\/([+-]\d+)/g;
     var m;
     while ((m = re.exec(oracle)) !== null) { pw += parseInt(m[1], 10); tw += parseInt(m[2], 10); }
+    return { power: pw, toughness: tw };
+}
+
+function engineIsEquipment(match, seat, cardId) {
+    var tl = String(engineCardMeta(match, seat, cardId)?.typeLine || "").toLowerCase();
+    return tl.includes("equipment");
+}
+
+function engineParseEquipCost(match, seat, cardId) {
+    var oracle = String(engineCardMeta(match, seat, cardId)?.oracleText || "");
+    var re = /equip\s*(?:\{(\d+)\}|(\d+))/i;
+    var m = re.exec(oracle);
+    if (m) return parseInt(m[1] || m[2], 10);
+    return null;
+}
+
+function engineParseEquipmentMods(match, seat, cardId) {
+    var oracle = String(engineCardMeta(match, seat, cardId)?.oracleText || "");
+    var pw = 0; var tw = 0;
+    var re = /equipped creature gets\s+([+-]\d+)\/([+-]\d+)/gi;
+    var m;
+    while ((m = re.exec(oracle)) !== null) { pw += parseInt(m[1], 10); tw += parseInt(m[2], 10); }
+    if (pw === 0 && tw === 0) {
+        var re2 = /([+-]\d+)\/([+-]\d+)/g;
+        while ((m = re2.exec(oracle)) !== null) { pw += parseInt(m[1], 10); tw += parseInt(m[2], 10); }
+    }
     return { power: pw, toughness: tw };
 }
 
@@ -6519,6 +6716,29 @@ function engineBotTakeTurn(match, botPlayer) {
         match.log.push({ t: Date.now(), type: "BOT_PASS", by: "bot", seat, difficulty: diff });
     }
     } // end if (!skipCardPlay)
+    // Bot equip phase: equip unattached equipment to strongest creature
+    var botBf = match.game.zones?.[seat]?.battlefield || [];
+    var eqAtch = match.game.equipmentAttachments || {};
+    for (var eqi = 0; eqi < botBf.length; eqi++) {
+        var eqCid = botBf[eqi];
+        if (!engineIsEquipment(match, seat, eqCid)) continue;
+        if (eqAtch[eqCid]) continue; // already attached
+        var eqCost = engineParseEquipCost(match, seat, eqCid);
+        if (eqCost === null || eqCost > mana.current) continue;
+        // Find strongest own creature
+        var bestEqTarget = null; var bestEqPow = -1;
+        for (var eci = 0; eci < botBf.length; eci++) {
+            if (!engineIsCreature(match, seat, botBf[eci])) continue;
+            var eqPow = engineGetCreaturePower(match, seat, botBf[eci]);
+            if (eqPow > bestEqPow) { bestEqPow = eqPow; bestEqTarget = botBf[eci]; }
+        }
+        if (bestEqTarget) {
+            if (!match.game.equipmentAttachments) match.game.equipmentAttachments = {};
+            match.game.equipmentAttachments[eqCid] = bestEqTarget;
+            mana.current = Math.max(0, mana.current - eqCost);
+            match.log.push({ t: Date.now(), type: "BOT_EQUIP", by: "bot", seat: seat, cardId: eqCid, targetId: bestEqTarget });
+        }
+    }
     // Bot combat phase
     var didAttack = engineBotDeclareAttackers(match, botPlayer);
     if (didAttack) {
