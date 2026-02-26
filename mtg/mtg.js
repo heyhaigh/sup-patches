@@ -1374,10 +1374,6 @@ function getClientHtml() {
     if (!config.deckId) { $('#createResult').textContent = 'No deck selected.'; toast('No deck selected.', { type: 'warn' }); return; }
     if (config.opponentType === 'bot' && config.format === 'standard' && !config.botDifficulty) { $('#createResult').textContent = 'Bot difficulty not set.'; toast('Bot difficulty not set.', { type: 'warn' }); return; }
     if (config.opponentType === 'bot' && config.format !== 'standard' && (!config.bots || !config.bots.length)) { $('#createResult').textContent = 'No bots configured.'; toast('No bots configured.', { type: 'warn' }); return; }
-    $('#createResult').textContent = 'Validating\u2026';
-    const v = await supExec('api_validateDeck', { deckId: config.deckId });
-    devLog('validateResult', v);
-    if (!v.ok) { $('#createResult').textContent = 'Invalid deck: ' + v.errors.join(' | '); toast('Deck validation failed.', { type: 'error', title: 'Invalid deck' }); return; }
     $('#createResult').textContent = 'Creating match\u2026';
     var opponent;
     if (config.opponentType === 'bot' && config.bots) {
@@ -1398,6 +1394,7 @@ function getClientHtml() {
       toast('Create failed: ' + err, { type: 'error' }); return;
     }
     state.activeMatchId = res.matchId;
+    state._lobbyPrefetchDone = false;
     $('#createResult').textContent = \`Match created. Share this matchId: \${res.matchId}\`;
     toast('Match created. Copy the matchId from the panel.', { type: 'success' });
     await refreshMatch();
@@ -1411,6 +1408,7 @@ function getClientHtml() {
     const res = await supExec('api_joinMatch', { matchId });
     if (!res.ok) { $('#joinResult').textContent = 'Join failed: ' + (res.error || 'unknown error'); toast('Join failed: ' + (res.error || 'unknown error'), { type: 'error' }); return; }
     state.activeMatchId = matchId;
+    state._lobbyPrefetchDone = false;
     $('#joinResult').textContent = 'Joined.'; toast('Joined match.', { type: 'success' }); await refreshMatch();
     enterMatchMode();
   }
@@ -1429,6 +1427,35 @@ function getClientHtml() {
     if (Array.isArray(hand)) return hand.length;
     if (hand && typeof hand === 'object' && Number.isFinite(hand.count)) return hand.count;
     return null;
+  }
+
+  // Prefetch Scryfall data for all decks in the match during lobby (background)
+  async function lobbyPrefetchCards(match) {
+    if (!match?.decks || state._lobbyPrefetchDone) return;
+    state._lobbyPrefetchDone = true;
+    // Collect all unique card IDs across all decks in the match
+    var allCardIds = [];
+    for (var seat in match.decks) {
+      var deckCards = match.decks[seat]?.cards;
+      if (deckCards && typeof deckCards === 'object') {
+        var ids = Object.keys(deckCards);
+        for (var i = 0; i < ids.length; i++) allCardIds.push(ids[i]);
+      }
+      if (match.decks[seat]?.commander) allCardIds.push(match.decks[seat].commander);
+    }
+    var unique = [];
+    var seen = {};
+    for (var j = 0; j < allCardIds.length; j++) {
+      if (!seen[allCardIds[j]]) { seen[allCardIds[j]] = true; unique.push(allCardIds[j]); }
+    }
+    if (!unique.length) return;
+    // Filter to only IDs not already in cardIndex
+    var missing = unique.filter(function(id) { return !state.cardIndex[id]; });
+    if (!missing.length) return;
+    try {
+      var res = await supExec('api_getCardsBulk', { ids: missing });
+      if (res?.byId) state.cardIndex = Object.assign({}, state.cardIndex, res.byId);
+    } catch (e) { /* non-fatal — will be fetched later during hydration */ }
   }
 
   function renderLobby(match) {
@@ -1484,6 +1511,8 @@ function getClientHtml() {
     btnStart.disabled = !isHost || match.phase !== 'lobby';
     const me = (match.players || []).find(p => p.userId === state.user?.id);
     if (me && match.decks && match.decks[me.seat]) { const assigned = match.decks[me.seat].deckId; if (assigned) $('#assignDeckSelect').value = assigned; }
+    // Prefetch card data for all decks in the background while players ready up
+    lobbyPrefetchCards(match);
   }
 
   function renderMulliganOverlay(match) {
@@ -3952,8 +3981,11 @@ function api_createMatch(event) {
     const deck = getUserDecks().find((d) => d.id === hostDeckId);
     if (!deck) throw new Error("deck not found");
     if (deck.format !== format) throw new Error("deck format mismatch");
-    const v = validateDeck(deck);
-    if (!v.ok) return { ok: false, error: "invalid deck", errors: v.errors };
+    // Lightweight structural check (no Scryfall calls — full validation at deck save time)
+    var deckCount = deckTotalCount(deck);
+    if (deck.format === "standard" && deckCount < 30) return { ok: false, error: "Standard deck must have at least 30 cards (has " + deckCount + ")" };
+    if (deck.format === "commander" && deckCount !== 60) return { ok: false, error: "Commander deck must have exactly 60 cards (has " + deckCount + ")" };
+    if (deck.format === "commander" && !deck.commander) return { ok: false, error: "Commander deck requires a commander" };
     const allDecks = getUserDecks();
     // Multi-bot (Commander)
     if (opponentType === "bot" && Array.isArray(opp.bots) && opp.bots.length > 0) {
