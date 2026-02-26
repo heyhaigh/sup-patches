@@ -209,6 +209,10 @@ function getClientHtml() {
     .cardImg.unplayable { opacity:0.45; filter:saturate(0.3); }
     .cardImg.unplayable:hover { opacity:0.6; filter:saturate(0.5); }
     .botThinking { display:flex; align-items:center; gap:8px; padding:8px 16px; background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.25); border-radius:10px; color:rgba(255,255,255,0.85); font-size:13px; font-weight:600; }
+    .cmdBotSlot { padding:8px 10px; margin-bottom:8px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,0.03); }
+    .cmdBotSlot .slotLabel { font-size:12px; font-weight:700; margin-bottom:6px; color:var(--muted); }
+    .cmdBotSlot .slotRow { display:flex; gap:8px; }
+    .cmdBotSlot .slotRow select { flex:1; }
     .reconnectBanner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:flex; align-items:center; gap:8px; padding:12px 24px; background:rgba(220,38,38,0.15); border:1px solid rgba(220,38,38,0.3); border-radius:12px; color:rgba(255,255,255,0.9); font-size:14px; font-weight:600; z-index:50; backdrop-filter:blur(6px); }
     .reconnectBanner .spinner { width:16px; height:16px; border:2px solid rgba(220,38,38,0.3); border-top-color:#ef4444; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
     .cardWrap { position:relative; display:inline-block; flex:0 0 auto; }
@@ -484,6 +488,17 @@ function getClientHtml() {
                 <div class="label">Bot deck</div>
                 <select id="playBotDeck" class="select"></select>
                 <div class="small" style="margin-top:8px;color:var(--muted2);">Pick a deck for the bot, or leave on "Same as mine" to mirror your deck.</div>
+              </div>
+              <div id="cmdBotOptions" style="display:none;margin-bottom:10px;">
+                <div class="label">Number of bots</div>
+                <select id="cmdBotCount" class="select" style="margin-bottom:10px;">
+                  <option value="1">1 bot (2 players)</option>
+                  <option value="2">2 bots (3 players)</option>
+                  <option value="3" selected>3 bots (4 players)</option>
+                  <option value="4">4 bots (5 players)</option>
+                </select>
+                <div id="cmdBotSlots"></div>
+                <div class="small" style="margin-top:8px;color:var(--muted2);">Each bot gets its own difficulty and deck. "Same as mine" mirrors your deck.</div>
               </div>
               <div class="label">Deck</div>
               <select id="playDeck" class="select"></select>
@@ -1000,29 +1015,64 @@ function getClientHtml() {
   function updateOpponentUI() {
     const fmt = $('#playFormat').value;
     const opp = $('#playOpponent').value;
-    if (fmt !== 'standard') {
-      $('#playOpponent').value = 'human';
-      $('#playOpponent').disabled = true;
-      $('#botOptions').style.display = 'none';
-      if (typeof updateDevPanel === 'function') updateDevPanel();
-      return;
-    }
     $('#playOpponent').disabled = false;
-    const showBot = opp === 'bot';
-    $('#botOptions').style.display = showBot ? '' : 'none';
-    if (showBot && !$('#playBotDifficulty').value) $('#playBotDifficulty').value = 'easy';
+    const isBot = opp === 'bot';
+    const isStandard = fmt === 'standard';
+    $('#botOptions').style.display = (isBot && isStandard) ? '' : 'none';
+    $('#cmdBotOptions').style.display = (isBot && !isStandard) ? '' : 'none';
+    if (isBot && isStandard && !$('#playBotDifficulty').value) $('#playBotDifficulty').value = 'easy';
+    if (isBot && !isStandard) renderCmdBotSlots();
     if (typeof updateDevPanel === 'function') updateDevPanel();
+  }
+
+  function renderCmdBotSlots() {
+    const count = parseInt($('#cmdBotCount').value) || 3;
+    const container = $('#cmdBotSlots');
+    const format = $('#playFormat').value || 'commander';
+    const playableDecks = state.decks.filter(function(d) { return d.format === format; });
+    var html = '';
+    for (var i = 0; i < count; i++) {
+      var n = i + 1;
+      html += '<div class="cmdBotSlot" data-bot-idx="' + i + '">';
+      html += '<div class="slotLabel">Bot ' + n + '</div>';
+      html += '<div class="slotRow">';
+      html += '<select class="select cmdBotDiff" data-bot-idx="' + i + '">';
+      html += '<option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>';
+      html += '</select>';
+      html += '<select class="select cmdBotDeck" data-bot-idx="' + i + '">';
+      html += '<option value="">Same as mine</option>';
+      for (var di = 0; di < playableDecks.length; di++) {
+        var d = playableDecks[di];
+        html += '<option value="' + escapeHtml(d.id) + '">' + escapeHtml(d.name || 'Untitled') + '</option>';
+      }
+      html += '</select>';
+      html += '</div></div>';
+    }
+    container.innerHTML = html;
   }
 
   function getPlayConfig() {
     const format = $('#playFormat').value || 'standard';
     const opponentRaw = $('#playOpponent').value || 'human';
-    const opponentType = format !== 'standard' ? 'human' : opponentRaw;
-    const botDifficulty = opponentType === 'bot' ? ($('#playBotDifficulty').value || 'easy') : null;
-    const botDeckId = opponentType === 'bot' ? ($('#playBotDeck').value || null) : null;
+    const opponentType = opponentRaw;
     const deckId = $('#playDeck').value || null;
     const deckName = deckId ? ($('#playDeck').selectedOptions[0]?.textContent || null) : null;
-    return { format, opponentType, botDifficulty, botDeckId, deckId, deckName };
+    if (opponentType === 'bot' && format === 'standard') {
+      const botDifficulty = $('#playBotDifficulty').value || 'easy';
+      const botDeckId = $('#playBotDeck').value || null;
+      return { format, opponentType, botDifficulty, botDeckId, deckId, deckName };
+    }
+    if (opponentType === 'bot' && format !== 'standard') {
+      var bots = [];
+      var slots = $$('.cmdBotSlot');
+      for (var si = 0; si < slots.length; si++) {
+        var diffSel = slots[si].querySelector('.cmdBotDiff');
+        var deckSel = slots[si].querySelector('.cmdBotDeck');
+        bots.push({ difficulty: diffSel ? diffSel.value : 'easy', deckId: deckSel ? (deckSel.value || null) : null });
+      }
+      return { format, opponentType, bots, deckId, deckName };
+    }
+    return { format, opponentType, botDifficulty: null, botDeckId: null, deckId, deckName };
   }
 
   const _devState = { clicks: 0, clickTimer: null, active: false, lastPayload: null, lastResponse: null, lastValidate: null };
@@ -1301,14 +1351,21 @@ function getClientHtml() {
     const config = getPlayConfig();
     devLog('playConfig', config);
     if (!config.deckId) { $('#createResult').textContent = 'No deck selected.'; toast('No deck selected.', { type: 'warn' }); return; }
-    if (config.opponentType === 'bot' && config.format !== 'standard') { $('#createResult').textContent = 'Bot is only supported for Standard (v1).'; toast('Bot is only supported for Standard (v1).', { type: 'warn' }); return; }
-    if (config.opponentType === 'bot' && !config.botDifficulty) { $('#createResult').textContent = 'Bot difficulty not set.'; toast('Bot difficulty not set.', { type: 'warn' }); return; }
+    if (config.opponentType === 'bot' && config.format === 'standard' && !config.botDifficulty) { $('#createResult').textContent = 'Bot difficulty not set.'; toast('Bot difficulty not set.', { type: 'warn' }); return; }
+    if (config.opponentType === 'bot' && config.format !== 'standard' && (!config.bots || !config.bots.length)) { $('#createResult').textContent = 'No bots configured.'; toast('No bots configured.', { type: 'warn' }); return; }
     $('#createResult').textContent = 'Validating\u2026';
     const v = await supExec('api_validateDeck', { deckId: config.deckId });
     devLog('validateResult', v);
     if (!v.ok) { $('#createResult').textContent = 'Invalid deck: ' + v.errors.join(' | '); toast('Deck validation failed.', { type: 'error', title: 'Invalid deck' }); return; }
     $('#createResult').textContent = 'Creating match\u2026';
-    const opponent = config.opponentType === 'bot' ? { type: 'bot', difficulty: config.botDifficulty, deckId: config.botDeckId || null } : { type: 'human' };
+    var opponent;
+    if (config.opponentType === 'bot' && config.bots) {
+      opponent = { type: 'bot', bots: config.bots };
+    } else if (config.opponentType === 'bot') {
+      opponent = { type: 'bot', difficulty: config.botDifficulty, deckId: config.botDeckId || null };
+    } else {
+      opponent = { type: 'human' };
+    }
     const payload = { format: config.format, hostDeckId: config.deckId, opponent };
     devLog('createPayload', payload);
     const res = await supExec('api_createMatch', payload);
@@ -2974,13 +3031,14 @@ function getClientHtml() {
       state._suppressTurnOverlay = true;
 
       // 1. Show bot's turn overlay
-      var botPlayer = (state.lastMatch?.players || []).find(function(p) { return p.isBot; });
-      var botName = botPlayer ? botPlayer.username : 'Bot';
-      showTurnOverlay(botName, false);
+      var botPlayers = (state.lastMatch?.players || []).filter(function(p) { return p.isBot; });
+      var botLabel = botPlayers.length > 1 ? 'Bots' : (botPlayers[0] ? botPlayers[0].username : 'Bot');
+      showTurnOverlay(botLabel, false);
 
       // 2. Show "Bot is thinking..." in turn bar
       var bar = $('#turnBar');
-      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> Bot is thinking\u2026</div>';
+      var thinkLabel = botPlayers.length > 1 ? 'Bots are thinking' : 'Bot is thinking';
+      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + thinkLabel + '\u2026</div>';
 
       // 3. Wait for overlay to hold (1.6s overlay + a bit of thinking time)
       await new Promise(function(r) { setTimeout(r, 2000); });
@@ -3004,22 +3062,34 @@ function getClientHtml() {
       var totalWait = 0;
       var toastIdx = 0;
 
+      var botNameBySeat = {};
+      for (var bni = 0; bni < botPlayers.length; bni++) {
+        botNameBySeat[botPlayers[bni].seat] = botPlayers[bni].username || 'Bot';
+      }
+      var multiBot = botPlayers.length > 1;
+
       if (botPlays.length) {
         for (var bpi = 0; bpi < botPlays.length; bpi++) {
           (function(entry, delay) {
             setTimeout(function() {
               var cName = cardMeta(entry.cardId)?.name || 'a card';
               var verb = entry.type === 'BOT_CAST_SPELL' ? 'cast' : 'played';
-              toast('Bot ' + verb + ' ' + cName + '.', { type: 'info', ms: toastDuration });
+              var who = multiBot ? (botNameBySeat[entry.seat] || 'Bot') : 'Bot';
+              toast(who + ' ' + verb + ' ' + cName + '.', { type: 'info', ms: toastDuration });
             }, delay);
           })(botPlays[bpi], bpi * toastGap);
         }
         toastIdx = botPlays.length;
         totalWait = (botPlays.length - 1) * toastGap + toastDuration;
       } else {
-        var botPass = log.find(function(e) { return e.type === 'BOT_PASS' && e.t > Date.now() - 10000; });
-        if (botPass) {
-          toast('Bot passed.', { type: 'info', ms: 2500 });
+        var botPasses = log.filter(function(e) { return e.type === 'BOT_PASS' && e.t > Date.now() - 10000; });
+        if (botPasses.length) {
+          if (multiBot && botPasses.length > 1) {
+            toast('All bots passed.', { type: 'info', ms: 2500 });
+          } else {
+            var passWho = multiBot ? (botNameBySeat[botPasses[0].seat] || 'Bot') : 'Bot';
+            toast(passWho + ' passed.', { type: 'info', ms: 2500 });
+          }
           totalWait = 2500;
           toastIdx = 1;
         } else {
@@ -3027,16 +3097,20 @@ function getClientHtml() {
         }
       }
 
-      if (botAttacked) {
+      var botAttacks = log.filter(function(e) {
+        return e.type === 'ATTACKERS_DECLARED' && e.by === 'bot' && e.count > 0 && e.t > Date.now() - 10000;
+      });
+      if (botAttacks.length) {
         var atkDelay = toastIdx * toastGap;
         var totalDmg = 0;
         for (var di = 0; di < botDamage.length; di++) totalDmg += (botDamage[di].damage || 0);
-        (function(delay, dmg) {
+        (function(delay, dmg, attacks) {
           setTimeout(function() {
             var dmgStr = dmg > 0 ? ' for ' + dmg + ' damage!' : '!';
-            toast('Bot attacked' + dmgStr, { type: 'info', ms: toastDuration });
+            var who = (multiBot && attacks.length === 1) ? (botNameBySeat[attacks[0].seat] || 'Bot') : (multiBot ? 'Bots' : 'Bot');
+            toast(who + ' attacked' + dmgStr, { type: 'info', ms: toastDuration });
           }, delay);
-        })(atkDelay, totalDmg);
+        })(atkDelay, totalDmg, botAttacks);
         totalWait = Math.max(totalWait, atkDelay + toastDuration);
       }
 
@@ -3072,22 +3146,26 @@ function getClientHtml() {
     state.pendingAttackers = {};
     state.combatMode = null;
     if (hasBot) {
+      var botCount = (state.lastMatch?.players || []).filter(function(p) { return p.isBot; }).length;
       var bar = $('#turnBar');
-      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> Bot is blocking\u2026</div>';
+      var blockLabel = botCount > 1 ? 'Bots are blocking' : 'Bot is blocking';
+      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + blockLabel + '\u2026</div>';
       await new Promise(function(r) { setTimeout(r, 800 + Math.floor(Math.random() * 600)); });
     }
     await refreshMatch();
     // Show bot blocking result
     if (hasBot) {
       var log = state.lastMatch?.log || [];
-      var recentBlock = null;
+      var recentBlocks = [];
       for (var bi = log.length - 1; bi >= 0; bi--) {
-        if (log[bi].type === 'BLOCKERS_DECLARED' && log[bi].by === 'bot' && log[bi].t > Date.now() - 5000) { recentBlock = log[bi]; break; }
+        if (log[bi].type === 'BLOCKERS_DECLARED' && log[bi].by === 'bot' && log[bi].t > Date.now() - 5000) recentBlocks.push(log[bi]);
       }
-      if (recentBlock && recentBlock.count > 0) {
-        toast('Bot blocked with ' + recentBlock.count + ' creature' + (recentBlock.count > 1 ? 's' : '') + '.', { type: 'info', ms: 2000 });
+      var totalBlocked = 0;
+      for (var rbi = 0; rbi < recentBlocks.length; rbi++) totalBlocked += (recentBlocks[rbi].count || 0);
+      if (totalBlocked > 0) {
+        toast('Bot' + (recentBlocks.length > 1 ? 's' : '') + ' blocked with ' + totalBlocked + ' creature' + (totalBlocked > 1 ? 's' : '') + '.', { type: 'info', ms: 2000 });
       } else {
-        toast('Bot did not block.', { type: 'info', ms: 1500 });
+        toast('Bot' + (recentBlocks.length > 1 ? 's' : '') + ' did not block.', { type: 'info', ms: 1500 });
       }
     }
     // Show combat result summary
@@ -3627,6 +3705,7 @@ function getClientHtml() {
     $('#playOpponent').onchange = () => { updateOpponentUI(); if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#playBotDifficulty').onchange = () => { if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#playBotDeck').onchange = () => { if (typeof updateDevPanel === 'function') updateDevPanel(); };
+    $('#cmdBotCount').onchange = () => { renderCmdBotSlots(); if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#playDeck').onchange = () => { if (typeof updateDevPanel === 'function') updateDevPanel(); };
     $('#btnValidateAndCreate').onclick = validateAndCreateMatch;
     $('#btnJoin').onclick = joinMatch;
@@ -3763,20 +3842,42 @@ function api_createMatch(event) {
     if (!hostDeckId) throw new Error("hostDeckId is required");
     const opp = opponent && typeof opponent === "object" ? opponent : { type: "human" };
     const opponentType = opp.type === "bot" ? "bot" : "human";
-    const difficulty = botDifficultyNormalize(opp.difficulty);
-    if (opponentType === "bot" && format !== "standard") return { ok: false, error: "bot only supported for standard (v1)" };
     const deck = getUserDecks().find((d) => d.id === hostDeckId);
     if (!deck) throw new Error("deck not found");
     if (deck.format !== format) throw new Error("deck format mismatch");
     const v = validateDeck(deck);
     if (!v.ok) return { ok: false, error: "invalid deck", errors: v.errors };
+    const allDecks = getUserDecks();
+    // Multi-bot (Commander)
+    if (opponentType === "bot" && Array.isArray(opp.bots) && opp.bots.length > 0) {
+        if (opp.bots.length > 4) return { ok: false, error: "max 4 bots" };
+        var resolvedBots = [];
+        for (var bi = 0; bi < opp.bots.length; bi++) {
+            var b = opp.bots[bi];
+            var bDeck = null;
+            if (b.deckId) {
+                bDeck = allDecks.find(function(d) { return d.id === b.deckId; });
+                if (!bDeck) return { ok: false, error: "Bot " + (bi + 1) + " deck not found" };
+                if (bDeck.format !== format) return { ok: false, error: "Bot " + (bi + 1) + " deck format mismatch" };
+                var bv = validateDeck(bDeck);
+                if (!bv.ok) return { ok: false, error: "Bot " + (bi + 1) + " deck invalid", errors: bv.errors };
+            }
+            resolvedBots.push({ difficulty: botDifficultyNormalize(b.difficulty), deck: bDeck });
+        }
+        const matchId = sup.uuid().slice(0, 8);
+        const match = createInitialMatchState({ matchId, format, hostUser: sup.user, hostDeck: deck, opponentType, bots: resolvedBots });
+        sup.chat.set(matchStoreKey(matchId), match);
+        return { ok: true, matchId };
+    }
+    // Single bot (Standard)
+    const difficulty = botDifficultyNormalize(opp.difficulty);
     var botDeck = null;
     if (opponentType === "bot" && opp.deckId) {
-        botDeck = getUserDecks().find((d) => d.id === opp.deckId);
+        botDeck = allDecks.find(function(d) { return d.id === opp.deckId; });
         if (!botDeck) return { ok: false, error: "bot deck not found" };
         if (botDeck.format !== format) return { ok: false, error: "bot deck format mismatch" };
-        const bv = validateDeck(botDeck);
-        if (!bv.ok) return { ok: false, error: "bot deck invalid", errors: bv.errors };
+        var bv2 = validateDeck(botDeck);
+        if (!bv2.ok) return { ok: false, error: "bot deck invalid", errors: bv2.errors };
     }
     const matchId = sup.uuid().slice(0, 8);
     const match = createInitialMatchState({ matchId, format, hostUser: sup.user, hostDeck: deck, opponentType, botDifficulty: difficulty, botDeck });
@@ -4110,7 +4211,7 @@ function matchStoreKey(matchId) { return `mtg.match.${matchId}`; }
 function botDifficultyNormalize(x) { const d = String(x || "").trim().toLowerCase(); if (d === "medium" || d === "hard") return d; return "easy"; }
 function matchHasBot(match) { return !!(match?.players || []).find((p) => p && p.isBot); }
 
-function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponentType, botDifficulty, botDeck }) {
+function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponentType, botDifficulty, botDeck, bots }) {
     const now = Date.now();
     const match = {
         v: 1, matchId, format, createdAt: now, phase: "lobby",
@@ -4121,7 +4222,24 @@ function createInitialMatchState({ matchId, format, hostUser, hostDeck, opponent
         botsBySeat: {},
         log: [{ t: now, type: "MATCH_CREATED", by: hostUser.username, opponentType: opponentType || "human" }],
     };
-    if (format === "standard" && opponentType === "bot") {
+    // Multi-bot (Commander)
+    if (opponentType === "bot" && Array.isArray(bots) && bots.length > 0) {
+        for (var bi = 0; bi < bots.length; bi++) {
+            var seat = bi + 2;
+            var botNum = bi + 1;
+            var botId = `bot${botNum}:${matchId}`;
+            var diff = botDifficultyNormalize(bots[bi].difficulty);
+            var useDeck = bots[bi].deck || hostDeck;
+            match.players.push({ userId: botId, username: `Bot ${botNum}`, joinedAt: now, seat: seat, isBot: true, difficulty: diff });
+            match.readyByUserId[botId] = true;
+            match.botsBySeat[seat] = { difficulty: diff };
+            match.decks[seat] = { deckId: useDeck.id, format: useDeck.format, name: `${useDeck.name} (Bot ${botNum})`, commander: useDeck.commander, cards: useDeck.cards, cardMeta: useDeck.cardMeta || {} };
+            match.log.push({ t: now, type: "BOT_ADDED", by: "engine", seat: seat, difficulty: diff, deckName: useDeck.name });
+        }
+        return match;
+    }
+    // Single bot (Standard)
+    if (opponentType === "bot") {
         const botId = `bot:${matchId}`;
         const useDeck = botDeck || hostDeck;
         match.players.push({ userId: botId, username: "MTG Bot", joinedAt: now, seat: 2, isBot: true, difficulty: botDifficultyNormalize(botDifficulty) });
