@@ -3225,10 +3225,11 @@ function getClientHtml() {
     state.combatMode = null;
     state.pendingBlockers = {};
     state.selectedBlocker = null;
-    var hasBot = (state.lastMatch?.players || []).some(function(p) { return p.isBot; });
-    if (hasBot) {
+    var botCount = (state.lastMatch?.players || []).filter(function(p) { return p.isBot; }).length;
+    if (botCount) {
       var bar = $('#turnBar');
-      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> Bot is thinking\u2026</div>';
+      var thinkMsg = botCount > 1 ? 'Bots are thinking' : 'Bot is thinking';
+      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + thinkMsg + '\u2026</div>';
       await new Promise(function(r) { setTimeout(r, 800 + Math.floor(Math.random() * 600)); });
     }
     await refreshMatch();
@@ -3241,10 +3242,11 @@ function getClientHtml() {
     state.combatMode = null;
     state.pendingBlockers = {};
     state.selectedBlocker = null;
-    var hasBot = (state.lastMatch?.players || []).some(function(p) { return p.isBot; });
-    if (hasBot) {
+    var botCount = (state.lastMatch?.players || []).filter(function(p) { return p.isBot; }).length;
+    if (botCount) {
       var bar = $('#turnBar');
-      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> Bot is thinking\u2026</div>';
+      var thinkMsg = botCount > 1 ? 'Bots are thinking' : 'Bot is thinking';
+      if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + thinkMsg + '\u2026</div>';
       await new Promise(function(r) { setTimeout(r, 800 + Math.floor(Math.random() * 600)); });
     }
     await refreshMatch();
@@ -4812,6 +4814,18 @@ function engineAdvanceTurn(match, opts) {
     match.log.push({ t: Date.now(), type: "TURN_START", by: (opts || {}).by || "engine", turn: match.game.turn, seat: next });
 }
 
+function enginePickWeakestOpponent(match, seat) {
+    var allSeats = engineSeatOrder(match);
+    var losers = match.game?.losers || [];
+    var best = null; var bestLife = Infinity;
+    for (var i = 0; i < allSeats.length; i++) {
+        if (allSeats[i] === seat || losers.indexOf(allSeats[i]) >= 0) continue;
+        var life = match.game.lifeBySeat?.[allSeats[i]] ?? 40;
+        if (life < bestLife) { bestLife = life; best = allSeats[i]; }
+    }
+    return best || allSeats.find(function(s) { return s !== seat; });
+}
+
 function engineRunBotsIfActive(match) {
     var guard = 0;
     while (guard++ < 6) {
@@ -5608,10 +5622,10 @@ function engineBotTakeTurn(match, botPlayer) {
                     }
                 }
                 if (bestTarget) return bestTarget;
-                if (eff.targetType === 'any target') return 'seat:' + allSeats.find(function(s) { return s !== seat; });
+                if (eff.targetType === 'any target') return 'seat:' + enginePickWeakestOpponent(match, seat);
             }
             if (eff.type === 'damage' && eff.targetType === 'target player') {
-                return 'seat:' + allSeats.find(function(s) { return s !== seat; });
+                return 'seat:' + enginePickWeakestOpponent(match, seat);
             }
             if (eff.type === 'destroy') {
                 // Pick strongest opponent creature
@@ -5785,13 +5799,31 @@ function engineBotDeclareAttackers(match, botPlayer) {
         eligible.push(cid);
     }
     if (!eligible.length) return false;
-    // Find a target seat (first opponent)
+    // Find a target seat — pick strategically in multiplayer
     var allSeats = engineSeatOrder(match);
-    var targetSeat = null;
+    var losers = match.game?.losers || [];
+    var opponentSeats = [];
     for (var si = 0; si < allSeats.length; si++) {
-        if (allSeats[si] !== seat) { targetSeat = allSeats[si]; break; }
+        if (allSeats[si] !== seat && losers.indexOf(allSeats[si]) < 0) opponentSeats.push(allSeats[si]);
     }
-    if (!targetSeat) return false;
+    if (!opponentSeats.length) return false;
+    var targetSeat = opponentSeats[0];
+    if (opponentSeats.length > 1) {
+        // Multiplayer: pick target by lowest life (most vulnerable)
+        var bestScore = -Infinity;
+        for (var ti = 0; ti < opponentSeats.length; ti++) {
+            var ts = opponentSeats[ti];
+            var life = match.game.lifeBySeat?.[ts] ?? 40;
+            var oppBfCount = 0;
+            var oppBfArr = match.game.zones?.[ts]?.battlefield || [];
+            for (var tbi = 0; tbi < oppBfArr.length; tbi++) { if (engineIsCreature(match, ts, oppBfArr[tbi])) oppBfCount++; }
+            // Score: lower life = higher priority, fewer creatures = easier target
+            var score = (100 - life) + (10 - Math.min(oppBfCount, 10)) * 2;
+            // Add randomness so bots don't all pile on the same target
+            score += sup.random.integer(0, 15);
+            if (score > bestScore) { bestScore = score; targetSeat = ts; }
+        }
+    }
     var chosen = [];
     if (diff === "easy") {
         // Easy: attack with everything
