@@ -5540,6 +5540,58 @@ function enginePlayCard(match, seat, cardId, targetId) {
     return result;
 }
 
+function engineBotCardImpactScore(match, seat, cardId) {
+    var meta = engineBotCardMeta(match, seat, cardId);
+    var oracle = String(meta?.oracleText || '');
+    var type = engineCardType(match, seat, cardId);
+    var score = 0;
+    var cmc = Number(meta?.cmc) || 0;
+    // Removal spells (destroy/exile/damage) — highest priority
+    if ((type === 'instant' || type === 'sorcery') && /destroy|exile|deals?\s+\d+\s+damage/i.test(oracle)) {
+        score += 100;
+        // Extra value if opponents have creatures to remove
+        var allSeats = engineSeatOrder(match);
+        var hasTargets = false;
+        for (var si = 0; si < allSeats.length; si++) {
+            if (allSeats[si] === seat) continue;
+            var oBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
+            for (var ci = 0; ci < oBf.length; ci++) { if (engineIsCreature(match, allSeats[si], oBf[ci])) { hasTargets = true; break; } }
+            if (hasTargets) break;
+        }
+        if (hasTargets) score += 30;
+    }
+    // Draw spells — high value (card advantage)
+    if ((type === 'instant' || type === 'sorcery') && /draw/i.test(oracle)) score += 80;
+    // Creatures — score by stats and keywords
+    if (type === 'creature') {
+        var pw = Number(meta?.power) || 0;
+        var tw = Number(meta?.toughness) || 0;
+        score += pw * 8 + tw * 4;
+        // Keyword bonuses
+        var kwBonus = 0;
+        if (/flying/i.test(oracle)) kwBonus += 15;
+        if (/trample/i.test(oracle)) kwBonus += 10;
+        if (/deathtouch/i.test(oracle)) kwBonus += 15;
+        if (/lifelink/i.test(oracle)) kwBonus += 10;
+        if (/first strike|double strike/i.test(oracle)) kwBonus += 12;
+        if (/haste/i.test(oracle)) kwBonus += 8;
+        if (/menace/i.test(oracle)) kwBonus += 10;
+        if (/indestructible/i.test(oracle)) kwBonus += 18;
+        if (/vigilance/i.test(oracle)) kwBonus += 6;
+        score += kwBonus;
+    }
+    // Buff auras — valuable only if we have creatures to enchant
+    if (engineIsAura(match, seat, cardId)) {
+        var hasCr = (match.game.zones?.[seat]?.battlefield || []).some(function(id) { return engineIsCreature(match, seat, id); });
+        score += hasCr ? 60 : 5;
+    }
+    // Enchantments/artifacts (non-aura) — moderate value
+    if ((type === 'enchantment' || type === 'artifact') && !engineIsAura(match, seat, cardId)) score += 40;
+    // CMC efficiency tiebreaker — prefer mana-efficient cards
+    score += Math.max(0, 12 - cmc * 2);
+    return score;
+}
+
 function engineBotTakeTurn(match, botPlayer) {
     if (match.game?.status === "finished") return;
     // If waiting for a human to declare blockers, don't continue the bot's turn
@@ -5575,29 +5627,37 @@ function engineBotTakeTurn(match, botPlayer) {
         return;
     }
 
-    // Helper: find best aura target for bot
+    // Helper: find best aura target for bot (detects buff vs debuff)
     var botAuraTarget = function(cardId) {
         var allSeats = engineSeatOrder(match);
-        var bestTarget = null; var bestPower = -1;
-        // Prefer own creatures (biggest power)
-        var ownBf = match.game.zones?.[seat]?.battlefield || [];
-        for (var oi = 0; oi < ownBf.length; oi++) {
-            var oid = ownBf[oi];
-            if (!engineIsCreature(match, seat, oid)) continue;
-            var pw = engineGetCreaturePower(match, seat, oid);
-            if (pw > bestPower) { bestPower = pw; bestTarget = oid; }
-        }
-        // Easy: also consider opponent creatures (random)
-        if (!bestTarget && diff === "easy") {
+        var auraMeta = engineBotCardMeta(match, seat, cardId);
+        var auraOracle = String(auraMeta?.oracleText || '');
+        var mods = engineParseAuraMods(match, seat, cardId);
+        var isDebuff = (mods.power < 0 || mods.toughness < 0) || /can't attack|can't block|doesn't untap|gets\s*-/i.test(auraOracle);
+        if (isDebuff) {
+            // Target opponent's strongest creature
+            var bestTarget = null; var bestPow = -1;
             for (var si = 0; si < allSeats.length; si++) {
                 if (allSeats[si] === seat) continue;
                 var oBf = match.game.zones?.[allSeats[si]]?.battlefield || [];
                 for (var ci = 0; ci < oBf.length; ci++) {
-                    if (engineIsCreature(match, allSeats[si], oBf[ci]) && !engineHasKeyword(match, allSeats[si], oBf[ci], "Hexproof")) { return oBf[ci]; }
+                    if (!engineIsCreature(match, allSeats[si], oBf[ci])) continue;
+                    if (engineHasKeyword(match, allSeats[si], oBf[ci], "Hexproof")) continue;
+                    var p = engineGetCreaturePower(match, allSeats[si], oBf[ci]);
+                    if (p > bestPow) { bestPow = p; bestTarget = oBf[ci]; }
                 }
             }
+            return bestTarget;
         }
-        return bestTarget;
+        // Buff aura — target own strongest creature
+        var bestBuff = null; var bestBp = -1;
+        var ownBf = match.game.zones?.[seat]?.battlefield || [];
+        for (var oi = 0; oi < ownBf.length; oi++) {
+            if (!engineIsCreature(match, seat, ownBf[oi])) continue;
+            var pw = engineGetCreaturePower(match, seat, ownBf[oi]);
+            if (pw > bestBp) { bestBp = pw; bestBuff = ownBf[oi]; }
+        }
+        return bestBuff;
     };
 
     var botPickSpellTarget = function(cardId) {
@@ -5719,8 +5779,13 @@ function engineBotTakeTurn(match, botPlayer) {
             }
         }
     } else if (diff === "medium") {
-        // Medium: sort affordable by CMC ascending, play greedily (cheapest first)
-        const sorted = affordable.slice().sort((a, b) => getCmc(a) - getCmc(b));
+        // Medium: sort by card impact (creatures first for sequencing, then removal/buffs)
+        const sorted = affordable.slice().sort(function(a, b) {
+            var sa = engineBotCardImpactScore(match, seat, a);
+            var sb = engineBotCardImpactScore(match, seat, b);
+            if (sb !== sa) return sb - sa;
+            return getCmc(a) - getCmc(b); // CMC ascending tiebreaker
+        });
         for (const cardId of sorted) {
             if (getCmc(cardId) > mana.current) continue;
             if (botIsLand(cardId) && (match.game.landsPlayedThisTurn || 0) >= 1) continue;
@@ -5731,8 +5796,12 @@ function engineBotTakeTurn(match, botPlayer) {
             }
         }
     } else {
-        // Hard: sort affordable by CMC descending (value maximization), cap board at 6
-        const sorted = affordable.slice().sort((a, b) => getCmc(b) - getCmc(a));
+        // Hard: sort by card impact (removal > strong creatures > buffs), cap board at 6
+        const sorted = affordable.slice().sort(function(a, b) {
+            var sa = engineBotCardImpactScore(match, seat, a);
+            var sb = engineBotCardImpactScore(match, seat, b);
+            return sb - sa; // highest impact first
+        });
         for (const cardId of sorted) {
             if (getCmc(cardId) > mana.current) continue;
             if (bf.length + played.length >= 6) break;
@@ -5825,7 +5894,21 @@ function engineBotDeclareAttackers(match, botPlayer) {
         }
     }
     var chosen = [];
-    if (diff === "easy") {
+    // Lethal detection — if we can kill the target, go all-in regardless of difficulty
+    var targetLife = match.game.lifeBySeat?.[targetSeat] ?? 40;
+    var totalEligPower = 0;
+    var evasivePower = 0;
+    for (var lci = 0; lci < eligible.length; lci++) {
+        var ePw = engineGetCreaturePower(match, seat, eligible[lci]);
+        totalEligPower += ePw;
+        if (engineHasKeyword(match, seat, eligible[lci], "Flying") || engineHasKeyword(match, seat, eligible[lci], "Trample") || engineHasKeyword(match, seat, eligible[lci], "Menace")) {
+            evasivePower += ePw;
+        }
+    }
+    if (diff !== "easy" && (totalEligPower >= targetLife || evasivePower >= targetLife)) {
+        // Go for lethal — attack with everything
+        chosen = eligible.slice();
+    } else if (diff === "easy") {
         // Easy: attack with everything
         chosen = eligible.slice();
     } else if (diff === "medium") {
@@ -5870,7 +5953,7 @@ function engineBotDeclareAttackers(match, botPlayer) {
             if (engineHasKeyword(match, seat, eid, "Lifelink")) atkScore += 2;
             if (engineHasKeyword(match, seat, eid, "First Strike") || engineHasKeyword(match, seat, eid, "Double Strike")) atkScore += 2;
             if (engineHasKeyword(match, seat, eid, "Indestructible")) atkScore += 5;
-            if (engineHasKeyword(match, seat, eid, "Vigilance")) atkScore += 1;
+            if (engineHasKeyword(match, seat, eid, "Vigilance")) atkScore += 4;
             // Penalty if opponent has untapped deathtouch blocker
             if (oppHasUntappedDT && !engineHasKeyword(match, seat, eid, "Indestructible")) atkScore -= 3;
             if (atkScore >= 3) chosen.push(eid);
@@ -5939,10 +6022,10 @@ function engineBotDeclareBlockers(match, botPlayer) {
             bIdx++;
         }
     } else if (diff === "medium") {
-        // Medium: only block if our creature kills the attacker, skip Menace
+        // Medium: Pass 1 — block if we can kill the attacker (favorable trade)
         for (var ai = 0; ai < incomingAttackers.length; ai++) {
             var atkId = incomingAttackers[ai];
-            if (hasMenace(atkId)) continue; // Medium skips Menace
+            if (hasMenace(atkId)) continue;
             var atkSeat = engineFindSeatForCard(match, atkId);
             if (!atkSeat) continue;
             var atkTough = engineGetCreatureToughness(match, atkSeat, atkId);
@@ -5955,6 +6038,31 @@ function engineBotDeclareBlockers(match, botPlayer) {
                     match.game.combat.blockers[atkId] = [blkId];
                     usedBlockers[blkId] = true;
                     break;
+                }
+            }
+        }
+        // Pass 2 — chump-block big threats (power >= 4) and evasive creatures to save life
+        for (var ai1b = 0; ai1b < incomingAttackers.length; ai1b++) {
+            var atkId1b = incomingAttackers[ai1b];
+            if (match.game.combat.blockers[atkId1b]) continue; // already blocked
+            if (hasMenace(atkId1b)) continue;
+            var atkSeat1b = engineFindSeatForCard(match, atkId1b);
+            if (!atkSeat1b) continue;
+            var atkPow1b = engineGetCreaturePower(match, atkSeat1b, atkId1b);
+            var isEvasive = engineHasKeyword(match, atkSeat1b, atkId1b, "Flying") || engineHasKeyword(match, atkSeat1b, atkId1b, "Trample");
+            if (atkPow1b >= 4 || isEvasive) {
+                // Find smallest available blocker to chump
+                var smallBlk = null; var smallPow = Infinity;
+                for (var sbi = 0; sbi < eligibleBlockers.length; sbi++) {
+                    var sbId = eligibleBlockers[sbi];
+                    if (usedBlockers[sbId]) continue;
+                    if (!engineBotCanBlock(match, seat, sbId, atkId1b)) continue;
+                    var sbPow = engineGetCreaturePower(match, seat, sbId);
+                    if (sbPow < smallPow) { smallPow = sbPow; smallBlk = sbId; }
+                }
+                if (smallBlk) {
+                    match.game.combat.blockers[atkId1b] = [smallBlk];
+                    usedBlockers[smallBlk] = true;
                 }
             }
         }
