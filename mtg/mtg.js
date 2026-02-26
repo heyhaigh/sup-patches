@@ -1307,6 +1307,7 @@ function getClientHtml() {
     $('#qsStandardMsg').innerHTML = '<span class="spinner"></span>Building Standard deck\u2026';
     try {
       const deck = await supExec('api_createQuickstartStandardDeck', { color });
+      if (deck?.ok === false) { $('#qsStandardMsg').textContent = 'Failed: ' + (deck.error || 'unknown'); toast(deck.error || 'Deck creation failed', { type: 'error' }); return; }
       await loadDecks();
       if (deck?.id) { setActiveDeck(deck.id); $('#builderDeck').value = deck.id; }
       $('#qsStandardMsg').textContent = '';
@@ -1328,6 +1329,7 @@ function getClientHtml() {
     $('#qsCommanderMsg').innerHTML = '<span class="spinner"></span>Building Commander deck \u2014 fetching cards from Scryfall\u2026';
     try {
       const deck = await supExec('api_createQuickstartCommanderDeck', { commanderName: name });
+      if (deck?.ok === false) { $('#qsCommanderMsg').textContent = 'Failed: ' + (deck.error || 'unknown'); toast(deck.error || 'Deck creation failed', { type: 'error' }); return; }
       await loadDecks();
       if (deck?.id) { setActiveDeck(deck.id); $('#builderDeck').value = deck.id; }
       $('#qsCommanderMsg').textContent = '';
@@ -1362,6 +1364,7 @@ function getClientHtml() {
     $('#qsCommanderMsg').innerHTML = '<span class="spinner"></span>Building Commander deck \u2014 fetching cards from Scryfall\u2026';
     try {
       const deck = await supExec('api_createQuickstartCommanderDeck', { commanderId: card.id });
+      if (deck?.ok === false) { $('#qsCommanderMsg').textContent = 'Failed: ' + (deck.error || 'unknown'); toast(deck.error || 'Deck creation failed', { type: 'error' }); return; }
       await loadDecks();
       if (deck?.id) { setActiveDeck(deck.id); $('#builderDeck').value = deck.id; }
       $('#qsCommanderMsg').textContent = '';
@@ -4022,17 +4025,33 @@ function api_deleteDeck(event) {
 function api_createQuickstartStandardDeck(event) {
     const { color } = event?.value || {};
     const c = String(color || "").trim().toUpperCase();
-    if (!['W','U','B','R','G'].includes(c)) throw new Error('color must be one of W U B R G');
-    return upsertDeckForUser(buildQuickstartStandardDeck(c));
+    if (!['W','U','B','R','G'].includes(c)) return { ok: false, error: 'color must be one of W U B R G' };
+    try {
+        return upsertDeckForUser(buildQuickstartStandardDeck(c));
+    } catch (e) {
+        var msg = String(e?.message || e || 'unknown');
+        if (msg.includes('fetch') || msg.includes('ECONNREFUSED') || msg.includes('timeout')) {
+            return { ok: false, error: 'Scryfall API temporarily unavailable — wait a moment and try again.' };
+        }
+        return { ok: false, error: msg };
+    }
 }
 
 function api_createQuickstartCommanderDeck(event) {
     const { commanderId, commanderName } = event?.value || {};
-    let commander = null;
-    if (commanderId) { commander = scryfallFetchJsonCached(`${SCRYFALL.card}/${encodeURIComponent(String(commanderId))}`); }
-    else if (commanderName) { commander = resolveCommanderByName(String(commanderName)); }
-    if (!commander || commander.object !== 'card') throw new Error('commander not found');
-    return upsertDeckForUser(buildQuickstartCommanderDeck(commander));
+    try {
+        let commander = null;
+        if (commanderId) { commander = scryfallFetchJsonCached(`${SCRYFALL.card}/${encodeURIComponent(String(commanderId))}`); }
+        else if (commanderName) { commander = resolveCommanderByName(String(commanderName)); }
+        if (!commander || commander.object !== 'card') return { ok: false, error: 'Commander not found. Scryfall may be rate-limiting — wait a moment and try again.' };
+        return upsertDeckForUser(buildQuickstartCommanderDeck(commander));
+    } catch (e) {
+        var msg = String(e?.message || e || 'unknown');
+        if (msg.includes('fetch') || msg.includes('ECONNREFUSED') || msg.includes('timeout')) {
+            return { ok: false, error: 'Scryfall API temporarily unavailable — wait a moment and try again.' };
+        }
+        return { ok: false, error: msg };
+    }
 }
 
 function api_searchCards(event) {
@@ -4240,10 +4259,8 @@ function scryfallSearchAll(query, opts) {
         const url = `${SCRYFALL.search}?q=${encodeURIComponent(query)}&order=${encodeURIComponent(order)}&unique=${encodeURIComponent(unique)}&page=${page}`;
         let json = scryfallCacheGet(cache, url);
         if (!json) {
-            const res = sup.fetch(url, { headers: { "User-Agent": "SupMTG/0 (contact: @heyhaigh)", Accept: "application/json" } });
-            json = res.json();
-            scryfallCacheSet(cache, url, json);
-            dirty = true;
+            json = scryfallFetchWithRetry(url);
+            if (json) { scryfallCacheSet(cache, url, json); dirty = true; }
         }
         const data = Array.isArray(json?.data) ? json.data : [];
         for (const c of data) out.push(c);
@@ -6510,14 +6527,50 @@ function scryfallCacheSet(cache, url, json) {
     }
 }
 
+// Rate-limit Scryfall: track last request time, enforce 120ms gap
+var _scryfallLastFetch = 0;
+function scryfallRateLimit() {
+    var now = Date.now();
+    var elapsed = now - _scryfallLastFetch;
+    if (elapsed < 120) {
+        var wait = 120 - elapsed;
+        var end = Date.now() + wait;
+        while (Date.now() < end) {} // busy-wait (sync environment)
+    }
+    _scryfallLastFetch = Date.now();
+}
+
+function scryfallFetchWithRetry(url, opts) {
+    var maxRetries = 2;
+    for (var attempt = 0; attempt <= maxRetries; attempt++) {
+        scryfallRateLimit();
+        try {
+            var res = sup.fetch(url, opts || { headers: { "User-Agent": "SupMTG/0 (contact: @heyhaigh)", Accept: "application/json" } });
+            var json = res.json();
+            // Scryfall returns { object: 'error', status: 429 } on rate limit
+            if (json && json.object === 'error' && json.status === 429 && attempt < maxRetries) {
+                var backoff = 500 * (attempt + 1);
+                var end = Date.now() + backoff;
+                while (Date.now() < end) {}
+                continue;
+            }
+            return json;
+        } catch (e) {
+            if (attempt >= maxRetries) throw e;
+            var backoff = 500 * (attempt + 1);
+            var end = Date.now() + backoff;
+            while (Date.now() < end) {}
+        }
+    }
+    return null;
+}
+
 function scryfallFetchJsonCached(url) {
     const cache = sup.global.get(GLOBAL_SCRYFALL_CACHE_KEY) || {};
     const cached = scryfallCacheGet(cache, url);
     if (cached) return cached;
-    const res = sup.fetch(url, { headers: { "User-Agent": "SupMTG/0 (contact: @heyhaigh)", Accept: "application/json" } });
-    const json = res.json();
-    scryfallCacheSet(cache, url, json);
-    sup.global.set(GLOBAL_SCRYFALL_CACHE_KEY, cache);
+    const json = scryfallFetchWithRetry(url);
+    if (json) { scryfallCacheSet(cache, url, json); sup.global.set(GLOBAL_SCRYFALL_CACHE_KEY, cache); }
     return json;
 }
 
@@ -6534,8 +6587,7 @@ function scryfallGetCardsByIdsCached(ids) {
     for (let i = 0; i < missing.length; i += 75) {
         const chunk = missing.slice(i, i + 75);
         const body = { identifiers: chunk.map((id) => ({ id })) };
-        const res = sup.fetch(SCRYFALL.collection, { method: "POST", headers: { "User-Agent": "SupMTG/0 (contact: @heyhaigh)", Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        const json = res.json();
+        const json = scryfallFetchWithRetry(SCRYFALL.collection, { method: "POST", headers: { "User-Agent": "SupMTG/0 (contact: @heyhaigh)", Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(body) });
         const data = Array.isArray(json?.data) ? json.data : [];
         for (const card of data) { if (!card || card.object !== "card" || !card.id) continue; scryfallCacheSet(cache, `${SCRYFALL.card}/${encodeURIComponent(card.id)}`, card); results.push(card); }
     }
