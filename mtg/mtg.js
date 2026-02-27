@@ -2598,7 +2598,6 @@ function getClientHtml() {
     // Filter out attached auras — they render as badges on their target creature
     // Equipment stays visible on battlefield with an "Equipped to" badge
     var auraAttachments = match?.game?.auraAttachments || {};
-    var equipAttachments = match?.game?.equipmentAttachments || {};
     var visibleBf = bf.filter(function(id) { return !auraAttachments[id]; });
     // Hide bot-played cards during progressive reveal animation
     if (state._hiddenBotCards) {
@@ -3457,6 +3456,7 @@ function getClientHtml() {
       if (oppEl) oppEl.dataset.cacheKey = '';
       renderGame(state.lastMatch);
 
+      try {
       if (state.quickMode) {
         // Quick mode — per-bot summaries with progressive reveal
         for (var bti = 0; bti < botTurnOrder.length; bti++) {
@@ -3485,13 +3485,6 @@ function getClientHtml() {
           if (atkCount) parts.push('attacked');
           if (passCount && !playCount) parts.push('passed');
           if (parts.length) toast(botName + ': ' + parts.join(', '), { type: 'info', ms: 2500 });
-        }
-        state._hiddenBotCards = {};
-        state._botAnimCounter = 0;
-        state._suppressTurnOverlay = false;
-        await refreshMatch();
-        if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
-          showTurnOverlay('', true);
         }
       } else {
         // Full animation mode — show each bot's turn with progressive card reveal
@@ -3537,15 +3530,18 @@ function getClientHtml() {
             }
           }
         }
-
-        // Show "YOUR TURN" — unless game ended or it's blocker phase
+      }
+      } finally {
+        // Always clean up hidden cards — prevents permanently invisible cards on error
         state._hiddenBotCards = {};
         state._botAnimCounter = 0;
-        state._suppressTurnOverlay = false;
-        await refreshMatch();
-        if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
-          showTurnOverlay('', true);
-        }
+      }
+
+      // Show "YOUR TURN" — unless game ended or it's blocker phase
+      state._suppressTurnOverlay = false;
+      await refreshMatch();
+      if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
+        showTurnOverlay('', true);
       }
     } else {
       await refreshMatch();
