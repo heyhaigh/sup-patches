@@ -3538,6 +3538,10 @@ function getClientHtml() {
       }
 
       // Show "YOUR TURN" — unless game ended or it's blocker phase
+      // Clear turn bar cache so renderTurnBar re-renders (bot animation overwrote innerHTML
+      // but the game state — and thus cache key — hasn't changed since the first refreshMatch)
+      var turnBarEl = $('#turnBar');
+      if (turnBarEl) turnBarEl.dataset.cacheKey = '';
       state._suppressTurnOverlay = false;
       await refreshMatch();
       if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
