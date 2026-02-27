@@ -223,13 +223,13 @@ All Phase 3 items completed 2026-02-25: combat depth (multi-block, commander dam
 
 ---
 
-## Phase 5: Card Mechanics Expansion (Modal + Equipment + Instants + Scry)
+## ~~Phase 5: Card Mechanics Expansion (Modal + Equipment + Instants + Scry)~~ ✅ COMPLETE
 
 **Goal:** Fix broken cards and expand supported mechanics. Many real cards fail because the engine lacks modal spells, expanded targeting, board sweeps, equipment, instant-speed casting, and scry.
 
-**Trigger:** Untimely Malfunction failing ("no valid targets" despite artifacts on field), Austere Command having no way to select modes.
+**All 4 sub-phases shipped 2026-02-26.** See git commits `1cc860f` (5D Scry), `15c6b99` (5-phase QA fixes), `70db5b4` (artifact targeting), `dfd0b8c` (per-bot turns), `a72f069` (5 gameplay improvements), `84bcc5a` (QA audit fixes).
 
-### Phase 5A: Modal Spells + Board Sweeps + Expanded Targeting
+### ~~Phase 5A: Modal Spells + Board Sweeps + Expanded Targeting~~ ✅
 **Impact: Highest — fixes the most broken cards**
 
 #### 5A1. Modal/Choice Parsing (engine + client)
@@ -307,7 +307,7 @@ New `botSelectModes()`: score each mode by board impact (destroyAll opponent cre
 
 ---
 
-### Phase 5B: Equipment Artifacts
+### ~~Phase 5B: Equipment Artifacts~~ ✅
 **Impact: High — many Commander staples are equipment**
 
 #### 5B1. Data Structure
@@ -346,7 +346,7 @@ After playing cards each turn, bot tries to equip unattached equipment to strong
 
 ---
 
-### Phase 5C: Instant-Speed Casting
+### ~~Phase 5C: Instant-Speed Casting~~ ✅
 **Impact: High but architecturally complex**
 
 #### 5C1. Lightweight Priority (No Full Stack)
@@ -388,17 +388,31 @@ Purple flash banner below turn bar, playable instants in hand get glow highlight
 
 ---
 
-### Phase 5 Verification Plan
+### ~~Phase 5 Verification Plan~~ ✅
 
-After each sub-phase:
-1. `node -c mtg/mtg.js` — syntax check
-2. Add `<script>console.log('PHASE_5X_OK');</script>` sentinel before main script to detect template literal parse errors
-3. Test in SupChat:
-   - **5A**: Cast Austere Command (choose 2 modes), cast Untimely Malfunction (target artifact)
-   - **5B**: Play Lightning Greaves, equip to creature, verify P/T buff + visual
-   - **5C**: End turn, see response window during bot turn, cast instant in response
-   - **5D**: Activate Sensei's Divining Top, reorder top 3 cards
-4. Commit + push after each sub-phase passes
+All sub-phases verified and committed. QA audit (3 parallel agents) caught and fixed 5 bugs in 5A-5D, plus 6 bugs in the Phase 6 gameplay improvements.
+
+---
+
+## ~~Phase 6: Gameplay Polish (Post-Playtest)~~ ✅ COMPLETE (2026-02-26)
+
+**Goal:** Fix issues discovered during Commander playtesting.
+
+- **Equipment Equip button** ✅ — Equip button added to floating inspector (was only in context menu)
+- **Bot attack target display** ✅ — Shows who bot attacks ("Bot 1 attacks Player with 3 creatures!")
+- **Dead player visual** ✅ — Eliminated players: opacity 0.4, grayscale, skull overlay, no interaction
+- **Multi-select attackers** ✅ — Stage multiple creatures (pulsing gold border), click opponent to assign all
+- **Hand size discard** ✅ — 7-card limit enforced at end of turn, discard overlay UI, bot auto-discard, "no maximum hand size" support
+- **Artifact targeting fix** ✅ — All permanents wrapped in `.cardWrap` (was creatures only)
+- **Per-bot turn display** ✅ — Individual bot turn overlays instead of grouped animation
+
+---
+
+## Code Cleanup Audit (2026-02-26)
+
+Full 7,800-line audit. See [`ROADMAP.md`](./ROADMAP.md) P5 section for complete findings table.
+
+**Summary:** 18 dead code items (HIGH confidence, safe to remove), 3 bugs found (HIGH confidence), 9 consolidation opportunities (MEDIUM, deferred).
 
 ---
 

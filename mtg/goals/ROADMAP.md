@@ -144,3 +144,65 @@ Fixes broken cards and expands supported mechanics:
 - **5B: Equipment Artifacts** ✅ — Play to battlefield, equip to creature via activated ability, +N/+N mods, stacked visual (peek strip above creature), equipment stays on battlefield when creature dies.
 - **5C: Instant-Speed Casting** ✅ — Lightweight response windows (not full stack/priority). Human can play instants during bot's turn. Purple flash banner + glow on playable instants.
 - **5D: Scry / Top-Card-View** ✅ — "Scry N" and "look at top N" abilities. Click-to-reorder UI overlay. Sensei's Divining Top support. Bot auto-resolve.
+
+### Phase 6: Gameplay Polish (Post-Playtest Fixes) ✅
+
+Fixes from playtesting Commander matches (2026-02-26):
+
+- **Equipment Equip button** ✅ — Added Equip button to floating inspector (was only in right-click context menu). Shows cost, disables when insufficient mana.
+- **Bot attack target display** ✅ — Bot attack overlay now shows WHO the bot is attacking (e.g. "Bot 1 attacks Player with 3 creatures!"). `targetSeat` added to ATTACKERS_DECLARED log.
+- **Dead player visual** ✅ — Eliminated players get `.eliminated` class (opacity 0.4, grayscale, pointer-events none) + skull (☠) overlay on battlefield.
+- **Multi-select attackers (Commander)** ✅ — Click multiple creatures to stage them (pulsing gold dashed border), then click an opponent to assign all staged creatures at once. Replaces tedious one-at-a-time assignment.
+- **Hand size discard** ✅ — End of turn enforces 7-card hand limit (MTG rule). Discard overlay with card grid, click-to-select, confirm. Bot auto-discards highest CMC first. Respects "no maximum hand size" cards.
+- **Artifact targeting fix** ✅ — `renderCardImg` now wraps ALL battlefield permanents in `.cardWrap` divs (was only creatures), fixing targeting for artifacts/enchantments.
+- **Per-bot turn display** ✅ — Individual "Bot N's Turn" overlays instead of grouped "Bots are thinking". Quick mode with per-bot summary toasts.
+
+---
+
+## P5 — Code Cleanup 🔜
+
+### Full-file audit (2026-02-26)
+
+7,800-line codebase audited across 4 parallel agents. Findings categorized by confidence.
+
+#### HIGH Confidence — Dead Code to Remove
+
+| # | Area | Finding | Lines |
+|---|------|---------|-------|
+| 1 | CSS | Dead `.muted` class (duplicate of `.small`) | ~100 |
+| 2 | CSS | Dead `.noteBox ul` (no `<ul>` in noteBox) | ~70 |
+| 3 | CSS | Dead `.tokenBadge` (never assigned) | ~395 |
+| 4 | CSS | Dead `.turnDot.done` (never added by JS) | ~375 |
+| 5 | CSS | Dead `.mulliganHand` rules (old mulligan, replaced by overlay) | ~127-129 |
+| 6 | HTML | Dead `#mulliganPanel` block (permanently hidden, replaced by dynamic overlay) | ~618-630 |
+| 7 | Client | Dead onclick bindings for hidden mulligan buttons | ~4610-4611 |
+| 8 | State | Dead `oppHandHighlight: {}` (never read/written) | ~812 |
+| 9 | State | 6 unused `GC` constants (only `LIFE_CRIT_STD`/`CMD` used) | ~800 |
+| 10 | Client | Dead `getHandCountForMySeat` function | ~1494-1500 |
+| 11 | Server | Dead `api_getCard` endpoint (never called) | ~4737-4741 |
+| 12 | Server | Dead `api_validateDeck` endpoint (never called from client) | ~4753-4759 |
+| 13 | Client | Dead `_devState.lastValidate` + setter branch | ~1165, 1195 |
+| 14 | Server | Dead `SUPPORTED_KEYWORDS` array (client has its own) | ~5980 |
+| 15 | Server | Dead `LIFE_CRITICAL_*` constants in GAME_CONST | ~5182-5183 |
+| 16 | Server | Dead `basicLandNameForColor` + `getBasicLandIdByName` + cache key | ~4900-4918, 12 |
+| 17 | Server | Duplicate `oracleText` key in `simplifyCard` | ~7820 |
+| 18 | Server | No-op `totalDmgToBlockers += 0` | ~6226 |
+
+#### HIGH Confidence — Bugs Found
+
+| # | Finding | Lines |
+|---|---------|-------|
+| A | `imageUrl` should be `imageSmall`/`imageNormal` — equipment peek images always empty | ~2447 |
+| B | Mana display destroyed when hand is empty (innerHTML wipes it) | ~3060-3062 |
+| C | Duplicate `.deathOverlay` CSS — skull fades out after 0.8s due to `deathFade` animation conflict | ~330 vs 419 |
+
+#### MEDIUM Confidence — Consolidation Opportunities (Future)
+
+| # | Finding |
+|---|---------|
+| D | `confirmBlockers`/`noBlocks` share 11 identical cleanup lines → extract helper |
+| E | Post-combat resolve duplicated in DECLARE_BLOCKERS vs NO_BLOCKS → extract helper |
+| F | Deck-out handling duplicated 3× → extract `engineHandleDeckOut` helper |
+| G | Bot-thinking spinner pattern repeated 5× → extract helper |
+| H | `engineBotIsLand` duplicates `engineCardType` check → remove, use `engineCardType` |
+| I | `getTargetableCreatures` trivial single-use wrapper → inline |
