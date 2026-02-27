@@ -810,7 +810,7 @@ function getClientHtml() {
     targetingMode: null, modalSelection: null,
     lastLogIndex: 0, eventLogCollapsed: false,
     _suppressTurnOverlay: false, prevHandCounts: {}, oppHandHighlight: {},
-    _atkTargetPending: null, _atkStagedCreatures: [], discardSelection: null, quickMode: true,
+    _atkStagedCreatures: [], discardSelection: null, quickMode: true,
   };
 
   /* Tab buttons work immediately via event delegation — no boot() needed */
@@ -880,6 +880,8 @@ function getClientHtml() {
     state.prevLifeBySeat = {};
     state.lastLogIndex = 0;
     state.gameEntranceAnimated = false;
+    state.discardSelection = null;
+    state._atkStagedCreatures = [];
     renderLobby(null);
     $('#gamePanel').style.display = 'none';
     $('#createResult').textContent = '';
@@ -3213,9 +3215,12 @@ function getClientHtml() {
       showScryOverlay(match);
     }
 
-    // Discard overlay: show if discardPending is set for viewer
+    // Discard overlay: show if discardPending is set for viewer, remove if not
     if (match.game?.discardPending && match.game.discardPending.seat === mySeat) {
       showDiscardOverlay(match);
+    } else {
+      var existingDiscard = document.querySelector('.discardOverlay');
+      if (existingDiscard) existingDiscard.remove();
     }
 
     renderCombatLines();
@@ -3564,6 +3569,7 @@ function getClientHtml() {
     var res = await supExec('api_matchAction', { matchId: state.activeMatchId, action: { type: 'DECLARE_ATTACKERS', attackers: state.pendingAttackers } });
     if (!res.ok) { toast('Declare attackers failed: ' + (res.error || 'unknown'), { type: 'error' }); return; }
     state.pendingAttackers = {};
+    state._atkStagedCreatures = [];
     state.combatMode = null;
     if (hasBot) {
       var botCount = (state.lastMatch?.players || []).filter(function(p) { return p.isBot; }).length;
@@ -3706,8 +3712,12 @@ function getClientHtml() {
 
   function selectAttackTarget(seat) {
     if (!state._atkStagedCreatures.length) return;
+    // Filter out any staged creatures that are no longer eligible (e.g. died since staging)
+    var eligible = state.lastMatch ? getCombatEligibleAttackers(state.lastMatch) : [];
     for (var i = 0; i < state._atkStagedCreatures.length; i++) {
-      state.pendingAttackers[state._atkStagedCreatures[i]] = seat;
+      if (eligible.indexOf(state._atkStagedCreatures[i]) >= 0) {
+        state.pendingAttackers[state._atkStagedCreatures[i]] = seat;
+      }
     }
     state._atkStagedCreatures = [];
     renderGame(state.lastMatch);
@@ -5475,6 +5485,12 @@ function engineApplyAction(match, user, action) {
         var discardIds = action.cardIds || [];
         if (discardIds.length !== match.game.discardPending.mustDiscard) {
             return { ok: false, error: "must discard exactly " + match.game.discardPending.mustDiscard + " card(s)" };
+        }
+        // Validate no duplicate card IDs
+        var seenIds = {};
+        for (var dci = 0; dci < discardIds.length; dci++) {
+            if (seenIds[discardIds[dci]]) return { ok: false, error: "duplicate card in discard list" };
+            seenIds[discardIds[dci]] = true;
         }
         engineEnsureZones(match, seat);
         var curHand = match.game.zones[seat].hand || [];
