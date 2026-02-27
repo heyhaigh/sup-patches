@@ -292,6 +292,7 @@ function getClientHtml() {
     .cardImg.instantGlow { box-shadow:0 0 12px rgba(168,85,247,0.7), 0 0 24px rgba(168,85,247,0.3); animation:instantGlowPulse 1.5s ease-in-out infinite; }
     @keyframes instantGlowPulse { 0%,100%{box-shadow:0 0 12px rgba(168,85,247,0.7),0 0 24px rgba(168,85,247,0.3)} 50%{box-shadow:0 0 18px rgba(168,85,247,1),0 0 36px rgba(168,85,247,0.5)} }
     .equipBadge { position:absolute; bottom:20px; right:4px; background:rgba(251,191,36,0.85); color:#000; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; pointer-events:none; z-index:3; border:1px solid rgba(255,255,255,0.2); }
+    .equippedToBadge { position:absolute; bottom:2px; left:50%; transform:translateX(-50%); background:rgba(251,191,36,0.9); color:#000; font-size:8px; font-weight:700; padding:1px 5px; border-radius:3px; pointer-events:none; z-index:3; white-space:nowrap; max-width:90%; overflow:hidden; text-overflow:ellipsis; border:1px solid rgba(255,255,255,0.25); }
     .equipPeek { position:absolute; top:-14px; left:50%; transform:translateX(-50%); width:56px; height:14px; border-radius:4px 4px 0 0; overflow:hidden; border:1px solid rgba(251,191,36,0.5); border-bottom:none; cursor:pointer; z-index:4; }
     .equipPeek img { width:56px; height:80px; object-fit:cover; object-position:top; pointer-events:none; }
     .scryOverlay { position:absolute; inset:0; z-index:50; background:rgba(0,0,0,0.8); backdrop-filter:blur(6px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; animation:modeOverlayIn 0.3s ease; }
@@ -789,6 +790,7 @@ function getClientHtml() {
     lastLogIndex: 0, eventLogCollapsed: false,
     _suppressTurnOverlay: false, prevHandCounts: {},
     _atkStagedCreatures: [], discardSelection: null, quickMode: true,
+    _hiddenBotCards: {}, _botAnimCounter: 0,
   };
 
   /* Tab buttons work immediately via event delegation — no boot() needed */
@@ -2468,7 +2470,18 @@ function getClientHtml() {
       var bfWrap = document.createElement('div');
       bfWrap.className = 'cardWrap' + (c?.isToken ? ' tokenWrap' : '');
       bfWrap.dataset.cardId = id;
+      var cs2 = options.cardState;
+      if (cs2 && cs2.tapped) bfWrap.classList.add('tapped');
       bfWrap.appendChild(img);
+      // "Equipped to [creature]" badge for attached equipment
+      var eqTarget = options.match?.game?.equipmentAttachments?.[id];
+      if (eqTarget) {
+        var eqTargetMeta = cardMeta(eqTarget);
+        var eqBadge2 = document.createElement('div');
+        eqBadge2.className = 'equippedToBadge';
+        eqBadge2.textContent = '\u2694 ' + (eqTargetMeta?.name || 'Equipped');
+        bfWrap.appendChild(eqBadge2);
+      }
       return bfWrap;
     }
     return img;
@@ -2582,10 +2595,15 @@ function getClientHtml() {
     bfArea.className = 'bfArea';
     // Determine which cards are attacking (from combat state or pending)
     var combatAttackers = match?.game?.combat?.attackers || {};
-    // Filter out attached auras and attached equipment — they render as badges on their target creature
+    // Filter out attached auras — they render as badges on their target creature
+    // Equipment stays visible on battlefield with an "Equipped to" badge
     var auraAttachments = match?.game?.auraAttachments || {};
     var equipAttachments = match?.game?.equipmentAttachments || {};
-    var visibleBf = bf.filter(function(id) { return !auraAttachments[id] && !equipAttachments[id]; });
+    var visibleBf = bf.filter(function(id) { return !auraAttachments[id]; });
+    // Hide bot-played cards during progressive reveal animation
+    if (state._hiddenBotCards) {
+      visibleBf = visibleBf.filter(function(id) { return !state._hiddenBotCards[id]; });
+    }
     // Pre-compute buff and aura maps for this seat's cards
     var buffMap = {}; var auraMap = {};
     var rawBuffs = match?.game?.tempBuffs || [];
@@ -2929,7 +2947,7 @@ function getClientHtml() {
     const seats = (match.players || []).map(p => p.seat).sort((a, b) => a - b);
     const oppSeats = seats.filter(s => s !== mySeat);
 
-    var oppCacheKey = oppSeats.map(function(s) { return buildSeatCacheKey(match, s); }).join('||') + '||atk:' + (state._atkStagedCreatures.length || 'n');
+    var oppCacheKey = oppSeats.map(function(s) { return buildSeatCacheKey(match, s); }).join('||') + '||atk:' + (state._atkStagedCreatures.length || 'n') + ':ba' + (state._botAnimCounter || 0);
     const oppEl = $('#oppSide');
     if (oppEl.dataset.cacheKey !== oppCacheKey) {
       oppEl.innerHTML = '';
@@ -3423,8 +3441,24 @@ function getClientHtml() {
         }
       }
 
+      // Collect ALL bot-played card IDs and hide them from the board
+      state._hiddenBotCards = {};
+      state._botAnimCounter = 0;
+      for (var hbi = 0; hbi < botTurnOrder.length; hbi++) {
+        var hbEvents = eventsBySeat[botTurnOrder[hbi]] || [];
+        for (var hei = 0; hei < hbEvents.length; hei++) {
+          if (hbEvents[hei].kind === 'play' && hbEvents[hei].entry.cardId) {
+            state._hiddenBotCards[hbEvents[hei].entry.cardId] = true;
+          }
+        }
+      }
+      // Force re-render with hidden cards — board now shows pre-bot state
+      var oppEl = $('#oppSide');
+      if (oppEl) oppEl.dataset.cacheKey = '';
+      renderGame(state.lastMatch);
+
       if (state.quickMode) {
-        // Quick mode — per-bot summaries, minimal delay
+        // Quick mode — per-bot summaries with progressive reveal
         for (var bti = 0; bti < botTurnOrder.length; bti++) {
           var botSeat = botTurnOrder[bti];
           var botName = botNameBySeat[botSeat] || 'Bot';
@@ -3432,6 +3466,14 @@ function getClientHtml() {
           var bar = $('#turnBar');
           if (bar) bar.innerHTML = '<div class="botThinking"><span class="spinner"></span> ' + botName + ' is thinking\u2026</div>';
           await new Promise(function(r) { setTimeout(r, 400); });
+          // Reveal all cards this bot played at once
+          for (var qi = 0; qi < seatEvents.length; qi++) {
+            if (seatEvents[qi].kind === 'play' && seatEvents[qi].entry.cardId) {
+              delete state._hiddenBotCards[seatEvents[qi].entry.cardId];
+            }
+          }
+          state._botAnimCounter++;
+          renderGame(state.lastMatch);
           var playCount = 0; var atkCount = 0; var passCount = 0;
           for (var si = 0; si < seatEvents.length; si++) {
             if (seatEvents[si].kind === 'play') playCount++;
@@ -3444,13 +3486,15 @@ function getClientHtml() {
           if (passCount && !playCount) parts.push('passed');
           if (parts.length) toast(botName + ': ' + parts.join(', '), { type: 'info', ms: 2500 });
         }
+        state._hiddenBotCards = {};
+        state._botAnimCounter = 0;
         state._suppressTurnOverlay = false;
         await refreshMatch();
         if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
           showTurnOverlay('', true);
         }
       } else {
-        // Full animation mode — show each bot's turn individually
+        // Full animation mode — show each bot's turn with progressive card reveal
         for (var bti = 0; bti < botTurnOrder.length; bti++) {
           var botSeat = botTurnOrder[bti];
           var botName = botNameBySeat[botSeat] || 'Bot';
@@ -3467,47 +3511,36 @@ function getClientHtml() {
           // Wait for overlay hold + thinking time
           await new Promise(function(r) { setTimeout(r, 1800); });
 
-          // Animate this bot's card plays, attacks, passes
-          if (seatEvents.length) {
-            var revealGap = 1600;
-            var revealDelay = 0;
-            for (var sei = 0; sei < seatEvents.length; sei++) {
-              var se = seatEvents[sei];
-              if (se.kind === 'play') {
-                (function(entry, delay, name) {
-                  setTimeout(function() {
-                    var isSpell = entry.type === 'BOT_CAST_SPELL';
-                    showBotPlayReveal(entry.cardId, name, isSpell);
-                  }, delay);
-                })(se.entry, revealDelay, botName);
-                revealDelay += revealGap;
-              } else if (se.kind === 'attack') {
-                (function(entry, delay, name, match) {
-                  setTimeout(function() {
-                    var tgtName = '';
-                    if (entry.targetSeat) {
-                      var tgtP = (match?.players || []).find(function(p) { return p.seat === entry.targetSeat; });
-                      tgtName = tgtP ? (tgtP.isBot ? tgtP.username : ('@' + tgtP.username)) : '';
-                    }
-                    showBotAttackOverlay(name, entry.count, tgtName);
-                  }, delay);
-                })(se.entry, revealDelay, botName, state.lastMatch);
-                revealDelay += 1400;
-              } else if (se.kind === 'pass') {
-                (function(entry, delay, name) {
-                  setTimeout(function() {
-                    toast(name + ' passed.', { type: 'info', ms: 2000 });
-                  }, delay);
-                })(se.entry, revealDelay, botName);
-                revealDelay += 1200;
+          // Reveal this bot's cards one at a time with overlays
+          for (var sei = 0; sei < seatEvents.length; sei++) {
+            var se = seatEvents[sei];
+            if (se.kind === 'play' && se.entry.cardId) {
+              // Reveal card on battlefield
+              delete state._hiddenBotCards[se.entry.cardId];
+              state._botAnimCounter++;
+              renderGame(state.lastMatch);
+              // Show card reveal overlay
+              var isSpell = se.entry.type === 'BOT_CAST_SPELL';
+              showBotPlayReveal(se.entry.cardId, botName, isSpell);
+              await new Promise(function(r) { setTimeout(r, 1600); });
+            } else if (se.kind === 'attack') {
+              var tgtName = '';
+              if (se.entry.targetSeat) {
+                var tgtP = (state.lastMatch?.players || []).find(function(p) { return p.seat === se.entry.targetSeat; });
+                tgtName = tgtP ? (tgtP.isBot ? tgtP.username : ('@' + tgtP.username)) : '';
               }
+              showBotAttackOverlay(botName, se.entry.count, tgtName);
+              await new Promise(function(r) { setTimeout(r, 1400); });
+            } else if (se.kind === 'pass') {
+              toast(botName + ' passed.', { type: 'info', ms: 2000 });
+              await new Promise(function(r) { setTimeout(r, 1200); });
             }
-            // Wait for this bot's animations to complete
-            await new Promise(function(r) { setTimeout(r, revealDelay + 200); });
           }
         }
 
         // Show "YOUR TURN" — unless game ended or it's blocker phase
+        state._hiddenBotCards = {};
+        state._botAnimCounter = 0;
         state._suppressTurnOverlay = false;
         await refreshMatch();
         if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
