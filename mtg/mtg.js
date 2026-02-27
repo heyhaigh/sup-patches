@@ -3445,6 +3445,7 @@ function getClientHtml() {
           if (parts.length) toast(botName + ': ' + parts.join(', '), { type: 'info', ms: 2500 });
         }
         state._suppressTurnOverlay = false;
+        await refreshMatch();
         if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
           showTurnOverlay('', true);
         }
@@ -3508,6 +3509,7 @@ function getClientHtml() {
 
         // Show "YOUR TURN" — unless game ended or it's blocker phase
         state._suppressTurnOverlay = false;
+        await refreshMatch();
         if (state.lastMatch?.game?.status !== 'finished' && state.lastMatch?.game?.step !== 'combat_blockers') {
           showTurnOverlay('', true);
         }
