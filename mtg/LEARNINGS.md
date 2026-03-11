@@ -338,6 +338,78 @@ while (guard++ < 6) {
 }
 ```
 
+## Render Cache vs Direct innerHTML Overwrites
+
+### The Bug
+
+After bot turn animations, the turn bar was stuck showing "Bot 3 is thinking..." even though it was the player's turn. Buttons (End Turn, Go to Combat) were missing.
+
+### Root Cause
+
+`renderTurnBar` uses a cache key computed from game state (turn number, active seat, mana, phase, etc.). The bot animation overwrites `bar.innerHTML` directly but doesn't touch `bar.dataset.cacheKey`. When the final `refreshMatch()` → `renderTurnBar()` runs, the computed cache key matches the stale one (game state is identical — bots completed server-side before the first `refreshMatch()`), so it returns early without re-rendering.
+
+```javascript
+// Timeline:
+// 1. refreshMatch() → renderTurnBar sets cacheKey = "3:0:main1:..." with proper buttons
+// 2. Bot animation: bar.innerHTML = "Bot 3 is thinking..." (cacheKey unchanged!)
+// 3. refreshMatch() → renderTurnBar computes "3:0:main1:..." → MATCHES → returns early
+//    Result: "Bot 3 is thinking..." stays forever
+```
+
+### Fix
+
+Clear `bar.dataset.cacheKey = ''` before the final `refreshMatch()` to force re-render.
+
+### Rule
+
+**When any code directly overwrites an element's innerHTML outside the normal render path, it must also invalidate the cache key.** Otherwise the render function will see a matching key and skip the update, leaving stale content.
+
+This applies to any element with cache-gated rendering: turn bar, opponent board (`oppEl.dataset.cacheKey`), hand area, etc.
+
+## Animation State Cleanup (try/finally)
+
+### The Pattern
+
+When animation code sets temporary state that hides/modifies the UI (like `_hiddenBotCards`), always wrap the animation in `try/finally` to guarantee cleanup:
+
+```javascript
+state._hiddenBotCards = collectBotCards();
+renderGame(state.lastMatch); // board shows pre-bot state
+
+try {
+  // ... animation sequence with awaits that could throw ...
+} finally {
+  state._hiddenBotCards = {};
+  state._botAnimCounter = 0;
+}
+```
+
+Without this, any error during the animation leaves cards permanently invisible until page refresh.
+
+### Rule
+
+**Any state that hides UI elements during a multi-step async sequence must be cleaned up in a `finally` block.** The longer the sequence (more awaits = more places to throw), the more critical this becomes.
+
+## Progressive Reveal Architecture
+
+### How It Works
+
+The server executes all bot turns at once and returns the final state. To create the illusion of sequential bot turns:
+
+1. After `refreshMatch()`, collect all bot-played card IDs from log events
+2. Populate `state._hiddenBotCards = { cardId: true, ... }` for all bot-played cards
+3. In `renderBoardSeat`, filter: `visibleBf.filter(id => !state._hiddenBotCards[id])`
+4. Force re-render by clearing opponent cache key → board shows pre-bot state
+5. For each bot's turn, delete their cards from `_hiddenBotCards` and increment `_botAnimCounter`
+6. `_botAnimCounter` is appended to `oppCacheKey` to bust the opponent board cache on each reveal
+
+### Key Design Decisions
+
+- **Quick mode**: Reveals all of a bot's cards at once per bot turn (batch reveal)
+- **Full mode**: Reveals cards one-at-a-time with `showBotPlayReveal` overlay between each
+- **Spells** (`BOT_CAST_SPELL`): Hidden initially but they're not on the battlefield anyway (go to graveyard), so the filter is a no-op — the overlay still shows them being cast
+- **`_botAnimCounter`**: Simple monotonic counter appended to cache key; avoids complex cache invalidation logic
+
 ## Workflow: Always Commit & Push After Plan Completion
 
 Every completed phase/plan improvement must be committed and pushed to git before considering it done. Don't wait for the user to ask — commit and push immediately after verifying the changes (syntax check, etc.).
